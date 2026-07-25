@@ -3,7 +3,7 @@
 > A Jira-style internal issue tracking system built as a **Modular Monolith** with Spring Boot and Spring Modulith.
 
 <p align="left">
-  <img src="https://img.shields.io/badge/status-in%20setup-yellow?style=flat-square" alt="Project Status" />
+  <img src="https://img.shields.io/badge/status-in%20development-yellow?style=flat-square" alt="Project Status" />
   <img src="https://img.shields.io/badge/Java-25-orange?style=flat-square&logo=openjdk&logoColor=white" alt="Java 25" />
   <img src="https://img.shields.io/badge/Spring%20Boot-4.1.0-6DB33F?style=flat-square&logo=springboot&logoColor=white" alt="Spring Boot 4.1.0" />
   <img src="https://img.shields.io/badge/Spring%20Modulith-2.1.0-6DB33F?style=flat-square&logo=spring&logoColor=white" alt="Spring Modulith 2.1.0" />
@@ -125,7 +125,7 @@ On startup, Flyway automatically applies all pending migrations under `src/main/
 
 ## Project Status
 
-🚧 **Early setup phase — no application/business logic has been implemented yet.**
+🚧 **Early development — foundational infrastructure and the first module (`user`) are underway.**
 
 What's currently in place:
 
@@ -133,19 +133,49 @@ What's currently in place:
 - [x] Docker Compose setup for local PostgreSQL
 - [x] Database schema designed (dbdiagram.io) and implemented via Flyway migrations
 - [x] Core dependencies wired up (Spring Modulith, Spring Data JPA, Spring Security, Validation)
+- [x] Module boundaries scaffolded (`user`, `team`, `project`, `sprint`, `epic`, `issue`, `comment`, `activity`, `shared`)
+- [x] Shared exception hierarchy and global exception handler
+- [x] Shared API response wrapper with pagination support
+- [x] `user` module: `User` entity and `UserRepository`
 
 ### Roadmap
 
-- [ ] Define module boundaries (user, team, project, sprint, epic, issue, comment, activity log)
-- [ ] Implement domain entities and repositories
+- [ ] Complete `user` module (service, controller, DTOs)
+- [ ] Implement remaining domain entities and repositories (team, project, sprint, epic, issue, comment)
 - [ ] Authentication & authorization (Spring Security)
 - [ ] Core CRUD APIs for projects, sprints, epics, and issues
 - [ ] Activity/audit logging via Spring Modulith events
 - [ ] API documentation
 - [ ] Test coverage (unit, module, integration)
 
-This README will be updated as the project progresses.
+## User Endpoints (Planned)
 
+### Core CRUD
+- [ ] `POST /api/users` — Create a new user (requires Admin role)
+- [ ] `GET /api/users/{id}` — Get user details by id
+- [ ] `GET /api/users` — List users (paginated, filterable)
+- [ ] `PUT /api/users/{id}` — Update user details (name/surname/email)
+- [ ] `DELETE /api/users/{id}` — Deactivate a user (soft delete, `is_active=false`)
+
+### Password Management
+- [ ] `PATCH /api/users/{id}/password` — Change password (requires current password confirmation)
+- [ ] `POST /api/users/{id}/reset-password` — Admin-initiated password reset (future phase)
+
+### Role / Permission
+- [ ] `PATCH /api/users/{id}/admin-status` — Grant or revoke admin privileges (Admin only)
+
+### Authentication (once the security layer is in place)
+- [ ] `POST /api/auth/login` — Log in, returns a JWT token
+- [ ] `POST /api/auth/refresh` — Refresh token (future phase)
+- [ ] `GET /api/auth/me` — Get the currently authenticated user's details
+
+### Filtering / Utility
+- [ ] `GET /api/users/active` — List only active users
+- [ ] `GET /api/users/search?q=...` — Search by name/surname/email (future phase)
+
+---
+This README will be updated as the project progresses.
+---
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
