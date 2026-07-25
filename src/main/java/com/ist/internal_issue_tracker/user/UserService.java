@@ -7,10 +7,10 @@ import com.ist.internal_issue_tracker.user.dto.UserCreateRequest;
 import com.ist.internal_issue_tracker.user.dto.UserResponse;
 import com.ist.internal_issue_tracker.user.internal.PasswordHasher;
 import com.ist.internal_issue_tracker.user.mapper.UserMapper;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -21,12 +21,16 @@ public class UserService {
     private final UserMapper userMapper;
     private final PasswordHasher passwordHasher;
 
+    private DuplicateResourceException emailAlreadyExists(String email) {
+        return new DuplicateResourceException(UserErrorCode.EMAIL_ALREADY_EXISTS,
+                "This email already exists: " + email);
+    }
+
     public UserResponse createUser(UserCreateRequest request) {
 
         // email unique check
         if (userRepository.existsByEmail(request.email())) {
-            throw new DuplicateResourceException(UserErrorCode.EMAIL_ALREADY_EXISTS,
-                    "This e-mail is already exists: " + request.email());
+            throw emailAlreadyExists(request.email());
         }
 
         // password hashing
@@ -41,8 +45,8 @@ public class UserService {
         try {
             savedUser = userRepository.save(user);
         } catch (DataIntegrityViolationException e) {
-            throw new DuplicateResourceException(UserErrorCode.EMAIL_ALREADY_EXISTS,
-                    "This e-mail is already exists: " + request.email());
+            // only unique constraint on User currently is email, revisit if a second one is added
+            throw emailAlreadyExists(request.email());
         }
 
         // return user response
