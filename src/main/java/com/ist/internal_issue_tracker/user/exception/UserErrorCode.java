@@ -4,7 +4,7 @@ import com.ist.internal_issue_tracker.shared.exception.ErrorCode;
 import org.springframework.http.HttpStatus;
 
 public enum UserErrorCode implements ErrorCode {
-    EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "This email already exist.");
+    EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "This email already exists.");
 
     private final HttpStatus httpStatus;
     private final String message;
