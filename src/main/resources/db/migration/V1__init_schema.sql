@@ -12,9 +12,9 @@ CREATE TABLE "users" (
                          "name" varchar(255) NOT NULL,
                          "surname" varchar(255) NOT NULL,
                          "email" varchar(255) UNIQUE NOT NULL,
-                         "is_admin" boolean DEFAULT false,
+                         "is_admin" boolean NOT NULL DEFAULT false,
                          "password_hashed" varchar(255) NOT NULL,
-                         "is_active" boolean DEFAULT true,
+                         "is_active" boolean NOT NULL DEFAULT true,
                          "created_at" timestamptz DEFAULT (now()),
                          "updated_at" timestamptz
 );
