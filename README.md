@@ -137,6 +137,7 @@ What's currently in place:
 - [x] Shared exception hierarchy and global exception handler
 - [x] Shared API response wrapper with pagination support
 - [x] `user` module: `User` entity and `UserRepository`
+- [x] user create endpoint (`POST /api/users`)
 
 ### Roadmap
 
@@ -151,7 +152,7 @@ What's currently in place:
 ## User Endpoints (Planned)
 
 ### Core CRUD
-- [ ] `POST /api/users` — Create a new user (requires Admin role)
+- [x] `POST /api/users` — Create a new user (requires Admin role)
 - [ ] `GET /api/users/{id}` — Get user details by id
 - [ ] `GET /api/users` — List users (paginated, filterable)
 - [ ] `PUT /api/users/{id}` — Update user details (name/surname/email)
