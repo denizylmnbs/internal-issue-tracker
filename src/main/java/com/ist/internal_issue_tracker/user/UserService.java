@@ -97,4 +97,12 @@ public class UserService {
 
         return userMapper.toResponse(savedUser);
     }
+
+    public void deleteUser(Integer id) {
+        // fetch existing user
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> ResourceNotFoundException.of("User", id));
+
+        user.setIsActive(false);
+    }
 }
