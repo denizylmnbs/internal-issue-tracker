@@ -4,6 +4,7 @@ import com.ist.internal_issue_tracker.shared.web.ApiResponse;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import com.ist.internal_issue_tracker.user.dto.UserCreateRequest;
 import com.ist.internal_issue_tracker.user.dto.UserResponse;
+import com.ist.internal_issue_tracker.user.dto.UserUpdateRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -40,6 +41,13 @@ public class UserController {
             Pageable pageable
     ) {
         PagedResponse<UserResponse> userResponse = userService.getAllUsers(name, surname, pageable);
+
+        return ResponseEntity.ok(ApiResponse.ok(userResponse));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<ApiResponse<UserResponse>> updateUser(@PathVariable Integer id, @Valid @RequestBody UserUpdateRequest request) {
+        UserResponse userResponse = userService.updateUser(id, request);
 
         return ResponseEntity.ok(ApiResponse.ok(userResponse));
     }

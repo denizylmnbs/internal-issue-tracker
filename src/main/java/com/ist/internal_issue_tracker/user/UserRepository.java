@@ -9,6 +9,8 @@ import org.springframework.data.repository.query.Param;
 public interface UserRepository extends JpaRepository<User, Integer> {
     Boolean existsByEmail(String email);
 
+    Boolean existsByEmailAndIdNot(String email, Integer id);
+
     @Query("""
             SELECT u FROM User u
             WHERE (:name IS NULL OR lower(u.name) LIKE lower(concat('%', :name, '%')))

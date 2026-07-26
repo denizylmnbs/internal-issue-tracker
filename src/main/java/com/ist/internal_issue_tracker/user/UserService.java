@@ -4,6 +4,7 @@ package com.ist.internal_issue_tracker.user;
 import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceException;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
+import com.ist.internal_issue_tracker.user.dto.UserUpdateRequest;
 import com.ist.internal_issue_tracker.user.exception.UserErrorCode;
 import com.ist.internal_issue_tracker.user.dto.UserCreateRequest;
 import com.ist.internal_issue_tracker.user.dto.UserResponse;
@@ -69,5 +70,31 @@ public class UserService {
         Page<UserResponse> responsePage = users.map(user -> userMapper.toResponse(user));
 
         return PagedResponse.from(responsePage);
+    }
+
+    public UserResponse updateUser(Integer id, UserUpdateRequest request) {
+
+        // fetch existing user
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> ResourceNotFoundException.of("User", id));
+
+        // email unique check
+        if (userRepository.existsByEmailAndIdNot(request.email(), id)) {
+            throw emailAlreadyExists(request.email());
+        }
+
+        // apply changes to the managed entity
+        userMapper.updateEntity(user, request);
+
+        // save to db and prevent race conditions
+        User savedUser;
+        try {
+            savedUser = userRepository.save(user);
+        } catch (DataIntegrityViolationException e) {
+            // only unique constraint on User currently is email, revisit if a second one is added
+            throw emailAlreadyExists(request.email());
+        }
+
+        return userMapper.toResponse(savedUser);
     }
 }
