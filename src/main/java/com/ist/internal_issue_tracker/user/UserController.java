@@ -6,10 +6,7 @@ import com.ist.internal_issue_tracker.user.dto.UserResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 
@@ -25,5 +22,12 @@ public class UserController {
         UserResponse userResponse = userService.createUser(request);
 
         return ResponseEntity.created(URI.create("/api/users/" + userResponse.id())).body(ApiResponse.ok(userResponse));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<ApiResponse<UserResponse>> getUserById(@PathVariable Integer id) {
+        UserResponse userResponse = userService.getUserById(id);
+
+        return ResponseEntity.ok(ApiResponse.ok(userResponse));
     }
 }

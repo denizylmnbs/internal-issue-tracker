@@ -2,6 +2,7 @@ package com.ist.internal_issue_tracker.user;
 
 
 import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceException;
+import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
 import com.ist.internal_issue_tracker.user.exception.UserErrorCode;
 import com.ist.internal_issue_tracker.user.dto.UserCreateRequest;
 import com.ist.internal_issue_tracker.user.dto.UserResponse;
@@ -51,5 +52,12 @@ public class UserService {
 
         // return user response
         return userMapper.toResponse(savedUser);
+    }
+
+    public UserResponse getUserById(Integer id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> ResourceNotFoundException.of("User", id));
+
+        return userMapper.toResponse(user);
     }
 }
