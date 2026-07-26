@@ -3,6 +3,7 @@ package com.ist.internal_issue_tracker.user;
 import com.ist.internal_issue_tracker.shared.web.ApiResponse;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import com.ist.internal_issue_tracker.user.dto.ChangePasswordRequest;
+import com.ist.internal_issue_tracker.user.dto.ResetPasswordRequest;
 import com.ist.internal_issue_tracker.user.dto.UserCreateRequest;
 import com.ist.internal_issue_tracker.user.dto.UserResponse;
 import com.ist.internal_issue_tracker.user.dto.UserUpdateRequest;
@@ -61,9 +62,16 @@ public class UserController {
     }
 
     @PatchMapping("/{id}/password")
-    public  ResponseEntity<ApiResponse<UserResponse>> changePassword(@PathVariable Integer id, @RequestBody ChangePasswordRequest request) {
+    public ResponseEntity<ApiResponse<UserResponse>> changePassword(@PathVariable Integer id, @Valid @RequestBody ChangePasswordRequest request) {
         UserResponse userResponse = userService.changePassword(id, request);
 
         return ResponseEntity.ok(ApiResponse.ok(userResponse));
+    }
+
+    @PostMapping("/{id}/reset-password")
+    public ResponseEntity<ApiResponse<Void>> resetPassword(@PathVariable Integer id, @Valid @RequestBody ResetPasswordRequest request) {
+        userService.resetPassword(id, request);
+
+        return ResponseEntity.ok(ApiResponse.ok());
     }
 }

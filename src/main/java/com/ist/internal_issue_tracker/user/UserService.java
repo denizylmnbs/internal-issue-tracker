@@ -6,6 +6,7 @@ import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceExceptio
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import com.ist.internal_issue_tracker.user.dto.ChangePasswordRequest;
+import com.ist.internal_issue_tracker.user.dto.ResetPasswordRequest;
 import com.ist.internal_issue_tracker.user.dto.UserUpdateRequest;
 import com.ist.internal_issue_tracker.user.exception.UserErrorCode;
 import com.ist.internal_issue_tracker.user.dto.UserCreateRequest;
@@ -124,5 +125,12 @@ public class UserService {
         return userMapper.toResponse(user);
     }
 
-    public
+    public void resetPassword(Integer id, ResetPasswordRequest request) {
+        // TODO: once JWT auth lands, verify the authenticated principal is an admin
+        // fetch existing user
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> ResourceNotFoundException.of("User", id));
+
+        user.changePassword(passwordHasher.hash(request.newPassword()));
+    }
 }
