@@ -3,6 +3,7 @@ package com.ist.internal_issue_tracker.user;
 
 import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceException;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
+import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import com.ist.internal_issue_tracker.user.exception.UserErrorCode;
 import com.ist.internal_issue_tracker.user.dto.UserCreateRequest;
 import com.ist.internal_issue_tracker.user.dto.UserResponse;
@@ -10,6 +11,8 @@ import com.ist.internal_issue_tracker.user.internal.PasswordHasher;
 import com.ist.internal_issue_tracker.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,5 +62,12 @@ public class UserService {
                 .orElseThrow(() -> ResourceNotFoundException.of("User", id));
 
         return userMapper.toResponse(user);
+    }
+
+    public PagedResponse<UserResponse> getAllUsers(Pageable pageable) {
+        Page<User> users = userRepository.findAll(pageable);
+        Page<UserResponse> responsePage = users.map(user -> userMapper.toResponse(user));
+
+        return PagedResponse.from(responsePage);
     }
 }
