@@ -153,10 +153,10 @@ What's currently in place:
 
 ### Core CRUD
 - [x] `POST /api/users` — Create a new user (requires Admin role)
-- [ ] `GET /api/users/{id}` — Get user details by id
-- [ ] `GET /api/users` — List users (paginated, filterable)
-- [ ] `PUT /api/users/{id}` — Update user details (name/surname/email)
-- [ ] `DELETE /api/users/{id}` — Deactivate a user (soft delete, `is_active=false`)
+- [x] `GET /api/users/{id}` — Get user details by id
+- [x] `GET /api/users` — List users (paginated, filterable)
+- [x] `PUT /api/users/{id}` — Update user details (name/surname/email)
+- [x] `DELETE /api/users/{id}` — Deactivate a user (soft delete, `is_active=false`)
 
 ### Password Management
 - [ ] `PATCH /api/users/{id}/password` — Change password (requires current password confirmation)
