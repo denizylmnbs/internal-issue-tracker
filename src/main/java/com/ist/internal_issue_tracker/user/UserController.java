@@ -34,8 +34,12 @@ public class UserController {
     }
 
     @GetMapping
-    public ResponseEntity<ApiResponse<PagedResponse<UserResponse>>> getAllUsers(Pageable pageable) {
-        PagedResponse<UserResponse> userResponse = userService.getAllUsers(pageable);
+    public ResponseEntity<ApiResponse<PagedResponse<UserResponse>>> getAllUsers(
+            @RequestParam(required = false) String name,
+            @RequestParam(required = false) String surname,
+            Pageable pageable
+    ) {
+        PagedResponse<UserResponse> userResponse = userService.getAllUsers(name, surname, pageable);
 
         return ResponseEntity.ok(ApiResponse.ok(userResponse));
     }

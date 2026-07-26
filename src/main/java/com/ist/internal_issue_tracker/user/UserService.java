@@ -64,8 +64,8 @@ public class UserService {
         return userMapper.toResponse(user);
     }
 
-    public PagedResponse<UserResponse> getAllUsers(Pageable pageable) {
-        Page<User> users = userRepository.findAll(pageable);
+    public PagedResponse<UserResponse> getAllUsers(String name, String surname, Pageable pageable) {
+        Page<User> users = userRepository.findAllByFilters(name, surname, pageable);
         Page<UserResponse> responsePage = users.map(user -> userMapper.toResponse(user));
 
         return PagedResponse.from(responsePage);
