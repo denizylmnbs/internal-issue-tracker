@@ -78,7 +78,7 @@ CREATE TABLE "sprints" (
                            "end_date" date,
                            "status" varchar(20) NOT NULL DEFAULT 'TODO'
                                CHECK ("status" IN ('TODO','IN_PROGRESS','TESTING','COMPLETED')),
-                           "is_active" boolean DEFAULT true,
+                           "deleted_at" timestamptz,
                            "created_at" timestamptz DEFAULT (now()),
                            "updated_at" timestamptz
 );
@@ -91,7 +91,7 @@ CREATE TABLE "epics" (
                          "status" varchar(20) NOT NULL DEFAULT 'TODO'
                              CHECK ("status" IN ('TODO','IN_PROGRESS','ON_HOLD','COMPLETED','CANCELLED')),
                          "reporter_id" int NOT NULL,
-                         "is_active" boolean DEFAULT true,
+                         "deleted_at" timestamptz,
                          "created_at" timestamptz DEFAULT (now()),
                          "updated_at" timestamptz
 );
@@ -113,7 +113,7 @@ CREATE TABLE "issues" (
                           "reporter_id" int NOT NULL,
                           "assignee_team_id" int,
                           "assignee_user_id" int,
-                          "is_active" boolean DEFAULT true,
+                          "deleted_at" timestamptz,
                           "created_at" timestamptz DEFAULT (now()),
                           "updated_at" timestamptz
 );
@@ -123,6 +123,7 @@ CREATE TABLE "comments" (
                             "user_id" int NOT NULL,
                             "issue_id" int NOT NULL,
                             "content" text NOT NULL,
+                            "deleted_at" timestamptz,
                             "created_at" timestamptz DEFAULT (now()),
                             "updated_at" timestamptz
 );
@@ -243,7 +244,8 @@ CREATE INDEX ON "project_activities" ("project_id");
 CREATE INDEX ON "project_activities" ("user_id");
 
 -- ============================================================
--- PARTIAL UNIQUE INDEXES (soft-delete'e duyarlı, is_active=true iken unique)
+-- PARTIAL UNIQUE INDEXES (soft-delete'e duyarlı: join tablolarında
+-- is_active=true iken, silinebilir domain entity'lerinde deleted_at IS NULL iken unique)
 -- ============================================================
 
 -- Bir kullanıcı aynı takıma birden fazla kez aktif olarak eklenemez
@@ -258,13 +260,13 @@ CREATE UNIQUE INDEX unique_active_project_team
 CREATE UNIQUE INDEX unique_active_project_user
     ON "project_users" ("user_id", "project_id") WHERE "is_active" = true;
 
--- Aynı projede aynı isimde iki aktif sprint olamaz
+-- Aynı projede aynı isimde iki silinmemiş sprint olamaz
 CREATE UNIQUE INDEX unique_active_sprint_name_per_project
-    ON "sprints" ("project_id", "name") WHERE "is_active" = true;
+    ON "sprints" ("project_id", "name") WHERE "deleted_at" IS NULL;
 
--- Aynı projede aynı isimde iki aktif epic olamaz
+-- Aynı projede aynı isimde iki silinmemiş epic olamaz
 CREATE UNIQUE INDEX unique_active_epic_name_per_project
-    ON "epics" ("project_id", "name") WHERE "is_active" = true;
+    ON "epics" ("project_id", "name") WHERE "deleted_at" IS NULL;
 
 -- Bir projede aynı anda sadece bir sprint IN_PROGRESS olabilir
 CREATE UNIQUE INDEX one_active_sprint_per_project
