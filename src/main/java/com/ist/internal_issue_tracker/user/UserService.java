@@ -1,9 +1,11 @@
 package com.ist.internal_issue_tracker.user;
 
 
+import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceException;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
+import com.ist.internal_issue_tracker.user.dto.ChangePasswordRequest;
 import com.ist.internal_issue_tracker.user.dto.UserUpdateRequest;
 import com.ist.internal_issue_tracker.user.exception.UserErrorCode;
 import com.ist.internal_issue_tracker.user.dto.UserCreateRequest;
@@ -105,4 +107,22 @@ public class UserService {
 
         user.setIsActive(false);
     }
+
+    public UserResponse changePassword(Integer id, ChangePasswordRequest request) {
+        // TODO: once JWT auth lands, verify the authenticated principal's id matches `id`
+        // fetch existing user
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> ResourceNotFoundException.of("User", id));
+
+        // current password check
+        if (!passwordHasher.matches(request.currentPassword(), user.getPasswordHashed())) {
+            throw new AppException(UserErrorCode.CURRENT_PASSWORD_INCORRECT);
+        }
+
+        user.changePassword(passwordHasher.hash(request.newPassword()));
+
+        return userMapper.toResponse(user);
+    }
+
+    public
 }
