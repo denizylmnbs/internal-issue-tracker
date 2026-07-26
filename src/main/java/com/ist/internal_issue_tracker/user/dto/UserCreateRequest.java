@@ -1,10 +1,9 @@
 package com.ist.internal_issue_tracker.user.dto;
 
+import com.ist.internal_issue_tracker.user.internal.EmailNormalizer;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-
-import java.util.Locale;
 
 public record UserCreateRequest(
 
@@ -25,15 +24,6 @@ public record UserCreateRequest(
         String password
 ) {
     public UserCreateRequest {
-        email = normalizeEmail(email);
-    }
-
-    // The DB unique index on email is case-sensitive, so we normalize here to
-    // keep uniqueness checks and storage case-insensitive.
-    private static String normalizeEmail(String email) {
-        if (email == null) {
-            return null;
-        }
-        return email.trim().toLowerCase(Locale.ROOT);
+        email = EmailNormalizer.normalize(email);
     }
 }
