@@ -4,6 +4,7 @@ package com.ist.internal_issue_tracker.user;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceException;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
+import com.ist.internal_issue_tracker.shared.security.AuthenticatedUser;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import com.ist.internal_issue_tracker.user.dto.ChangePasswordRequest;
 import com.ist.internal_issue_tracker.user.dto.ResetPasswordRequest;
@@ -28,6 +29,19 @@ public class UserService {
     private final UserRepository userRepository;
     private final UserMapper userMapper;
     private final PasswordHasher passwordHasher;
+
+    /** Used by the {@code auth} module to authenticate a login attempt without exposing password hashing internals. */
+    public AuthenticatedUser verifyCredentials(String email, String rawPassword) {
+        User user = userRepository.findByEmail(email)
+                .filter(User::getIsActive)
+                .orElseThrow(() -> new AppException(UserErrorCode.INVALID_CREDENTIALS));
+
+        if (!passwordHasher.matches(rawPassword, user.getPasswordHashed())) {
+            throw new AppException(UserErrorCode.INVALID_CREDENTIALS);
+        }
+
+        return new AuthenticatedUser(user.getId(), user.getIsAdmin());
+    }
 
     private DuplicateResourceException emailAlreadyExists(String email) {
         return new DuplicateResourceException(UserErrorCode.EMAIL_ALREADY_EXISTS,
@@ -110,7 +124,7 @@ public class UserService {
     }
 
     public UserResponse changePassword(Integer id, ChangePasswordRequest request) {
-        // TODO: once JWT auth lands, verify the authenticated principal's id matches `id`
+        // authorization (self-or-admin) is enforced in UserController via @PreAuthorize
         // fetch existing user
         User user = userRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("User", id));
@@ -126,7 +140,7 @@ public class UserService {
     }
 
     public void resetPassword(Integer id, ResetPasswordRequest request) {
-        // TODO: once JWT auth lands, verify the authenticated principal is an admin
+        // authorization (admin-only) is enforced in UserController via @PreAuthorize
         // fetch existing user
         User user = userRepository.findById(id)
                 .orElseThrow(() -> ResourceNotFoundException.of("User", id));
