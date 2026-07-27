@@ -37,12 +37,16 @@ public class SecurityConfig {
             auth ->
                 auth.requestMatchers(HttpMethod.POST, "/api/auth/login")
                     .permitAll()
-                    .requestMatchers(HttpMethod.POST, "/api/users")
+
+                    .requestMatchers(HttpMethod.POST, "/api/users/register")
                     .permitAll()
+
                     .requestMatchers(HttpMethod.PATCH, "/api/users/{id}/password")
                     .access(selfOrAdmin())
+
                     .requestMatchers(HttpMethod.POST, "/api/users/{id}/reset-password")
                     .hasRole("ADMIN")
+
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(

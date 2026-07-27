@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 public class UserController {
   private final UserService userService;
 
-  @PostMapping
+  @PostMapping("/register")
   public ResponseEntity<ApiResponse<UserResponse>> createUser(
       @Valid @RequestBody UserCreateRequest request) {
 
