@@ -151,23 +151,66 @@ What's currently in place:
 - [x] Shared exception hierarchy and global exception handler
 - [x] Shared API response wrapper with pagination support
 - [x] `user` module: `User` entity and `UserRepository`
-- [x] user create endpoint (`POST /api/users`)
+- [x] `user` module: service, controller and DTOs (CRUD + password management)
+- [x] JWT authentication (`POST /api/auth/login`), stateless security filter chain
 
 ### Roadmap
 
-- [ ] Complete `user` module (service, controller, DTOs)
+- [ ] Finish the `user` module (search & filtering endpoints, `GET /api/auth/me`)
+- [x] Authentication (Spring Security + JWT bearer tokens)
 - [ ] Implement remaining domain entities and repositories (team, project, sprint, epic, issue, comment)
-- [ ] Authentication & authorization (Spring Security)
 - [ ] Core CRUD APIs for projects, sprints, epics, and issues
+- [ ] Role-based authorization (`ADMIN` / `DEVELOPER` / `USER`) plus project-scoped access
+  — see [Roles & Permissions](#roles--permissions-planned)
 - [ ] Activity/audit logging via Spring Modulith events
 - [ ] API documentation
 - [ ] Test coverage (unit, module, integration)
+
+## Roles & Permissions (Planned)
+
+Authorization is built on **two independent axes**. Keeping them separate matters: a global role answers *"is this
+kind of user allowed to do this kind of thing?"*, while project membership answers *"is this user allowed to do it
+**here**?"*. Both checks apply.
+
+### 1. Global role (`users.role`)
+
+A single enum column on the user, replacing the current `is_admin` boolean.
+
+| Role        | Intent                | Capabilities                                                                          |
+|-------------|-----------------------|---------------------------------------------------------------------------------------|
+| `ADMIN`     | System administrator  | Full access to every endpoint; manages users, roles, teams and projects                |
+| `DEVELOPER` | Regular contributor   | Joins teams, creates issues, takes/receives assignments, comments, moves issues        |
+| `USER`      | Read-only stakeholder | Views only; added to a project solely by that project's leader to follow its progress  |
+
+Roles are hierarchical — `ADMIN` implies `DEVELOPER` implies `USER` — so a rule written as `hasRole('USER')` also
+admits developers and admins, and each endpoint only needs to declare its *minimum* role.
+
+### 2. Project-scoped access (`projects.leader_id`, `project_users`, `project_teams`)
+
+"Project leader" is deliberately **not** a global role: it is a relationship stored as data. The same person can lead
+one project while being an ordinary member of another. Fine-grained checks ("is the caller a member of this project?",
+"is the caller its leader?") resolve against these tables, exposed to the security layer through a
+`ProjectMembership` port in `shared.security` — the same pattern already used by `AuthenticatedUserLookup`.
+
+### Design notes
+
+- The role is **not** carried as a JWT claim. It is resolved from the database on every request (see
+  `UserAuthenticatedUserLookup`), so a role change or deactivation takes effect immediately rather than at token
+  expiry.
+- Authorization rules stay centralized in `SecurityConfig` rather than scattered across `@PreAuthorize` annotations.
+- Self-registration always creates a `USER`; the create/update DTOs never accept a role field. Promotion is an
+  admin-only operation.
+- Role changes are guarded against lockout: an admin cannot change their own role, and the last active admin cannot
+  be demoted.
+
+> **Status:** designed, not yet implemented — scheduled after the `project` and `sprint` modules land, so the
+> project-scoped half of the model can be built against real entities.
 
 ## User Endpoints (Planned)
 
 ### Core CRUD
 
-- [x] `POST /api/users` — Create a new user (requires Admin role)
+- [x] `POST /api/users/register` — Register a new user (public; always created with the `USER` role)
 - [x] `GET /api/users/{id}` — Get user details by id
 - [x] `GET /api/users` — List users (paginated, filterable)
 - [x] `PUT /api/users/{id}` — Update user details (name/surname/email)
@@ -180,8 +223,10 @@ What's currently in place:
 
 ### Role / Permission
 
-- No API endpoint for granting/revoking admin privileges. Admin status is set directly in the database by whoever has DB
-  access.
+- [ ] `PATCH /api/users/{id}/role` — Change a user's global role (Admin only; cannot target self, cannot demote the
+  last active admin)
+
+Until this endpoint exists, roles are set directly in the database by whoever has DB access.
 
 ### Authentication (once the security layer is in place)
 
