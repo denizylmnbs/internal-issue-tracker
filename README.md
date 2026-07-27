@@ -159,14 +159,14 @@ What's currently in place:
 - [x] `DELETE /api/users/{id}` — Deactivate a user (soft delete, `is_active=false`)
 
 ### Password Management
-- [ ] `PATCH /api/users/{id}/password` — Change password (requires current password confirmation)
-- [ ] `POST /api/users/{id}/reset-password` — Admin-initiated password reset (future phase)
+- [x] `PATCH /api/users/{id}/password` — Change password (requires current password confirmation)
+- [x] `POST /api/users/{id}/reset-password` — Admin-initiated password reset (future phase)
 
 ### Role / Permission
-- [ ] `PATCH /api/users/{id}/admin-status` — Grant or revoke admin privileges (Admin only)
+- No API endpoint for granting/revoking admin privileges. Admin status is set directly in the database by whoever has DB access.
 
 ### Authentication (once the security layer is in place)
-- [ ] `POST /api/auth/login` — Log in, returns a JWT token
+- [x] `POST /api/auth/login` — Log in, returns a JWT token
 - [ ] `POST /api/auth/refresh` — Refresh token (future phase)
 - [ ] `GET /api/auth/me` — Get the currently authenticated user's details
 
