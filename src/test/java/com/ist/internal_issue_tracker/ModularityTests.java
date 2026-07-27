@@ -6,18 +6,15 @@ import org.springframework.modulith.docs.Documenter;
 
 class ModularityTests {
 
-    ApplicationModules modules = ApplicationModules.of(InternalIssueTrackerApplication.class);
+  ApplicationModules modules = ApplicationModules.of(InternalIssueTrackerApplication.class);
 
-    @Test
-    void verifiesModularStructure() {
-        modules.verify();
-    }
+  @Test
+  void verifiesModularStructure() {
+    modules.verify();
+  }
 
-    @Test
-    void writeDocumentationSnippets() {
-        new Documenter(modules)
-                .writeDocumentation()
-                .writeIndividualModulesAsPlantUml();
-    }
-
+  @Test
+  void writeDocumentationSnippets() {
+    new Documenter(modules).writeDocumentation().writeIndividualModulesAsPlantUml();
+  }
 }

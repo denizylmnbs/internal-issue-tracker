@@ -9,31 +9,30 @@ import org.springframework.stereotype.Component;
 @Component
 public class UserMapper {
 
-    public User toEntity(UserCreateRequest request) {
-        User user = new User();
+  public User toEntity(UserCreateRequest request) {
+    User user = new User();
 
-        user.setName(request.name());
-        user.setSurname(request.surname());
-        user.setEmail(request.email());
+    user.setName(request.name());
+    user.setSurname(request.surname());
+    user.setEmail(request.email());
 
-        return user;
-    }
+    return user;
+  }
 
-    public void updateEntity(User user, UserUpdateRequest request) {
-        user.setName(request.name());
-        user.setSurname(request.surname());
-        user.setEmail(request.email());
-    }
+  public void updateEntity(User user, UserUpdateRequest request) {
+    user.setName(request.name());
+    user.setSurname(request.surname());
+    user.setEmail(request.email());
+  }
 
-    public UserResponse toResponse(User user) {
-        return new UserResponse(
-                user.getId(),
-                user.getName(),
-                user.getSurname(),
-                user.getEmail(),
-                user.getIsAdmin(),
-                user.getIsActive(),
-                user.getCreatedAt()
-        );
-    }
+  public UserResponse toResponse(User user) {
+    return new UserResponse(
+        user.getId(),
+        user.getName(),
+        user.getSurname(),
+        user.getEmail(),
+        user.getIsAdmin(),
+        user.getIsActive(),
+        user.getCreatedAt());
+  }
 }

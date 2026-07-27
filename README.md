@@ -15,39 +15,50 @@
 
 ## About
 
-Internal Issue Tracker is a project/sprint/issue tracking application intended for internal team use, similar in spirit to Jira. It manages users, teams, projects, sprints, epics, issues, comments, and full activity history for auditing purposes.
+Internal Issue Tracker is a project/sprint/issue tracking application intended for internal team use, similar in spirit
+to Jira. It manages users, teams, projects, sprints, epics, issues, comments, and full activity history for auditing
+purposes.
 
-The project is deliberately built as a **Modular Monolith** rather than microservices: a single deployable application internally organized into independent, well-bounded modules (via [Spring Modulith](https://spring.io/projects/spring-modulith)), each owning its own domain logic and enforcing boundaries at compile/verification time. This gives the simplicity of a monolith (one deployment, one database, easy local development) while keeping the codebase modular enough to split into separate services later if needed.
+The project is deliberately built as a **Modular Monolith** rather than microservices: a single deployable application
+internally organized into independent, well-bounded modules (
+via [Spring Modulith](https://spring.io/projects/spring-modulith)), each owning its own domain logic and enforcing
+boundaries at compile/verification time. This gives the simplicity of a monolith (one deployment, one database, easy
+local development) while keeping the codebase modular enough to split into separate services later if needed.
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Language | Java 25 |
-| Framework | Spring Boot 4.1.0 |
-| Architecture | Spring Modulith 2.1.0 (Modular Monolith) |
-| Web | Spring Web MVC |
-| Persistence | Spring Data JPA + Hibernate |
-| Database | PostgreSQL 17 |
-| Migrations | Flyway |
-| Security | Spring Security |
-| Validation | Spring Validation (Jakarta Bean Validation) |
-| Build Tool | Maven (via Maven Wrapper) |
-| Boilerplate Reduction | Lombok |
-| Local Infrastructure | Docker Compose |
+| Layer                 | Technology                                  |
+|-----------------------|---------------------------------------------|
+| Language              | Java 25                                     |
+| Framework             | Spring Boot 4.1.0                           |
+| Architecture          | Spring Modulith 2.1.0 (Modular Monolith)    |
+| Web                   | Spring Web MVC                              |
+| Persistence           | Spring Data JPA + Hibernate                 |
+| Database              | PostgreSQL 17                               |
+| Migrations            | Flyway                                      |
+| Security              | Spring Security                             |
+| Validation            | Spring Validation (Jakarta Bean Validation) |
+| Build Tool            | Maven (via Maven Wrapper)                   |
+| Boilerplate Reduction | Lombok                                      |
+| Local Infrastructure  | Docker Compose                              |
 
 ## Database Schema
 
-The database schema was designed with [dbdiagram.io](https://dbdiagram.io) and is version-controlled through Flyway migrations under [`src/main/resources/db/migration`](./src/main/resources/db/migration).
+The database schema was designed with [dbdiagram.io](https://dbdiagram.io) and is version-controlled through Flyway
+migrations under [`src/main/resources/db/migration`](./src/main/resources/db/migration).
 
 <!-- TODO: Replace with the exported dbdiagram.io schema image, e.g.: -->
 <!-- ![Database Schema](./docs/db-schema.png) -->
 
-Core entities include: `users`, `teams`, `team_users`, `projects`, `project_teams`, `project_users`, `sprints`, `epics`, `issues`, `comments`, and per-entity activity logs (`issue_activities`, `sprint_activities`, `project_activities`) for tracking changes over time.
+Core entities include: `users`, `teams`, `team_users`, `projects`, `project_teams`, `project_users`, `sprints`, `epics`,
+`issues`, `comments`, and per-entity activity logs (`issue_activities`, `sprint_activities`, `project_activities`) for
+tracking changes over time.
 
 ## Project Structure
 
-The codebase follows the conventions of a Spring Modulith application, where each business capability lives in its own top-level package (module) under the base package, with internal classes kept package-private and only intended APIs exposed publicly.
+The codebase follows the conventions of a Spring Modulith application, where each business capability lives in its own
+top-level package (module) under the base package, with internal classes kept package-private and only intended APIs
+exposed publicly.
 
 ```
 internal-issue-tracker/
@@ -69,7 +80,8 @@ internal-issue-tracker/
 └── mvnw / mvnw.cmd                                       # Maven Wrapper
 ```
 
-Each module is expected to be verified for boundary violations using Spring Modulith's testing support (`ApplicationModules.verify()`) as the codebase grows.
+Each module is expected to be verified for boundary violations using Spring Modulith's testing support (
+`ApplicationModules.verify()`) as the codebase grows.
 
 ## Getting Started
 
@@ -115,7 +127,8 @@ This starts a PostgreSQL 17 container (`issue-tracker-db`) and applies persisten
 ./mvnw spring-boot:run
 ```
 
-On startup, Flyway automatically applies all pending migrations under `src/main/resources/db/migration` against the configured database.
+On startup, Flyway automatically applies all pending migrations under `src/main/resources/db/migration` against the
+configured database.
 
 ### 5. Run the tests
 
@@ -133,7 +146,8 @@ What's currently in place:
 - [x] Docker Compose setup for local PostgreSQL
 - [x] Database schema designed (dbdiagram.io) and implemented via Flyway migrations
 - [x] Core dependencies wired up (Spring Modulith, Spring Data JPA, Spring Security, Validation)
-- [x] Module boundaries scaffolded (`user`, `team`, `project`, `sprint`, `epic`, `issue`, `comment`, `activity`, `shared`)
+- [x] Module boundaries scaffolded (`user`, `team`, `project`, `sprint`, `epic`, `issue`, `comment`, `activity`,
+  `shared`)
 - [x] Shared exception hierarchy and global exception handler
 - [x] Shared API response wrapper with pagination support
 - [x] `user` module: `User` entity and `UserRepository`
@@ -152,6 +166,7 @@ What's currently in place:
 ## User Endpoints (Planned)
 
 ### Core CRUD
+
 - [x] `POST /api/users` — Create a new user (requires Admin role)
 - [x] `GET /api/users/{id}` — Get user details by id
 - [x] `GET /api/users` — List users (paginated, filterable)
@@ -159,24 +174,30 @@ What's currently in place:
 - [x] `DELETE /api/users/{id}` — Deactivate a user (soft delete, `is_active=false`)
 
 ### Password Management
+
 - [x] `PATCH /api/users/{id}/password` — Change password (requires current password confirmation)
 - [x] `POST /api/users/{id}/reset-password` — Admin-initiated password reset (future phase)
 
 ### Role / Permission
-- No API endpoint for granting/revoking admin privileges. Admin status is set directly in the database by whoever has DB access.
+
+- No API endpoint for granting/revoking admin privileges. Admin status is set directly in the database by whoever has DB
+  access.
 
 ### Authentication (once the security layer is in place)
+
 - [x] `POST /api/auth/login` — Log in, returns a JWT token
 - [ ] `POST /api/auth/refresh` — Refresh token (future phase)
 - [ ] `GET /api/auth/me` — Get the currently authenticated user's details
 
 ### Filtering / Utility
+
 - [ ] `GET /api/users/active` — List only active users
 - [ ] `GET /api/users/search?q=...` — Search by name/surname/email (future phase)
 
 ---
 This README will be updated as the project progresses.
 ---
+
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
