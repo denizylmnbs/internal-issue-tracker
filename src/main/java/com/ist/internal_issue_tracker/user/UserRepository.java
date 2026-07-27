@@ -14,11 +14,19 @@ public interface UserRepository extends JpaRepository<User, Integer> {
 
   Optional<User> findByEmail(String email);
 
+  /**
+   * The {@code CAST(... AS String)} wrappers are load-bearing: a bare {@code :name IS NULL} gives
+   * Hibernate no context to infer the parameter type from, so the driver sends it untyped and
+   * PostgreSQL fails the whole statement with {@code function lower(bytea) does not exist}. Casting
+   * pins the parameter to varchar at every bind site.
+   */
   @Query(
       """
             SELECT u FROM User u
-            WHERE (:name IS NULL OR lower(u.name) LIKE lower(concat('%', :name, '%')))
-            AND (:surname IS NULL OR lower(u.surname) LIKE lower(concat('%', :surname, '%')))
+            WHERE (CAST(:name AS String) IS NULL
+                   OR lower(u.name) LIKE lower(concat('%', CAST(:name AS String), '%')))
+            AND (CAST(:surname AS String) IS NULL
+                 OR lower(u.surname) LIKE lower(concat('%', CAST(:surname AS String), '%')))
             """)
   Page<User> findAllByFilters(
       @Param("name") String name, @Param("surname") String surname, Pageable pageable);
