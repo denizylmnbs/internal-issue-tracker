@@ -1,5 +1,6 @@
 package com.ist.internal_issue_tracker.user;
 
+import com.ist.internal_issue_tracker.shared.security.Role;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
@@ -40,8 +41,9 @@ public class User {
   private String email;
 
   @NotNull
-  @Column(nullable = false)
-  private Boolean isAdmin = false;
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false, length = 20)
+  private Role role = Role.USER;
 
   @NotBlank
   @Column(nullable = false)

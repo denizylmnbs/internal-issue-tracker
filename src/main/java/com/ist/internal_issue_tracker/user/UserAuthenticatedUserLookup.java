@@ -21,6 +21,6 @@ public class UserAuthenticatedUserLookup implements AuthenticatedUserLookup {
     return userRepository
         .findById(userId)
         .filter(User::getIsActive)
-        .map(user -> new AuthenticatedUser(user.getId(), user.getIsAdmin()));
+        .map(user -> new AuthenticatedUser(user.getId(), user.getRole()));
   }
 }

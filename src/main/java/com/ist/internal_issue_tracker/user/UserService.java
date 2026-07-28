@@ -44,7 +44,7 @@ public class UserService {
       throw new AppException(UserErrorCode.INVALID_CREDENTIALS);
     }
 
-    return new AuthenticatedUser(user.getId(), user.getIsAdmin());
+    return new AuthenticatedUser(user.getId(), user.getRole());
   }
 
   private DuplicateResourceException emailAlreadyExists(String email) {

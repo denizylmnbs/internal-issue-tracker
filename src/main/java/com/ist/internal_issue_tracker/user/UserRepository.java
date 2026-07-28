@@ -14,6 +14,8 @@ public interface UserRepository extends JpaRepository<User, Integer> {
 
   Optional<User> findByEmail(String email);
 
+  boolean existsByIdAndIsActiveTrue(Integer id);
+
   /**
    * The {@code CAST(... AS String)} wrappers are load-bearing: a bare {@code :name IS NULL} gives
    * Hibernate no context to infer the parameter type from, so the driver sends it untyped and
