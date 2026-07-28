@@ -55,10 +55,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         Optional<AuthenticatedUser> authenticatedUser = authenticatedUserLookup.findById(userId);
 
         if (authenticatedUser.isPresent()) {
+          // Only the user's own role is granted; the implied lower roles are resolved at decision
+          // time by the RoleHierarchy bean in SecurityConfig.
           List<GrantedAuthority> authorities =
-              authenticatedUser.get().isAdmin()
-                  ? List.of(new SimpleGrantedAuthority("ROLE_ADMIN"))
-                  : List.of(new SimpleGrantedAuthority("ROLE_USER"));
+              List.of(new SimpleGrantedAuthority(authenticatedUser.get().getRole().authority()));
 
           var authentication =
               new UsernamePasswordAuthenticationToken(authenticatedUser.get(), null, authorities);

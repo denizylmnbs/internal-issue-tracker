@@ -9,18 +9,18 @@ package com.ist.internal_issue_tracker.shared.security;
 public final class AuthenticatedUser {
 
   private final Integer id;
-  private final boolean admin;
+  private final Role role;
 
-  public AuthenticatedUser(Integer id, boolean admin) {
+  public AuthenticatedUser(Integer id, Role role) {
     this.id = id;
-    this.admin = admin;
+    this.role = role;
   }
 
   public Integer getId() {
     return id;
   }
 
-  public boolean isAdmin() {
-    return admin;
+  public Role getRole() {
+    return role;
   }
 }
