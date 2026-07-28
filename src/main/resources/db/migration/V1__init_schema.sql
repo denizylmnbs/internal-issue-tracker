@@ -12,7 +12,8 @@ CREATE TABLE "users" (
                          "name" varchar(255) NOT NULL,
                          "surname" varchar(255) NOT NULL,
                          "email" varchar(255) UNIQUE NOT NULL,
-                         "is_admin" boolean NOT NULL DEFAULT false,
+                         "role" varchar(20) NOT NULL DEFAULT 'USER'
+                             CHECK ("role" IN ('USER','DEVELOPER','EDITOR','ADMIN')),
                          "password_hashed" varchar(255) NOT NULL,
                          "is_active" boolean NOT NULL DEFAULT true,
                          "created_at" timestamptz DEFAULT (now()),
