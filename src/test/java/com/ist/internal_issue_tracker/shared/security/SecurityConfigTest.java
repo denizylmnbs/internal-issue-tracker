@@ -1,0 +1,160 @@
+package com.ist.internal_issue_tracker.shared.security;
+
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import com.ist.internal_issue_tracker.team.TeamController;
+import com.ist.internal_issue_tracker.team.TeamService;
+import com.ist.internal_issue_tracker.user.UserController;
+import com.ist.internal_issue_tracker.user.UserService;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
+
+/**
+ * Exercises the authorization rules through the real filter chain. The JWT filter is not involved -
+ * requests carry a pre-built {@code Authentication} identical in shape to the one {@link
+ * JwtAuthenticationFilter} produces: an {@link AuthenticatedUser} principal plus the caller's own
+ * role, and only that role.
+ *
+ */
+@WebMvcTest(controllers = {UserController.class, TeamController.class})
+@Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
+class SecurityConfigTest {
+
+  private static final String RESET_PASSWORD_BODY = "{\"newPassword\":\"password123\"}";
+  private static final String CHANGE_PASSWORD_BODY =
+      "{\"currentPassword\":\"password123\",\"newPassword\":\"password456\"}";
+
+  @Autowired private MockMvc mockMvc;
+
+  @MockitoBean private UserService userService;
+  @MockitoBean private TeamService teamService;
+  @MockitoBean private JwtService jwtService;
+  @MockitoBean private AuthenticatedUserLookup authenticatedUserLookup;
+
+  /** Mirrors {@link JwtAuthenticationFilter}: the principal carries exactly one authority. */
+  private static RequestPostProcessor as(Integer userId, Role role) {
+    return authentication(
+        new UsernamePasswordAuthenticationToken(
+            new AuthenticatedUser(userId, role),
+            null,
+            List.of(new SimpleGrantedAuthority(role.authority()))));
+  }
+
+  @Test
+  void anyRequest_returns401_whenUnauthenticated() throws Exception {
+    mockMvc.perform(get("/api/users")).andExpect(status().isUnauthorized());
+  }
+
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void anyRequest_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc.perform(get("/api/users").with(as(1, role))).andExpect(status().isOk());
+  }
+
+  @Test
+  void resetPassword_isAllowed_forAdmin() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/users/1/reset-password")
+                .with(as(99, Role.ADMIN))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RESET_PASSWORD_BODY))
+        .andExpect(status().isOk());
+  }
+
+  /**
+   * The hierarchy only ever grants <em>downwards</em>: an editor outranks a developer but must not
+   * reach an admin-only rule.
+   */
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER", "EDITOR"})
+  void resetPassword_returns403_forEveryRoleBelowAdmin(Role role) throws Exception {
+    mockMvc
+        .perform(
+            post("/api/users/1/reset-password")
+                .with(as(99, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(RESET_PASSWORD_BODY))
+        .andExpect(status().isForbidden());
+  }
+
+  /**
+   * The hierarchy's whole purpose, observed end to end: {@code DELETE /api/teams/{id}} declares only
+   * {@code hasRole("EDITOR")}, yet an admin gets through without the rule ever naming {@code ADMIN}.
+   * Deleting the {@code EDITOR -> DEVELOPER} link or the {@code RoleHierarchy} bean turns the admin
+   * case red.
+   */
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"EDITOR", "ADMIN"})
+  void deleteTeam_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
+    mockMvc.perform(delete("/api/teams/1").with(as(1, role))).andExpect(status().isOk());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void deleteTeam_returns403_forEveryRoleBelowEditor(Role role) throws Exception {
+    mockMvc.perform(delete("/api/teams/1").with(as(1, role))).andExpect(status().isForbidden());
+  }
+
+  @Test
+  void changePassword_isAllowed_forOwner() throws Exception {
+    mockMvc
+        .perform(
+            patch("/api/users/1/password")
+                .with(as(1, Role.USER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(CHANGE_PASSWORD_BODY))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void changePassword_returns403_forAnotherUser() throws Exception {
+    mockMvc
+        .perform(
+            patch("/api/users/2/password")
+                .with(as(1, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(CHANGE_PASSWORD_BODY))
+        .andExpect(status().isForbidden());
+  }
+
+  /**
+   * Regression test for the hand-written {@code selfOrAdmin} manager: it reads authorities itself,
+   * so it has to expand them through the {@code RoleHierarchy} first. Comparing {@code
+   * getAuthorities()} directly would still pass here (admin is the top role) - the case that would
+   * break is covered by {@link #changePassword_returns403_forAnotherUser} staying red for any role
+   * that is neither owner nor admin.
+   */
+  @Test
+  void changePassword_isAllowed_forAdminActingOnAnotherUser() throws Exception {
+    mockMvc
+        .perform(
+            patch("/api/users/1/password")
+                .with(as(99, Role.ADMIN))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(CHANGE_PASSWORD_BODY))
+        .andExpect(status().isOk());
+  }
+}
