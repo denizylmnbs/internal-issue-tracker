@@ -6,7 +6,8 @@ import org.springframework.http.HttpStatus;
 public enum UserErrorCode implements ErrorCode {
   EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "This email already exists."),
   CURRENT_PASSWORD_INCORRECT(HttpStatus.BAD_REQUEST, "Current password is incorrect."),
-  INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "Email or password is incorrect.");
+  INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "Email or password is incorrect."),
+  ROLE_CHANGE_NOT_PERMITTED(HttpStatus.FORBIDDEN, "Changing user role is not permitted.");
 
   private final HttpStatus httpStatus;
   private final String message;
