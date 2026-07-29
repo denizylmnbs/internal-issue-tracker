@@ -15,11 +15,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class TeamService {
 
   private final TeamRepository teamRepository;
@@ -112,7 +110,7 @@ public class TeamService {
 
     team.setLeaderId(request.leaderId());
 
-    return teamMapper.toResponse(team);
+    return teamMapper.toResponse(teamRepository.save(team));
   }
 
   public void deleteTeam(Integer id) {
@@ -121,5 +119,7 @@ public class TeamService {
         teamRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("Team", id));
 
     team.setIsActive(false);
+
+    teamRepository.save(team);
   }
 }
