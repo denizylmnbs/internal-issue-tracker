@@ -2,10 +2,14 @@ package com.ist.internal_issue_tracker.shared.security;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.authorization.AuthorizationResult;
@@ -66,6 +70,32 @@ class RoleHierarchyTest {
   @Test
   void authorityName_carriesTheRolePrefix() {
     assertThat(Role.ADMIN.authority()).isEqualTo("ROLE_ADMIN");
+  }
+
+  /**
+   * The single point where {@link Role#outranks} and the {@link RoleHierarchy} bean are forced to
+   * agree. {@code outranks} reads the enum's declaration order; the bean is declared separately in
+   * {@link SecurityConfig}. Nothing links the two at runtime, so reordering the constants - or
+   * inserting a role without extending the chain - would leave domain code and endpoint rules with
+   * two different ideas of who outranks whom. Asserting over every ordered pair turns that into a
+   * red test rather than a silent divergence.
+   *
+   * <p>Equality is asserted deliberately: {@code outranks} is strict, while a role is always
+   * reachable from itself, so the self case has to be excluded on the hierarchy side.
+   */
+  @ParameterizedTest
+  @MethodSource("everyOrderedRolePair")
+  void outranks_agreesWithRoleHierarchy(Role actor, Role target) {
+    boolean hierarchySaysStrictlyAbove =
+        actor != target && reachableFrom(actor).contains(target.authority());
+
+    assertThat(actor.outranks(target)).isEqualTo(hierarchySaysStrictlyAbove);
+  }
+
+  private static Stream<Arguments> everyOrderedRolePair() {
+    return Arrays.stream(Role.values())
+        .flatMap(
+            actor -> Arrays.stream(Role.values()).map(target -> Arguments.of(actor, target)));
   }
 
   /**

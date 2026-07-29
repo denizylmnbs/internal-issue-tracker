@@ -7,10 +7,13 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceException;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
+import com.ist.internal_issue_tracker.shared.security.AuthenticatedUser;
 import com.ist.internal_issue_tracker.shared.security.Role;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
+import com.ist.internal_issue_tracker.user.dto.RoleChangeRequest;
 import com.ist.internal_issue_tracker.user.dto.UserCreateRequest;
 import com.ist.internal_issue_tracker.user.dto.UserResponse;
 import com.ist.internal_issue_tracker.user.dto.UserUpdateRequest;
@@ -213,6 +216,99 @@ class UserServiceTest {
     when(userRepository.findById(1)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> userService.deleteUser(1))
+        .isInstanceOf(ResourceNotFoundException.class);
+  }
+
+  private static User userWithRole(Role role) {
+    User user = new User();
+    user.changeRole(role);
+    return user;
+  }
+
+  private void assertRoleChangeRejected(AuthenticatedUser caller, User target, Role newRole) {
+    Role roleBefore = target.getRole();
+
+    when(userRepository.findById(1)).thenReturn(Optional.of(target));
+
+    assertThatThrownBy(() -> userService.changeRole(1, new RoleChangeRequest(newRole), caller))
+        .isInstanceOf(AppException.class)
+        .extracting(ex -> ((AppException) ex).errorCode())
+        .isEqualTo(UserErrorCode.ROLE_CHANGE_NOT_PERMITTED);
+
+    assertThat(target.getRole()).isEqualTo(roleBefore);
+  }
+
+  @Test
+  void changeRole_changesRole_whenCallerOutranksBothTheTargetAndTheNewRole() {
+    User target = userWithRole(Role.USER);
+    UserResponse expectedResponse =
+        new UserResponse(
+            1, "Ada", "Lovelace", "ada@ist.com", Role.EDITOR, true, OffsetDateTime.now());
+
+    when(userRepository.findById(1)).thenReturn(Optional.of(target));
+    when(userMapper.toResponse(target)).thenReturn(expectedResponse);
+
+    UserResponse actualResponse =
+        userService.changeRole(
+            1, new RoleChangeRequest(Role.EDITOR), new AuthenticatedUser(99, Role.ADMIN));
+
+    assertThat(actualResponse).isEqualTo(expectedResponse);
+    assertThat(target.getRole()).isEqualTo(Role.EDITOR);
+    // the entity is managed and the method is transactional, so dirty checking persists the change
+    verify(userRepository, never()).save(any());
+  }
+
+  /**
+   * The ceiling half of the rule: outranking the target is not enough on its own, the caller must
+   * also outrank the role being handed out. Without this an admin could mint a peer - and, one hop
+   * later, someone able to act on the admin's own account.
+   */
+  @Test
+  void changeRole_throwsRoleChangeNotPermitted_whenNewRoleEqualsCallerRole() {
+    assertRoleChangeRejected(
+        new AuthenticatedUser(99, Role.ADMIN), userWithRole(Role.USER), Role.ADMIN);
+  }
+
+  /**
+   * The floor half: the target's <em>current</em> role is what gates the action, which is why this
+   * check cannot live in {@code SecurityConfig} - it is unknown until the row is read.
+   */
+  @Test
+  void changeRole_throwsRoleChangeNotPermitted_whenTargetHoldsTheCallersOwnRole() {
+    assertRoleChangeRejected(
+        new AuthenticatedUser(99, Role.ADMIN), userWithRole(Role.ADMIN), Role.USER);
+  }
+
+  /**
+   * Self-demotion and self-promotion need no dedicated branch in the service: a caller never
+   * strictly outranks its own role, so the floor check rejects it. This test is what allows that
+   * branch to stay absent.
+   */
+  @Test
+  void changeRole_throwsRoleChangeNotPermitted_whenCallerTargetsOwnAccount() {
+    User self = userWithRole(Role.ADMIN);
+
+    assertRoleChangeRejected(new AuthenticatedUser(1, Role.ADMIN), self, Role.EDITOR);
+  }
+
+  /**
+   * The service rule is enforced independently of the {@code hasRole("ADMIN")} gate in front of the
+   * endpoint, so loosening that gate later cannot silently let an editor rewrite an admin.
+   */
+  @Test
+  void changeRole_throwsRoleChangeNotPermitted_whenCallerIsOutrankedByTarget() {
+    assertRoleChangeRejected(
+        new AuthenticatedUser(99, Role.EDITOR), userWithRole(Role.ADMIN), Role.USER);
+  }
+
+  @Test
+  void changeRole_throwsResourceNotFoundException_whenUserNotFound() {
+    when(userRepository.findById(1)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(
+            () ->
+                userService.changeRole(
+                    1, new RoleChangeRequest(Role.EDITOR), new AuthenticatedUser(99, Role.ADMIN)))
         .isInstanceOf(ResourceNotFoundException.class);
   }
 }

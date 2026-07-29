@@ -7,6 +7,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ist.internal_issue_tracker.shared.port.TeamLookup;
 import com.ist.internal_issue_tracker.team.TeamController;
 import com.ist.internal_issue_tracker.team.TeamService;
 import com.ist.internal_issue_tracker.user.UserController;
@@ -39,6 +40,7 @@ class SecurityConfigTest {
   private static final String RESET_PASSWORD_BODY = "{\"newPassword\":\"password123\"}";
   private static final String CHANGE_PASSWORD_BODY =
       "{\"currentPassword\":\"password123\",\"newPassword\":\"password456\"}";
+  private static final String CHANGE_ROLE_BODY = "{\"newRole\":\"EDITOR\"}";
 
   @Autowired private MockMvc mockMvc;
 
@@ -46,6 +48,9 @@ class SecurityConfigTest {
   @MockitoBean private TeamService teamService;
   @MockitoBean private JwtService jwtService;
   @MockitoBean private AuthenticatedUserLookup authenticatedUserLookup;
+
+  /** {@code securityFilterChain} takes the port directly, so the slice has to supply it. */
+  @MockitoBean private TeamLookup teamLookup;
 
   /** Mirrors {@link JwtAuthenticationFilter}: the principal carries exactly one authority. */
   private static RequestPostProcessor as(Integer userId, Role role) {
@@ -156,5 +161,36 @@ class SecurityConfigTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(CHANGE_PASSWORD_BODY))
         .andExpect(status().isOk());
+  }
+
+  /**
+   * Only the coarse gate is observable here: whether this admin may hand out <em>this</em> role to
+   * <em>this</em> user depends on rows the filter chain never reads, and is covered by {@code
+   * UserServiceTest}. Getting past the gate is therefore all a 200 proves - {@code UserService} is
+   * mocked out.
+   */
+  @Test
+  void changeRole_isAllowed_forAdmin() throws Exception {
+    mockMvc
+        .perform(
+            patch("/api/users/1/role")
+                .with(as(99, Role.ADMIN))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(CHANGE_ROLE_BODY))
+        .andExpect(status().isOk());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER", "EDITOR"})
+  void changeRole_returns403_forEveryRoleBelowAdmin(Role role) throws Exception {
+    mockMvc
+        .perform(
+            patch("/api/users/1/role")
+                .with(as(99, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(CHANGE_ROLE_BODY))
+        .andExpect(status().isForbidden());
   }
 }
