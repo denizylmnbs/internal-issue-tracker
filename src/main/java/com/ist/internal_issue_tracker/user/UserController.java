@@ -1,17 +1,15 @@
 package com.ist.internal_issue_tracker.user;
 
+import com.ist.internal_issue_tracker.shared.security.AuthenticatedUser;
 import com.ist.internal_issue_tracker.shared.web.ApiResponse;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
-import com.ist.internal_issue_tracker.user.dto.ChangePasswordRequest;
-import com.ist.internal_issue_tracker.user.dto.ResetPasswordRequest;
-import com.ist.internal_issue_tracker.user.dto.UserCreateRequest;
-import com.ist.internal_issue_tracker.user.dto.UserResponse;
-import com.ist.internal_issue_tracker.user.dto.UserUpdateRequest;
+import com.ist.internal_issue_tracker.user.dto.*;
 import jakarta.validation.Valid;
 import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -76,5 +74,15 @@ public class UserController {
     userService.resetPassword(id, request);
 
     return ResponseEntity.ok(ApiResponse.ok());
+  }
+
+  @PatchMapping("/{id}/role")
+  public ResponseEntity<ApiResponse<UserResponse>> changeRole(
+          @AuthenticationPrincipal AuthenticatedUser caller,
+          @PathVariable Integer id, @Valid @RequestBody RoleChangeRequest request
+  ) {
+    UserResponse userResponse = userService.changeRole(id, request, caller);
+
+    return ResponseEntity.ok(ApiResponse.ok(userResponse));
   }
 }

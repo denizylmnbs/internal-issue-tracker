@@ -43,6 +43,7 @@ public class User {
   @NotNull
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, length = 20)
+  @Setter(AccessLevel.NONE) // Blocks the setter from being used
   private Role role = Role.USER;
 
   @NotBlank
@@ -64,5 +65,10 @@ public class User {
   public void changePassword(String newHashedPassword) {
     // TODO: I will add some validations in the future
     this.passwordHashed = newHashedPassword;
+  }
+
+  public void changeRole(Role newRole) {
+    // TODO: I will add some validations in the future
+    this.role = newRole;
   }
 }

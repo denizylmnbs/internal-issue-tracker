@@ -4,12 +4,9 @@ import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceException;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
 import com.ist.internal_issue_tracker.shared.security.AuthenticatedUser;
+import com.ist.internal_issue_tracker.shared.security.Role;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
-import com.ist.internal_issue_tracker.user.dto.ChangePasswordRequest;
-import com.ist.internal_issue_tracker.user.dto.ResetPasswordRequest;
-import com.ist.internal_issue_tracker.user.dto.UserCreateRequest;
-import com.ist.internal_issue_tracker.user.dto.UserResponse;
-import com.ist.internal_issue_tracker.user.dto.UserUpdateRequest;
+import com.ist.internal_issue_tracker.user.dto.*;
 import com.ist.internal_issue_tracker.user.exception.UserErrorCode;
 import com.ist.internal_issue_tracker.user.internal.PasswordHasher;
 import com.ist.internal_issue_tracker.user.mapper.UserMapper;
@@ -150,5 +147,24 @@ public class UserService {
         userRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("User", id));
 
     user.changePassword(passwordHasher.hash(request.newPassword()));
+  }
+
+  public UserResponse changeRole(Integer id, RoleChangeRequest request, AuthenticatedUser caller) {
+    // fetch existing user
+    User user =
+        userRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("User", id));
+
+    // variable definitions
+    Role userRole = user.getRole();
+    Role callerRole = caller.getRole();
+    Role newRole = request.newRole();
+
+    // authorization check
+    if (!callerRole.outranks(userRole) || !callerRole.outranks(newRole)) {
+      throw new AppException(UserErrorCode.ROLE_CHANGE_NOT_PERMITTED);
+    }
+    user.changeRole(newRole);
+
+    return userMapper.toResponse(user);
   }
 }
