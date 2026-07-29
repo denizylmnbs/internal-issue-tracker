@@ -1,5 +1,7 @@
 package com.ist.internal_issue_tracker.shared.port;
 
+import com.ist.internal_issue_tracker.shared.security.Role;
+
 /**
  * Port letting other modules validate a user reference (a team leader, a project leader, an
  * assignee) without depending on the {@code user} module. {@code shared} must never depend on a
@@ -17,4 +19,6 @@ public interface UserLookup {
    * responsibilities.
    */
   boolean existsActiveUser(Integer userId);
+
+  boolean hasAtLeastRole(Integer userId, Role requiredRole);
 }
