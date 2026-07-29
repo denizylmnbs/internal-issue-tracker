@@ -14,7 +14,6 @@ public enum Role {
   EDITOR,
   ADMIN;
 
-  private static final String AUTHORITY_PREFIX = "ROLE_";
 
   /**
    * Spring Security matches {@code hasRole("ADMIN")} against an authority named {@code ROLE_ADMIN},
@@ -22,6 +21,6 @@ public enum Role {
    * mismatched prefix fails silently rather than loudly.
    */
   public String authority() {
-    return AUTHORITY_PREFIX + name();
+    return name();
   }
 }

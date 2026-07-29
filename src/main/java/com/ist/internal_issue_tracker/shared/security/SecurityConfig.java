@@ -1,5 +1,6 @@
 package com.ist.internal_issue_tracker.shared.security;
 
+import com.ist.internal_issue_tracker.shared.port.TeamLookup;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -11,6 +12,7 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -19,10 +21,17 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 public class SecurityConfig {
 
+  private final AuthenticationEntryPoint authenticationEntryPoint;
+
+  public SecurityConfig(AuthenticationEntryPoint authenticationEntryPoint) {
+    this.authenticationEntryPoint = authenticationEntryPoint;
+  }
+
   /**
    * The single source of truth for role precedence. Declaring it as a bean is enough: {@code
-   * authorizeHttpRequests} picks it up on its own, so a rule written as {@code hasRole("DEVELOPER")}
-   * also admits editors and admins and each endpoint only has to state its <em>minimum</em> role.
+   * authorizeHttpRequests} picks it up on its own, so a rule written as {@code
+   * hasRole("DEVELOPER")} also admits editors and admins and each endpoint only has to state its
+   * <em>minimum</em> role.
    *
    * <p>The expansion happens at decision time, inside Spring's own authorization managers - it does
    * not change what {@code Authentication#getAuthorities()} returns. Any hand-written check must
@@ -47,7 +56,8 @@ public class SecurityConfig {
       AuthenticatedUserLookup authenticatedUserLookup,
       RestAuthenticationEntryPoint authenticationEntryPoint,
       RestAccessDeniedHandler accessDeniedHandler,
-      RoleHierarchy roleHierarchy)
+      RoleHierarchy roleHierarchy,
+      TeamLookup teamLookup)
       throws Exception {
     http.csrf(csrf -> csrf.disable())
         .sessionManagement(
@@ -61,19 +71,24 @@ public class SecurityConfig {
             auth ->
                 auth.requestMatchers(HttpMethod.POST, "/api/auth/login")
                     .permitAll()
-
                     .requestMatchers(HttpMethod.POST, "/api/users/register")
                     .permitAll()
-
+                    .requestMatchers(HttpMethod.PUT, "/api/users/{id}")
+                    .access(selfOrAdmin(roleHierarchy))
+                    .requestMatchers(HttpMethod.DELETE, "/api/users/{id}")
+                    .hasRole("ADMIN")
                     .requestMatchers(HttpMethod.PATCH, "/api/users/{id}/password")
                     .access(selfOrAdmin(roleHierarchy))
-
                     .requestMatchers(HttpMethod.POST, "/api/users/{id}/reset-password")
                     .hasRole("ADMIN")
-
+                    .requestMatchers(HttpMethod.POST, "/api/teams")
+                    .hasRole("EDITOR")
+                    .requestMatchers(HttpMethod.DELETE, "/api/teams/{id}")
+                    .hasRole("EDITOR")
                     .requestMatchers(HttpMethod.PATCH, "/api/teams/{id}/leader")
-                    .hasRole("ADMIN")
-
+                    .hasRole("EDITOR")
+                    .requestMatchers(HttpMethod.PUT, "/api/teams/{id}")
+                    .access(editorOrTeamLeader(roleHierarchy, teamLookup))
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(
@@ -97,10 +112,33 @@ public class SecurityConfig {
         return new AuthorizationDecision(false);
       }
 
-      String idVariable = context.getVariables().get("id");
-      boolean isSelf = idVariable != null && user.getId().equals(Integer.valueOf(idVariable));
+      Integer idVariable = parseId(context);
+      boolean isSelf = idVariable != null && user.getId().equals(idVariable);
 
       return new AuthorizationDecision(isSelf || hasRole(roleHierarchy, auth, Role.ADMIN));
+    };
+  }
+
+  private AuthorizationManager<RequestAuthorizationContext> editorOrTeamLeader(
+      RoleHierarchy roleHierarchy, TeamLookup teamLookup) {
+    return (authentication, context) -> {
+      // take auth information and check if it is valid
+      Authentication auth = authentication.get();
+      if (auth == null || !(auth.getPrincipal() instanceof AuthenticatedUser user)) {
+        return new AuthorizationDecision(false);
+      }
+
+      // In-memory check first
+      if (hasRole(roleHierarchy, auth, Role.EDITOR)) {
+        return new AuthorizationDecision(true);
+      }
+
+      Integer teamId = parseId(context);
+      if (teamId == null) {
+        return new AuthorizationDecision(false);
+      }
+
+      return new AuthorizationDecision(teamLookup.isLeaderOfTeam(teamId, user.getId()));
     };
   }
 
@@ -113,5 +151,17 @@ public class SecurityConfig {
   private boolean hasRole(RoleHierarchy roleHierarchy, Authentication auth, Role required) {
     return roleHierarchy.getReachableGrantedAuthorities(auth.getAuthorities()).stream()
         .anyMatch(authority -> authority.getAuthority().equals(required.authority()));
+  }
+
+  private Integer parseId(RequestAuthorizationContext context) {
+    String raw = context.getVariables().get("id");
+    if (raw == null) {
+      return null;
+    }
+    try {
+      return Integer.valueOf(raw);
+    } catch (NumberFormatException e) {
+      return null;
+    }
   }
 }
