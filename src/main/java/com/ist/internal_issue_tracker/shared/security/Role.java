@@ -3,10 +3,14 @@ package com.ist.internal_issue_tracker.shared.security;
 /**
  * Global role carried by every user, declared in increasing order of privilege.
  *
- * <p>The hierarchy itself - which role implies which - is deliberately <em>not</em> encoded here.
- * It is declared once as the {@code RoleHierarchy} bean in {@link SecurityConfig}, so that
- * authorization rules only ever have to state the <em>minimum</em> role an endpoint requires.
- * Adding a second notion of "implies" to this enum would let the two drift apart.
+ * <p>Endpoint rules never consult this order. Which role implies which is declared once as the
+ * {@code RoleHierarchy} bean in {@link SecurityConfig}, so that a rule only ever has to state the
+ * <em>minimum</em> role it requires and Spring expands the rest at decision time.
+ *
+ * <p>{@link #outranks} and {@link #atLeast} exist for domain code, which has to compare two roles
+ * it holds in hand - a question no {@code RoleHierarchy} lookup phrases naturally. They read the
+ * declaration order above, which makes it a second statement of the same hierarchy; {@code
+ * RoleHierarchyTest} asserts the two agree over every ordered pair so they cannot drift.
  */
 public enum Role {
   USER,
@@ -23,7 +27,7 @@ public enum Role {
     return "ROLE_" + name();
   }
 
-  /** {@code true} when this role is ranks above it. */
+  /** {@code true} when this role ranks strictly above {@code other}. */
   public boolean outranks(Role other) {
     return this.ordinal() > other.ordinal();
   }
