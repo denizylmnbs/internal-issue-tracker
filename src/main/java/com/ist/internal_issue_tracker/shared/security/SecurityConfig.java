@@ -12,7 +12,6 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -20,12 +19,6 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
-
-  private final AuthenticationEntryPoint authenticationEntryPoint;
-
-  public SecurityConfig(AuthenticationEntryPoint authenticationEntryPoint) {
-    this.authenticationEntryPoint = authenticationEntryPoint;
-  }
 
   /**
    * The single source of truth for role precedence. Declaring it as a bean is enough: {@code
@@ -80,6 +73,8 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.PATCH, "/api/users/{id}/password")
                     .access(selfOrAdmin(roleHierarchy))
                     .requestMatchers(HttpMethod.POST, "/api/users/{id}/reset-password")
+                    .hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.PATCH, "/api/users/{id}/role")
                     .hasRole("ADMIN")
                     .requestMatchers(HttpMethod.POST, "/api/teams")
                     .hasRole("EDITOR")

@@ -21,6 +21,10 @@ public enum Role {
    * mismatched prefix fails silently rather than loudly.
    */
   public String authority() {
-    return name();
+    return "ROLE_" + name();
+  }
+
+  public boolean outranks(Role other) {
+    return this.ordinal() > other.ordinal();
   }
 }
