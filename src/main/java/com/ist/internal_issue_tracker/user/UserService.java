@@ -15,11 +15,9 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
 public class UserService {
 
   private final UserRepository userRepository;
@@ -122,6 +120,8 @@ public class UserService {
         userRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("User", id));
 
     user.setIsActive(false);
+
+    userRepository.save(user);
   }
 
   public UserResponse changePassword(Integer id, ChangePasswordRequest request) {
@@ -137,7 +137,7 @@ public class UserService {
 
     user.changePassword(passwordHasher.hash(request.newPassword()));
 
-    return userMapper.toResponse(user);
+    return userMapper.toResponse(userRepository.save(user));
   }
 
   public void resetPassword(Integer id, ResetPasswordRequest request) {
@@ -147,6 +147,8 @@ public class UserService {
         userRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("User", id));
 
     user.changePassword(passwordHasher.hash(request.newPassword()));
+
+    userRepository.save(user);
   }
 
   public UserResponse changeRole(Integer id, RoleChangeRequest request, AuthenticatedUser caller) {
@@ -165,6 +167,6 @@ public class UserService {
     }
     user.changeRole(newRole);
 
-    return userMapper.toResponse(user);
+    return userMapper.toResponse(userRepository.save(user));
   }
 }

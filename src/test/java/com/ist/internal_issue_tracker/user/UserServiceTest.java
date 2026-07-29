@@ -208,7 +208,8 @@ class UserServiceTest {
     userService.deleteUser(1);
 
     assertThat(entity.getIsActive()).isFalse();
-    verify(userRepository, never()).save(any());
+    // the write is explicit rather than left to dirty checking - the service is not transactional
+    verify(userRepository).save(entity);
   }
 
   @Test
@@ -236,6 +237,7 @@ class UserServiceTest {
         .isEqualTo(UserErrorCode.ROLE_CHANGE_NOT_PERMITTED);
 
     assertThat(target.getRole()).isEqualTo(roleBefore);
+    verify(userRepository, never()).save(any());
   }
 
   @Test
@@ -246,6 +248,7 @@ class UserServiceTest {
             1, "Ada", "Lovelace", "ada@ist.com", Role.EDITOR, true, OffsetDateTime.now());
 
     when(userRepository.findById(1)).thenReturn(Optional.of(target));
+    when(userRepository.save(target)).thenReturn(target);
     when(userMapper.toResponse(target)).thenReturn(expectedResponse);
 
     UserResponse actualResponse =
@@ -254,8 +257,7 @@ class UserServiceTest {
 
     assertThat(actualResponse).isEqualTo(expectedResponse);
     assertThat(target.getRole()).isEqualTo(Role.EDITOR);
-    // the entity is managed and the method is transactional, so dirty checking persists the change
-    verify(userRepository, never()).save(any());
+    verify(userRepository).save(target);
   }
 
   /**
