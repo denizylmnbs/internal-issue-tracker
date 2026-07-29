@@ -1,5 +1,8 @@
 package com.ist.internal_issue_tracker.shared.security;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -9,7 +12,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
 import com.ist.internal_issue_tracker.team.TeamController;
+import com.ist.internal_issue_tracker.team.TeamMemberController;
+import com.ist.internal_issue_tracker.team.TeamMemberService;
 import com.ist.internal_issue_tracker.team.TeamService;
+import com.ist.internal_issue_tracker.team.dto.TeamMemberResponse;
 import com.ist.internal_issue_tracker.user.UserController;
 import com.ist.internal_issue_tracker.user.UserService;
 import java.util.List;
@@ -24,6 +30,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 /**
@@ -33,7 +40,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * role, and only that role.
  *
  */
-@WebMvcTest(controllers = {UserController.class, TeamController.class})
+@WebMvcTest(
+    controllers = {UserController.class, TeamController.class, TeamMemberController.class})
 @Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 class SecurityConfigTest {
 
@@ -41,11 +49,13 @@ class SecurityConfigTest {
   private static final String CHANGE_PASSWORD_BODY =
       "{\"currentPassword\":\"password123\",\"newPassword\":\"password456\"}";
   private static final String CHANGE_ROLE_BODY = "{\"newRole\":\"EDITOR\"}";
+  private static final String ADD_MEMBER_BODY = "{\"userId\":7}";
 
   @Autowired private MockMvc mockMvc;
 
   @MockitoBean private UserService userService;
   @MockitoBean private TeamService teamService;
+  @MockitoBean private TeamMemberService teamMemberService;
   @MockitoBean private JwtService jwtService;
   @MockitoBean private AuthenticatedUserLookup authenticatedUserLookup;
 
@@ -192,5 +202,57 @@ class SecurityConfigTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(CHANGE_ROLE_BODY))
         .andExpect(status().isForbidden());
+  }
+
+  private ResultActions addMemberToTeam1(Integer callerId, Role role) throws Exception {
+    return mockMvc.perform(
+        post("/api/teams/1/members")
+            .with(as(callerId, role))
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(ADD_MEMBER_BODY));
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"EDITOR", "ADMIN"})
+  void addTeamMember_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
+    when(teamMemberService.createTeamMember(eq(1), any()))
+        .thenReturn(new TeamMemberResponse(10, 7, 1, true));
+
+    addMemberToTeam1(99, role).andExpect(status().isCreated());
+  }
+
+  /**
+   * The reason the team id sits in the path and not in the request body: {@code editorOrTeamLeader}
+   * runs before the controller and can only reach path variables, so a body-carried id would leave
+   * this leader branch permanently unreachable and silently degrade the rule to {@code
+   * hasRole("EDITOR")}.
+   */
+  @Test
+  void addTeamMember_isAllowed_forTheLeaderOfThatTeam() throws Exception {
+    when(teamLookup.isLeaderOfTeam(1, 5)).thenReturn(true);
+    when(teamMemberService.createTeamMember(eq(1), any()))
+        .thenReturn(new TeamMemberResponse(10, 7, 1, true));
+
+    addMemberToTeam1(5, Role.DEVELOPER).andExpect(status().isCreated());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void addTeamMember_returns403_forEveryRoleBelowEditorThatDoesNotLeadTheTeam(Role role)
+      throws Exception {
+    addMemberToTeam1(5, role).andExpect(status().isForbidden());
+  }
+
+  /** Reading the roster is not restricted beyond being logged in. */
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void getTeamMembers_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc
+        .perform(get("/api/teams/1/members").with(as(1, role)))
+        .andExpect(status().isOk());
   }
 }
