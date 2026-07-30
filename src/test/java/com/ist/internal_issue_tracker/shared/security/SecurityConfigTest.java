@@ -15,6 +15,7 @@ import com.ist.internal_issue_tracker.team.TeamController;
 import com.ist.internal_issue_tracker.team.TeamMemberController;
 import com.ist.internal_issue_tracker.team.TeamMemberService;
 import com.ist.internal_issue_tracker.team.TeamService;
+import com.ist.internal_issue_tracker.team.UserTeamsController;
 import com.ist.internal_issue_tracker.team.dto.TeamMemberResponse;
 import com.ist.internal_issue_tracker.user.UserController;
 import com.ist.internal_issue_tracker.user.UserService;
@@ -41,7 +42,12 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  *
  */
 @WebMvcTest(
-    controllers = {UserController.class, TeamController.class, TeamMemberController.class})
+    controllers = {
+      UserController.class,
+      TeamController.class,
+      TeamMemberController.class,
+      UserTeamsController.class
+    })
 @Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 class SecurityConfigTest {
 
@@ -254,5 +260,55 @@ class SecurityConfigTest {
     mockMvc
         .perform(get("/api/teams/1/members").with(as(1, role)))
         .andExpect(status().isOk());
+  }
+
+  /** Removing a member is gated exactly like adding one. */
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"EDITOR", "ADMIN"})
+  void removeTeamMember_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
+    mockMvc.perform(delete("/api/teams/1/members/7").with(as(99, role))).andExpect(status().isOk());
+  }
+
+  @Test
+  void removeTeamMember_isAllowed_forTheLeaderOfThatTeam() throws Exception {
+    when(teamLookup.isLeaderOfTeam(1, 5)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/teams/1/members/7").with(as(5, Role.DEVELOPER)))
+        .andExpect(status().isOk());
+  }
+
+  /**
+   * The trailing {@code {userId}} must not be mistaken for the team the rule authorizes against:
+   * user 7 leads team 7, not team 1, so the request is still refused.
+   */
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void removeTeamMember_returns403_forEveryRoleBelowEditorThatDoesNotLeadTheTeam(Role role)
+      throws Exception {
+    when(teamLookup.isLeaderOfTeam(7, 7)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/teams/1/members/7").with(as(7, role)))
+        .andExpect(status().isForbidden());
+  }
+
+  /**
+   * Someone else's team list is readable too - the rule is {@code anyRequest().authenticated()}, not
+   * self-or-admin, so the caller's id deliberately differs from the one in the path.
+   */
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void getTeamsByUserId_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc.perform(get("/api/users/7/teams").with(as(1, role))).andExpect(status().isOk());
+  }
+
+  @Test
+  void getTeamsByUserId_returns401_whenUnauthenticated() throws Exception {
+    mockMvc.perform(get("/api/users/7/teams")).andExpect(status().isUnauthorized());
   }
 }
