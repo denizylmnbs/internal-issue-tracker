@@ -17,6 +17,7 @@ import com.ist.internal_issue_tracker.project.ProjectMemberService;
 import com.ist.internal_issue_tracker.project.ProjectService;
 import com.ist.internal_issue_tracker.project.ProjectTeamController;
 import com.ist.internal_issue_tracker.project.ProjectTeamService;
+import com.ist.internal_issue_tracker.project.UserProjectsController;
 import com.ist.internal_issue_tracker.project.dto.ProjectMemberResponse;
 import com.ist.internal_issue_tracker.project.dto.ProjectTeamResponse;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
@@ -59,7 +60,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
       UserTeamsController.class,
       ProjectController.class,
       ProjectMemberController.class,
-      ProjectTeamController.class
+      ProjectTeamController.class,
+      UserProjectsController.class
     })
 @Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 class SecurityConfigTest {
@@ -334,6 +336,18 @@ class SecurityConfigTest {
   @Test
   void getTeamsByUserId_returns401_whenUnauthenticated() throws Exception {
     mockMvc.perform(get("/api/users/7/teams")).andExpect(status().isUnauthorized());
+  }
+
+  /** Someone else's project list is readable too, on the same rule as their team list. */
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void getProjectsByUserId_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc.perform(get("/api/users/7/projects").with(as(1, role))).andExpect(status().isOk());
+  }
+
+  @Test
+  void getProjectsByUserId_returns401_whenUnauthenticated() throws Exception {
+    mockMvc.perform(get("/api/users/7/projects")).andExpect(status().isUnauthorized());
   }
 
   @ParameterizedTest
