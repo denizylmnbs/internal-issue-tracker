@@ -7,6 +7,7 @@ import com.ist.internal_issue_tracker.shared.security.Role;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import com.ist.internal_issue_tracker.team.dto.TeamMemberCreateRequest;
 import com.ist.internal_issue_tracker.team.dto.TeamMemberResponse;
+import com.ist.internal_issue_tracker.team.dto.UserTeamMembershipResponse;
 import com.ist.internal_issue_tracker.team.exception.TeamMemberErrorCode;
 import com.ist.internal_issue_tracker.team.mapper.TeamMemberMapper;
 import lombok.AllArgsConstructor;
@@ -14,6 +15,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @AllArgsConstructor
@@ -56,20 +58,51 @@ public class TeamMemberService {
     return teamMemberMapper.toResponse(savedTeamMember);
   }
 
-  public PagedResponse<TeamMemberResponse> getTeamMembers(Integer teamId, Pageable pageable) {
+  public PagedResponse<TeamMemberResponse> getTeamMembersByTeamId(Integer teamId, Pageable pageable) {
     if (!teamRepository.existsById(teamId)) {
       throw ResourceNotFoundException.of("Team", teamId);
     }
 
-    Page<TeamMember> teamMembers = teamMemberRepository.findAllByTeamId(teamId, pageable);
+    Page<TeamMember> teamMembers =
+        teamMemberRepository.findAllByTeamIdAndIsActiveTrue(teamId, pageable);
     Page<TeamMemberResponse> responsePage = teamMembers.map(teamMemberMapper::toResponse);
 
     return PagedResponse.from(responsePage);
   }
 
-  // Get by teamMember team id
+  public PagedResponse<TeamMemberResponse> getAllTeamMembers(Pageable pageable) {
+    Page<TeamMember> teamMembers = teamMemberRepository.findAll(pageable);
+    Page<TeamMemberResponse> responsePage = teamMembers.map(teamMemberMapper::toResponse);
 
-  // Get by teams by user id
+    return PagedResponse.from(responsePage);
+  }
 
-  // Soft delete team member
+  /** The teams a user currently belongs to, each carrying its own name and field. */
+  public PagedResponse<UserTeamMembershipResponse> getTeamsByUserId(
+      Integer userId, Pageable pageable) {
+    if (!userLookup.existsActiveUser(userId)) {
+      throw new AppException(TeamMemberErrorCode.USER_NOT_FOUND);
+    }
+
+    Page<UserTeamMembershipResponse> memberships =
+        teamMemberRepository.findActiveMembershipsWithTeamByUserId(userId, pageable);
+
+    return PagedResponse.from(memberships);
+  }
+
+  /**
+   * Soft delete: the row stays for history and only {@code isActive} is cleared. The entity is
+   * loaded and mutated rather than updated through a bulk {@code @Modifying} query so that dirty
+   * checking still fires {@code @UpdateTimestamp} - a JPQL update would leave {@code updatedAt}
+   * stale.
+   */
+  public void removeTeamMember(Integer teamId, Integer userId) {
+    TeamMember membership =
+        teamMemberRepository
+            .findByTeamIdAndUserIdAndIsActiveTrue(teamId, userId)
+            .orElseThrow(() -> new AppException(TeamMemberErrorCode.TEAM_MEMBER_NOT_FOUND));
+
+    membership.setIsActive(false);
+    teamMemberRepository.save(membership);
+  }
 }
