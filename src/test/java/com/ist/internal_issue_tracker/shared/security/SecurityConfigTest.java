@@ -12,7 +12,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ist.internal_issue_tracker.project.ProjectController;
+import com.ist.internal_issue_tracker.project.ProjectMemberController;
+import com.ist.internal_issue_tracker.project.ProjectMemberService;
 import com.ist.internal_issue_tracker.project.ProjectService;
+import com.ist.internal_issue_tracker.project.ProjectTeamController;
+import com.ist.internal_issue_tracker.project.ProjectTeamService;
+import com.ist.internal_issue_tracker.project.dto.ProjectMemberResponse;
+import com.ist.internal_issue_tracker.project.dto.ProjectTeamResponse;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
 import com.ist.internal_issue_tracker.team.TeamController;
@@ -51,7 +57,9 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
       TeamController.class,
       TeamMemberController.class,
       UserTeamsController.class,
-      ProjectController.class
+      ProjectController.class,
+      ProjectMemberController.class,
+      ProjectTeamController.class
     })
 @Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 class SecurityConfigTest {
@@ -65,6 +73,7 @@ class SecurityConfigTest {
       "{\"name\":\"Apollo\",\"description\":\"x\",\"startDate\":\"2026-01-01\",\"endDate\":\"2026-06-01\"}";
   private static final String CHANGE_STATUS_BODY = "{\"status\":\"ACTIVE\"}";
   private static final String CHANGE_LEADER_BODY = "{\"leaderId\":7}";
+  private static final String ADD_PROJECT_TEAM_BODY = "{\"teamId\":3}";
 
   @Autowired private MockMvc mockMvc;
 
@@ -75,6 +84,8 @@ class SecurityConfigTest {
   @MockitoBean private AuthenticatedUserLookup authenticatedUserLookup;
 
   @MockitoBean private ProjectService projectService;
+  @MockitoBean private ProjectMemberService projectMemberService;
+  @MockitoBean private ProjectTeamService projectTeamService;
 
   /** {@code securityFilterChain} takes the ports directly, so the slice has to supply them. */
   @MockitoBean private TeamLookup teamLookup;
@@ -422,5 +433,108 @@ class SecurityConfigTest {
   void getProjects_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
     mockMvc.perform(get("/api/projects").with(as(1, role))).andExpect(status().isOk());
     mockMvc.perform(get("/api/projects/1").with(as(1, role))).andExpect(status().isOk());
+  }
+
+  /** Staffing a project is the leader's own job, so it is not editor-only. */
+  @Test
+  void addProjectMember_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+    when(projectMemberService.createProjectMember(eq(1), any()))
+        .thenReturn(new ProjectMemberResponse(10, 7, 1, true));
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/members")
+                .with(as(5, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ADD_MEMBER_BODY))
+        .andExpect(status().isCreated());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void addProjectMember_returns403_forEveryRoleBelowEditorThatDoesNotLeadTheProject(Role role)
+      throws Exception {
+    mockMvc
+        .perform(
+            post("/api/projects/1/members")
+                .with(as(5, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ADD_MEMBER_BODY))
+        .andExpect(status().isForbidden());
+  }
+
+  /**
+   * The trailing {@code {userId}} must not be mistaken for the project the rule authorizes against:
+   * user 7 leads project 7, not project 1, so the request is still refused.
+   */
+  @Test
+  void removeProjectMember_returns403_forTheLeaderOfADifferentProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(7, 7)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1/members/7").with(as(7, Role.DEVELOPER)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void removeProjectMember_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1/members/7").with(as(5, Role.DEVELOPER)))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void addProjectTeam_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+    when(projectTeamService.createProjectTeam(eq(1), any()))
+        .thenReturn(new ProjectTeamResponse(10, 3, 1, true));
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/teams")
+                .with(as(5, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ADD_PROJECT_TEAM_BODY))
+        .andExpect(status().isCreated());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void addProjectTeam_returns403_forEveryRoleBelowEditorThatDoesNotLeadTheProject(Role role)
+      throws Exception {
+    mockMvc
+        .perform(
+            post("/api/projects/1/teams")
+                .with(as(5, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ADD_PROJECT_TEAM_BODY))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void removeProjectTeam_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1/teams/3").with(as(5, Role.DEVELOPER)))
+        .andExpect(status().isOk());
+  }
+
+  /** Rosters are readable by anyone logged in, like every other listing. */
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void getProjectRosters_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc.perform(get("/api/projects/1/members").with(as(1, role))).andExpect(status().isOk());
+    mockMvc.perform(get("/api/projects/1/teams").with(as(1, role))).andExpect(status().isOk());
+    mockMvc
+        .perform(get("/api/projects/1/participants").with(as(1, role)))
+        .andExpect(status().isOk());
   }
 }
