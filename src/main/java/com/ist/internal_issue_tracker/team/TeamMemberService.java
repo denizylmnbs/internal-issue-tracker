@@ -31,8 +31,8 @@ public class TeamMemberService {
     Integer userId = request.userId();
     Role role = Role.DEVELOPER; // minimum role to become a team member
 
-    // check team is valid
-    if (!teamRepository.existsById(teamId)) {
+    // check team is valid - a soft-deleted team takes no new members
+    if (!teamRepository.existsByIdAndIsActiveTrue(teamId)) {
       throw new AppException(TeamMemberErrorCode.TEAM_NOT_FOUND);
     }
 
@@ -59,7 +59,7 @@ public class TeamMemberService {
   }
 
   public PagedResponse<TeamMemberResponse> getTeamMembersByTeamId(Integer teamId, Pageable pageable) {
-    if (!teamRepository.existsById(teamId)) {
+    if (!teamRepository.existsByIdAndIsActiveTrue(teamId)) {
       throw ResourceNotFoundException.of("Team", teamId);
     }
 
@@ -71,7 +71,7 @@ public class TeamMemberService {
   }
 
   public PagedResponse<TeamMemberResponse> getAllTeamMembers(Pageable pageable) {
-    Page<TeamMember> teamMembers = teamMemberRepository.findAll(pageable);
+    Page<TeamMember> teamMembers = teamMemberRepository.findAllByIsActiveTrue(pageable);
     Page<TeamMemberResponse> responsePage = teamMembers.map(teamMemberMapper::toResponse);
 
     return PagedResponse.from(responsePage);

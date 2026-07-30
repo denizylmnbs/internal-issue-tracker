@@ -34,6 +34,17 @@ public class TeamService {
     }
   }
 
+  /**
+   * Every read and write of a single team goes through here, so a soft-deleted team is a 404 the
+   * same way a never-existing one is - which is what {@link ResourceNotFoundException} already
+   * promises in its own contract.
+   */
+  private Team requireActiveTeam(Integer id) {
+    return teamRepository
+        .findByIdAndIsActiveTrue(id)
+        .orElseThrow(() -> ResourceNotFoundException.of("Team", id));
+  }
+
   public TeamResponse createTeam(TeamCreateRequest request) {
 
     // name unique check
@@ -60,8 +71,7 @@ public class TeamService {
   }
 
   public TeamResponse getTeamById(Integer id) {
-    Team team =
-        teamRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("Team", id));
+    Team team = requireActiveTeam(id);
 
     return teamMapper.toResponse(team);
   }
@@ -77,8 +87,7 @@ public class TeamService {
   public TeamResponse updateTeam(Integer id, TeamUpdateRequest request) {
 
     // fetch existing team
-    Team team =
-        teamRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("Team", id));
+    Team team = requireActiveTeam(id);
 
     // name unique check
     if (teamRepository.existsByNameAndIdNot(request.name(), id)) {
@@ -103,8 +112,7 @@ public class TeamService {
   public TeamResponse changeLeader(Integer id, ChangeLeaderRequest request) {
     // authorization (admin-only) is enforced in SecurityConfig
     // fetch existing team
-    Team team =
-        teamRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("Team", id));
+    Team team = requireActiveTeam(id);
 
     requireActiveUser(request.leaderId());
 
@@ -115,8 +123,7 @@ public class TeamService {
 
   public void deleteTeam(Integer id) {
     // fetch existing team
-    Team team =
-        teamRepository.findById(id).orElseThrow(() -> ResourceNotFoundException.of("Team", id));
+    Team team = requireActiveTeam(id);
 
     team.setIsActive(false);
 

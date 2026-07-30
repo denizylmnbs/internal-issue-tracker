@@ -10,6 +10,8 @@ import org.springframework.data.repository.query.Param;
 
 public interface TeamMemberRepository extends JpaRepository<TeamMember, Integer> {
 
+  Page<TeamMember> findAllByIsActiveTrue(Pageable pageable);
+
   Page<TeamMember> findAllByTeamIdAndIsActiveTrue(Integer teamId, Pageable pageable);
 
   /**
@@ -33,14 +35,14 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Integer>
               tm.id, t.id, t.name, t.field, tm.createdAt)
           from TeamMember tm
           join Team t on t.id = tm.teamId
-          where tm.userId = :userId and tm.isActive = true
+          where tm.userId = :userId and tm.isActive = true and t.isActive = true
           """,
       countQuery =
           """
           select count(tm)
           from TeamMember tm
           join Team t on t.id = tm.teamId
-          where tm.userId = :userId and tm.isActive = true
+          where tm.userId = :userId and tm.isActive = true and t.isActive = true
           """)
   Page<UserTeamMembershipResponse> findActiveMembershipsWithTeamByUserId(
       @Param("userId") Integer userId, Pageable pageable);
