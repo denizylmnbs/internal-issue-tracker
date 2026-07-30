@@ -3,6 +3,7 @@ package com.ist.internal_issue_tracker.project;
 import com.ist.internal_issue_tracker.project.dto.ProjectMemberCreateRequest;
 import com.ist.internal_issue_tracker.project.dto.ProjectMemberResponse;
 import com.ist.internal_issue_tracker.project.dto.ProjectParticipantResponse;
+import com.ist.internal_issue_tracker.project.dto.UserProjectMembershipResponse;
 import com.ist.internal_issue_tracker.project.exception.ProjectMemberErrorCode;
 import com.ist.internal_issue_tracker.project.exception.ProjectNotFoundException;
 import com.ist.internal_issue_tracker.project.mapper.ProjectMemberMapper;
@@ -100,6 +101,25 @@ public class ProjectMemberService {
         projectMemberRepository.findActiveParticipants(projectId, byUserId);
 
     return PagedResponse.from(participants.map(projectMemberMapper::toParticipantResponse));
+  }
+
+  /**
+   * The projects a user works on, by either route. Sorting is fixed for the same reason as {@link
+   * #getProjectParticipants}.
+   */
+  public PagedResponse<UserProjectMembershipResponse> getProjectsByUserId(
+      Integer userId, Pageable pageable) {
+    if (!userLookup.existsActiveUser(userId)) {
+      throw new AppException(ProjectMemberErrorCode.USER_NOT_FOUND);
+    }
+
+    Pageable byProjectId =
+        PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by("project_id"));
+
+    Page<UserProject> projects =
+        projectMemberRepository.findActiveProjectsByUserId(userId, byProjectId);
+
+    return PagedResponse.from(projects.map(projectMemberMapper::toUserProjectResponse));
   }
 
   /** Soft delete - see {@code TeamMemberService#removeTeamMember} for why the entity is loaded. */
