@@ -63,44 +63,4 @@ public interface ProjectRepository extends JpaRepository<Project, Integer> {
       @Param("endDateBefore") LocalDate endDateBefore,
       Pageable pageable);
 
-  /**
-   * Everyone working on the project, counted once: directly assigned users plus everyone reached
-   * through an assigned team. {@code UNION} already removes the overlap between the two, which is
-   * the whole reason this is not two additions.
-   *
-   * <p>Native SQL because {@code project_users}, {@code project_teams} and {@code team_users} have
-   * no entities in this module - and mapping them here would put team internals inside {@code
-   * project}. The cost is that this query knows those table names by hand; it has to be revisited
-   * when those modules are built.
-   */
-  @Query(
-      value =
-          """
-          SELECT count(*) FROM (
-              SELECT pu.user_id
-                FROM project_users pu
-                JOIN users u ON u.id = pu.user_id AND u.is_active
-               WHERE pu.project_id = :projectId AND pu.is_active
-              UNION
-              SELECT tu.user_id
-                FROM project_teams pt
-                JOIN teams t ON t.id = pt.team_id AND t.is_active
-                JOIN team_users tu ON tu.team_id = pt.team_id AND tu.is_active
-                JOIN users u ON u.id = tu.user_id AND u.is_active
-               WHERE pt.project_id = :projectId AND pt.is_active
-          ) members
-          """,
-      nativeQuery = true)
-  long countActiveMembers(@Param("projectId") Integer projectId);
-
-  @Query(
-      value =
-          """
-          SELECT count(*)
-            FROM project_teams pt
-            JOIN teams t ON t.id = pt.team_id AND t.is_active
-           WHERE pt.project_id = :projectId AND pt.is_active
-          """,
-      nativeQuery = true)
-  long countActiveTeams(@Param("projectId") Integer projectId);
 }

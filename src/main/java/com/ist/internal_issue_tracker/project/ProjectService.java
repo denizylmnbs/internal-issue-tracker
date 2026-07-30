@@ -24,6 +24,8 @@ import org.springframework.stereotype.Service;
 public class ProjectService {
 
   private final ProjectRepository projectRepository;
+  private final ProjectMemberRepository projectMemberRepository;
+  private final ProjectTeamRepository projectTeamRepository;
   private final ProjectMapper projectMapper;
   private final UserLookup userLookup;
 
@@ -80,8 +82,8 @@ public class ProjectService {
 
     return projectMapper.toDetailResponse(
         project,
-        projectRepository.countActiveMembers(id),
-        projectRepository.countActiveTeams(id));
+        projectMemberRepository.countActiveMembers(id),
+        projectTeamRepository.countActiveTeams(id));
   }
 
   public PagedResponse<ProjectResponse> getAllProjects(

@@ -1,0 +1,97 @@
+package com.ist.internal_issue_tracker.project;
+
+import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+
+/**
+ * Direct assignments, plus the two queries that answer "who actually works on this project" by
+ * folding in the teams. Both of those are native SQL: {@code project_teams} is this module's, but
+ * {@code team_users} belongs to {@code team} and mapping it here would drag team internals into
+ * {@code project}. The trade was made deliberately - the cost is that these two queries know those
+ * table names by hand and no test of the module structure can see it, so they are kept side by side
+ * rather than scattered.
+ */
+public interface ProjectMemberRepository extends JpaRepository<ProjectMember, Integer> {
+
+  Page<ProjectMember> findAllByProjectIdAndIsActiveTrue(Integer projectId, Pageable pageable);
+
+  /**
+   * At most one row can match: {@code unique_active_project_user} is a partial unique index over
+   * {@code (user_id, project_id) where is_active}, so the pair identifies the live assignment while
+   * leaving any number of soft-deleted ones behind it.
+   */
+  Optional<ProjectMember> findByProjectIdAndUserIdAndIsActiveTrue(
+      Integer projectId, Integer userId);
+
+  /**
+   * Everyone working on the project, counted once. {@code UNION} removes the overlap between the two
+   * routes, which is the whole reason this is not two additions.
+   */
+  @Query(
+      value =
+          """
+          SELECT count(*) FROM (
+              SELECT pu.user_id
+                FROM project_users pu
+                JOIN users u ON u.id = pu.user_id AND u.is_active
+               WHERE pu.project_id = :projectId AND pu.is_active
+              UNION
+              SELECT tu.user_id
+                FROM project_teams pt
+                JOIN teams t ON t.id = pt.team_id AND t.is_active
+                JOIN team_users tu ON tu.team_id = pt.team_id AND tu.is_active
+                JOIN users u ON u.id = tu.user_id AND u.is_active
+               WHERE pt.project_id = :projectId AND pt.is_active
+          ) members
+          """,
+      nativeQuery = true)
+  long countActiveMembers(@Param("projectId") Integer projectId);
+
+  /**
+   * The same population as {@link #countActiveMembers}, listed rather than counted, with a flag for
+   * how each person got there. {@code UNION ALL} plus {@code bool_or} rather than {@code UNION}: a
+   * user who is both directly assigned and on an assigned team must appear once, and the direct
+   * route has to win the flag.
+   */
+  @Query(
+      value =
+          """
+          SELECT s.user_id AS user_id, bool_or(s.direct) AS directly_assigned FROM (
+              SELECT pu.user_id, true AS direct
+                FROM project_users pu
+                JOIN users u ON u.id = pu.user_id AND u.is_active
+               WHERE pu.project_id = :projectId AND pu.is_active
+              UNION ALL
+              SELECT tu.user_id, false AS direct
+                FROM project_teams pt
+                JOIN teams t ON t.id = pt.team_id AND t.is_active
+                JOIN team_users tu ON tu.team_id = pt.team_id AND tu.is_active
+                JOIN users u ON u.id = tu.user_id AND u.is_active
+               WHERE pt.project_id = :projectId AND pt.is_active
+          ) s
+          GROUP BY s.user_id
+          """,
+      countQuery =
+          """
+          SELECT count(*) FROM (
+              SELECT pu.user_id
+                FROM project_users pu
+                JOIN users u ON u.id = pu.user_id AND u.is_active
+               WHERE pu.project_id = :projectId AND pu.is_active
+              UNION
+              SELECT tu.user_id
+                FROM project_teams pt
+                JOIN teams t ON t.id = pt.team_id AND t.is_active
+                JOIN team_users tu ON tu.team_id = pt.team_id AND tu.is_active
+                JOIN users u ON u.id = tu.user_id AND u.is_active
+               WHERE pt.project_id = :projectId AND pt.is_active
+          ) members
+          """,
+      nativeQuery = true)
+  Page<ProjectParticipant> findActiveParticipants(
+      @Param("projectId") Integer projectId, Pageable pageable);
+}
