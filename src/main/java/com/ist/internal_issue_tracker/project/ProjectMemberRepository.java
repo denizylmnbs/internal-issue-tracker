@@ -94,4 +94,50 @@ public interface ProjectMemberRepository extends JpaRepository<ProjectMember, In
       nativeQuery = true)
   Page<ProjectParticipant> findActiveParticipants(
       @Param("projectId") Integer projectId, Pageable pageable);
+
+  /**
+   * The same union read from the other end: the projects one user works on, each carrying enough of
+   * itself to render a list without a lookup per row. Soft-deleted projects drop out, so a user's
+   * assignment to a deleted project is simply not reported.
+   */
+  @Query(
+      value =
+          """
+          SELECT s.project_id AS project_id,
+                 p.name AS project_name,
+                 p.status AS project_status,
+                 bool_or(s.direct) AS directly_assigned
+            FROM (
+              SELECT pu.project_id, true AS direct
+                FROM project_users pu
+               WHERE pu.user_id = :userId AND pu.is_active
+              UNION ALL
+              SELECT pt.project_id, false AS direct
+                FROM project_teams pt
+                JOIN teams t ON t.id = pt.team_id AND t.is_active
+                JOIN team_users tu ON tu.team_id = pt.team_id AND tu.is_active
+               WHERE tu.user_id = :userId AND pt.is_active
+            ) s
+            JOIN projects p ON p.id = s.project_id AND p.is_active
+           GROUP BY s.project_id, p.name, p.status
+          """,
+      countQuery =
+          """
+          SELECT count(*) FROM (
+              SELECT pu.project_id
+                FROM project_users pu
+                JOIN projects p ON p.id = pu.project_id AND p.is_active
+               WHERE pu.user_id = :userId AND pu.is_active
+              UNION
+              SELECT pt.project_id
+                FROM project_teams pt
+                JOIN projects p ON p.id = pt.project_id AND p.is_active
+                JOIN teams t ON t.id = pt.team_id AND t.is_active
+                JOIN team_users tu ON tu.team_id = pt.team_id AND tu.is_active
+               WHERE tu.user_id = :userId AND pt.is_active
+          ) projects
+          """,
+      nativeQuery = true)
+  Page<UserProject> findActiveProjectsByUserId(
+      @Param("userId") Integer userId, Pageable pageable);
 }
