@@ -1,6 +1,8 @@
 package com.ist.internal_issue_tracker.shared.security;
 
+import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
+import java.util.function.BiPredicate;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -50,7 +52,8 @@ public class SecurityConfig {
       RestAuthenticationEntryPoint authenticationEntryPoint,
       RestAccessDeniedHandler accessDeniedHandler,
       RoleHierarchy roleHierarchy,
-      TeamLookup teamLookup)
+      TeamLookup teamLookup,
+      ProjectLookup projectLookup)
       throws Exception {
     http.csrf(csrf -> csrf.disable())
         .sessionManagement(
@@ -88,6 +91,18 @@ public class SecurityConfig {
                     .access(editorOrTeamLeader(roleHierarchy, teamLookup))
                     .requestMatchers(HttpMethod.DELETE, "/api/teams/{id}/members/{userId}")
                     .access(editorOrTeamLeader(roleHierarchy, teamLookup))
+                    .requestMatchers(HttpMethod.POST, "/api/projects")
+                    .hasRole("EDITOR")
+                    .requestMatchers(HttpMethod.DELETE, "/api/projects/{id}")
+                    .hasRole("EDITOR")
+                    .requestMatchers(HttpMethod.PATCH, "/api/projects/{id}/leader")
+                    .hasRole("EDITOR")
+                    .requestMatchers(HttpMethod.DELETE, "/api/projects/{id}/leader")
+                    .hasRole("EDITOR")
+                    .requestMatchers(HttpMethod.PUT, "/api/projects/{id}")
+                    .access(editorOrProjectLeader(roleHierarchy, projectLookup))
+                    .requestMatchers(HttpMethod.PATCH, "/api/projects/{id}/status")
+                    .access(editorOrProjectLeader(roleHierarchy, projectLookup))
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(
@@ -120,6 +135,21 @@ public class SecurityConfig {
 
   private AuthorizationManager<RequestAuthorizationContext> editorOrTeamLeader(
       RoleHierarchy roleHierarchy, TeamLookup teamLookup) {
+    return editorOrLeader(roleHierarchy, teamLookup::isLeaderOfTeam);
+  }
+
+  private AuthorizationManager<RequestAuthorizationContext> editorOrProjectLeader(
+      RoleHierarchy roleHierarchy, ProjectLookup projectLookup) {
+    return editorOrLeader(roleHierarchy, projectLookup::isLeaderOfProject);
+  }
+
+  /**
+   * Shared body of the two "editor, or the person who leads this thing" rules. They differ only in
+   * which port answers the leadership question, so {@code isLeader} takes the {@code {id}} path
+   * variable and the caller's id and reports whether the second leads the first.
+   */
+  private AuthorizationManager<RequestAuthorizationContext> editorOrLeader(
+      RoleHierarchy roleHierarchy, BiPredicate<Integer, Integer> isLeader) {
     return (authentication, context) -> {
       // take auth information and check if it is valid
       Authentication auth = authentication.get();
@@ -132,12 +162,12 @@ public class SecurityConfig {
         return new AuthorizationDecision(true);
       }
 
-      Integer teamId = parseId(context);
-      if (teamId == null) {
+      Integer resourceId = parseId(context);
+      if (resourceId == null) {
         return new AuthorizationDecision(false);
       }
 
-      return new AuthorizationDecision(teamLookup.isLeaderOfTeam(teamId, user.getId()));
+      return new AuthorizationDecision(isLeader.test(resourceId, user.getId()));
     };
   }
 
