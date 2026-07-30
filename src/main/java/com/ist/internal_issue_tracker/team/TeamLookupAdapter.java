@@ -13,4 +13,9 @@ public class TeamLookupAdapter implements TeamLookup {
   public boolean isLeaderOfTeam(Integer teamId, Integer userId) {
     return userId != null && teamId != null && teamRepository.existsByIdAndLeaderId(teamId, userId);
   }
+
+  @Override
+  public boolean existsActiveTeam(Integer teamId) {
+    return teamId != null && teamRepository.existsByIdAndIsActiveTrue(teamId);
+  }
 }
