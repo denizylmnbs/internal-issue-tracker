@@ -10,9 +10,50 @@ import org.springframework.data.repository.query.Param;
 
 public interface TeamMemberRepository extends JpaRepository<TeamMember, Integer> {
 
-  Page<TeamMember> findAllByIsActiveTrue(Pageable pageable);
+  /**
+   * Every live membership in the system. Native SQL because an active membership row is not enough
+   * on its own - the team and the user behind it have to still exist. Soft-deleting a team does not
+   * touch its {@code team_users} rows, so without the {@code teams} join a deleted team's roster
+   * would go on being listed here after it had vanished from every other view.
+   */
+  @Query(
+      value =
+          """
+          SELECT tu.* FROM team_users tu
+            JOIN teams t ON t.id = tu.team_id AND t.is_active
+            JOIN users u ON u.id = tu.user_id AND u.is_active
+           WHERE tu.is_active
+          """,
+      countQuery =
+          """
+          SELECT count(*) FROM team_users tu
+            JOIN teams t ON t.id = tu.team_id AND t.is_active
+            JOIN users u ON u.id = tu.user_id AND u.is_active
+           WHERE tu.is_active
+          """,
+      nativeQuery = true)
+  Page<TeamMember> findAllActiveMemberships(Pageable pageable);
 
-  Page<TeamMember> findAllByTeamIdAndIsActiveTrue(Integer teamId, Pageable pageable);
+  /**
+   * One team's roster. The {@code users} join is what keeps a deactivated user out of it - the
+   * membership row stays active when a user is soft-deleted, and the counts elsewhere already
+   * exclude them, so listing them here made the same person present and absent at once.
+   */
+  @Query(
+      value =
+          """
+          SELECT tu.* FROM team_users tu
+            JOIN users u ON u.id = tu.user_id AND u.is_active
+           WHERE tu.team_id = :teamId AND tu.is_active
+          """,
+      countQuery =
+          """
+          SELECT count(*) FROM team_users tu
+            JOIN users u ON u.id = tu.user_id AND u.is_active
+           WHERE tu.team_id = :teamId AND tu.is_active
+          """,
+      nativeQuery = true)
+  Page<TeamMember> findActiveMembersOfTeam(@Param("teamId") Integer teamId, Pageable pageable);
 
   /**
    * At most one row can match: {@code unique_active_team_membership} is a partial unique index over
