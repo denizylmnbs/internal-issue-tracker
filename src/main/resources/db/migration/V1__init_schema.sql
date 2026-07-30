@@ -46,7 +46,14 @@ CREATE TABLE "projects" (
                             "description" text,
                             "start_date" date NOT NULL,
                             "end_date" date,
-                            "leader_id" int NOT NULL,
+                            -- Nullable: a project can be opened before anyone is put in charge of
+                            -- it, and a leader is named later. Teams are not like this.
+                            "leader_id" int,
+                            -- Where a live project stands, independent of "is_active", which only
+                            -- records whether the row has been soft-deleted. A CANCELLED project
+                            -- is still a visible row; a soft-deleted one is not.
+                            "status" varchar(20) NOT NULL DEFAULT 'PLANNING'
+                                CHECK ("status" IN ('PLANNING','ACTIVE','ON_HOLD','COMPLETED','CANCELLED')),
                             "is_active" boolean DEFAULT true,
                             "created_at" timestamptz DEFAULT (now()),
                             "updated_at" timestamptz
@@ -159,7 +166,8 @@ CREATE TABLE "project_activities" (
                                       "user_id" int NOT NULL,
                                       "action_type" varchar(30) NOT NULL
                                           CHECK ("action_type" IN ('CREATED','LEADER_UPDATED','TEAM_ADDED','TEAM_REMOVED',
-                                                                   'USER_ADDED','USER_REMOVED','DETAILS_UPDATED','DELETED')),
+                                                                   'USER_ADDED','USER_REMOVED','DETAILS_UPDATED',
+                                                                   'STATUS_UPDATED','DELETED')),
                                       "old_value" varchar(255),
                                       "new_value" varchar(255),
                                       "created_at" timestamptz DEFAULT (now())
@@ -208,6 +216,7 @@ CREATE INDEX ON "team_users" ("user_id");
 
 CREATE INDEX ON "projects" ("leader_id");
 CREATE INDEX ON "projects" ("is_active");
+CREATE INDEX ON "projects" ("status");
 
 CREATE INDEX ON "project_teams" ("project_id");
 
@@ -272,3 +281,25 @@ CREATE UNIQUE INDEX unique_active_epic_name_per_project
 -- Bir projede aynı anda sadece bir sprint IN_PROGRESS olabilir
 CREATE UNIQUE INDEX one_active_sprint_per_project
     ON "sprints" ("project_id") WHERE "status" = 'IN_PROGRESS';
+
+-- ============================================================
+-- SPRING MODULITH EVENT PUBLICATION REGISTRY
+-- Verbatim from the reference documentation, not hand-written:
+-- https://docs.spring.io/spring-modulith/reference/appendix.html#schemas.postgresql
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS event_publication
+(
+    id                     UUID NOT NULL,
+    listener_id            TEXT NOT NULL,
+    event_type             TEXT NOT NULL,
+    serialized_event       TEXT NOT NULL,
+    publication_date       TIMESTAMP WITH TIME ZONE NOT NULL,
+    completion_date        TIMESTAMP WITH TIME ZONE,
+    status                 TEXT,
+    completion_attempts    INT,
+    last_resubmission_date TIMESTAMP WITH TIME ZONE,
+    PRIMARY KEY (id)
+    );
+CREATE INDEX IF NOT EXISTS event_publication_serialized_event_hash_idx ON event_publication USING hash(serialized_event);
+CREATE INDEX IF NOT EXISTS event_publication_by_completion_date_idx ON event_publication (completion_date);
