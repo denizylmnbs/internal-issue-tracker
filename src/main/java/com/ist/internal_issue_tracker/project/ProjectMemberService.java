@@ -77,8 +77,11 @@ public class ProjectMemberService {
       Integer projectId, Pageable pageable) {
     requireActiveProject(projectId);
 
+    Pageable byId =
+        PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by("id"));
+
     Page<ProjectMember> projectMembers =
-        projectMemberRepository.findAllByProjectIdAndIsActiveTrue(projectId, pageable);
+        projectMemberRepository.findActiveMembersOfProject(projectId, byId);
     Page<ProjectMemberResponse> responsePage = projectMembers.map(projectMemberMapper::toResponse);
 
     return PagedResponse.from(responsePage);

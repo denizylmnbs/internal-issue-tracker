@@ -9,7 +9,27 @@ import org.springframework.data.repository.query.Param;
 
 public interface ProjectTeamRepository extends JpaRepository<ProjectTeam, Integer> {
 
-  Page<ProjectTeam> findAllByProjectIdAndIsActiveTrue(Integer projectId, Pageable pageable);
+  /**
+   * The teams on a project. The {@code teams} join matches {@link #countActiveTeams}: soft-deleting
+   * a team leaves its {@code project_teams} row active, so without it a deleted team stayed on the
+   * list while the count beside it had already dropped to zero.
+   */
+  @Query(
+      value =
+          """
+          SELECT pt.* FROM project_teams pt
+            JOIN teams t ON t.id = pt.team_id AND t.is_active
+           WHERE pt.project_id = :projectId AND pt.is_active
+          """,
+      countQuery =
+          """
+          SELECT count(*) FROM project_teams pt
+            JOIN teams t ON t.id = pt.team_id AND t.is_active
+           WHERE pt.project_id = :projectId AND pt.is_active
+          """,
+      nativeQuery = true)
+  Page<ProjectTeam> findActiveTeamsOfProject(
+      @Param("projectId") Integer projectId, Pageable pageable);
 
   /** Backed by {@code unique_active_project_team} - see {@code ProjectMemberRepository}. */
   Optional<ProjectTeam> findByProjectIdAndTeamIdAndIsActiveTrue(Integer projectId, Integer teamId);

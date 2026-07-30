@@ -17,7 +17,27 @@ import org.springframework.data.repository.query.Param;
  */
 public interface ProjectMemberRepository extends JpaRepository<ProjectMember, Integer> {
 
-  Page<ProjectMember> findAllByProjectIdAndIsActiveTrue(Integer projectId, Pageable pageable);
+  /**
+   * One project's direct assignments. The {@code users} join keeps a deactivated user out, matching
+   * what {@link #countActiveMembers} and {@link #findActiveParticipants} already do - without it the
+   * same person was listed here and missing from the count beside it.
+   */
+  @Query(
+      value =
+          """
+          SELECT pu.* FROM project_users pu
+            JOIN users u ON u.id = pu.user_id AND u.is_active
+           WHERE pu.project_id = :projectId AND pu.is_active
+          """,
+      countQuery =
+          """
+          SELECT count(*) FROM project_users pu
+            JOIN users u ON u.id = pu.user_id AND u.is_active
+           WHERE pu.project_id = :projectId AND pu.is_active
+          """,
+      nativeQuery = true)
+  Page<ProjectMember> findActiveMembersOfProject(
+      @Param("projectId") Integer projectId, Pageable pageable);
 
   /**
    * At most one row can match: {@code unique_active_project_user} is a partial unique index over

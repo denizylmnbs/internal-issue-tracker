@@ -11,7 +11,9 @@ import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 /**
@@ -59,8 +61,12 @@ public class ProjectTeamService {
   public PagedResponse<ProjectTeamResponse> getProjectTeams(Integer projectId, Pageable pageable) {
     requireActiveProject(projectId);
 
+    // native query - the caller's sort would reach PostgreSQL as a raw column name, so it is pinned
+    Pageable byId =
+        PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by("id"));
+
     Page<ProjectTeam> projectTeams =
-        projectTeamRepository.findAllByProjectIdAndIsActiveTrue(projectId, pageable);
+        projectTeamRepository.findActiveTeamsOfProject(projectId, byId);
     Page<ProjectTeamResponse> responsePage = projectTeams.map(projectTeamMapper::toResponse);
 
     return PagedResponse.from(responsePage);
