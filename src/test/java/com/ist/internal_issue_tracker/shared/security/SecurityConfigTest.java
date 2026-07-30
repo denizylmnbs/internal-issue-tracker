@@ -8,8 +8,12 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ist.internal_issue_tracker.project.ProjectController;
+import com.ist.internal_issue_tracker.project.ProjectService;
+import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
 import com.ist.internal_issue_tracker.team.TeamController;
 import com.ist.internal_issue_tracker.team.TeamMemberController;
@@ -46,7 +50,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
       UserController.class,
       TeamController.class,
       TeamMemberController.class,
-      UserTeamsController.class
+      UserTeamsController.class,
+      ProjectController.class
     })
 @Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 class SecurityConfigTest {
@@ -56,6 +61,10 @@ class SecurityConfigTest {
       "{\"currentPassword\":\"password123\",\"newPassword\":\"password456\"}";
   private static final String CHANGE_ROLE_BODY = "{\"newRole\":\"EDITOR\"}";
   private static final String ADD_MEMBER_BODY = "{\"userId\":7}";
+  private static final String UPDATE_PROJECT_BODY =
+      "{\"name\":\"Apollo\",\"description\":\"x\",\"startDate\":\"2026-01-01\",\"endDate\":\"2026-06-01\"}";
+  private static final String CHANGE_STATUS_BODY = "{\"status\":\"ACTIVE\"}";
+  private static final String CHANGE_LEADER_BODY = "{\"leaderId\":7}";
 
   @Autowired private MockMvc mockMvc;
 
@@ -65,8 +74,12 @@ class SecurityConfigTest {
   @MockitoBean private JwtService jwtService;
   @MockitoBean private AuthenticatedUserLookup authenticatedUserLookup;
 
-  /** {@code securityFilterChain} takes the port directly, so the slice has to supply it. */
+  @MockitoBean private ProjectService projectService;
+
+  /** {@code securityFilterChain} takes the ports directly, so the slice has to supply them. */
   @MockitoBean private TeamLookup teamLookup;
+
+  @MockitoBean private ProjectLookup projectLookup;
 
   /** Mirrors {@link JwtAuthenticationFilter}: the principal carries exactly one authority. */
   private static RequestPostProcessor as(Integer userId, Role role) {
@@ -310,5 +323,104 @@ class SecurityConfigTest {
   @Test
   void getTeamsByUserId_returns401_whenUnauthenticated() throws Exception {
     mockMvc.perform(get("/api/users/7/teams")).andExpect(status().isUnauthorized());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"EDITOR", "ADMIN"})
+  void deleteProject_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
+    mockMvc.perform(delete("/api/projects/1").with(as(99, role))).andExpect(status().isOk());
+  }
+
+  /** Deleting is editor-only, so leading the project is not enough - unlike updating it. */
+  @Test
+  void deleteProject_returns403_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1").with(as(5, Role.DEVELOPER)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void updateProject_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+
+    mockMvc
+        .perform(
+            put("/api/projects/1")
+                .with(as(5, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(UPDATE_PROJECT_BODY))
+        .andExpect(status().isOk());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void updateProject_returns403_forEveryRoleBelowEditorThatDoesNotLeadTheProject(Role role)
+      throws Exception {
+    mockMvc
+        .perform(
+            put("/api/projects/1")
+                .with(as(5, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(UPDATE_PROJECT_BODY))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void changeStatus_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+
+    mockMvc
+        .perform(
+            patch("/api/projects/1/status")
+                .with(as(5, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(CHANGE_STATUS_BODY))
+        .andExpect(status().isOk());
+  }
+
+  /** Handing the project to someone else stays editor-only, even for the current leader. */
+  @Test
+  void changeProjectLeader_returns403_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+
+    mockMvc
+        .perform(
+            patch("/api/projects/1/leader")
+                .with(as(5, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(CHANGE_LEADER_BODY))
+        .andExpect(status().isForbidden());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"EDITOR", "ADMIN"})
+  void removeProjectLeader_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
+    mockMvc.perform(delete("/api/projects/1/leader").with(as(99, role))).andExpect(status().isOk());
+  }
+
+  /** Same rule as naming a leader: the sitting leader cannot vacate the seat themselves. */
+  @Test
+  void removeProjectLeader_returns403_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1/leader").with(as(5, Role.DEVELOPER)))
+        .andExpect(status().isForbidden());
+  }
+
+  /** Reading is not restricted beyond being logged in. */
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void getProjects_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc.perform(get("/api/projects").with(as(1, role))).andExpect(status().isOk());
+    mockMvc.perform(get("/api/projects/1").with(as(1, role))).andExpect(status().isOk());
   }
 }
