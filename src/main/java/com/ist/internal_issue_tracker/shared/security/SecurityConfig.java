@@ -86,6 +86,8 @@ public class SecurityConfig {
                     .access(editorOrTeamLeader(roleHierarchy, teamLookup))
                     .requestMatchers(HttpMethod.POST, "/api/teams/{id}/members")
                     .access(editorOrTeamLeader(roleHierarchy, teamLookup))
+                    .requestMatchers(HttpMethod.DELETE, "/api/teams/{id}/members/{userId}")
+                    .access(editorOrTeamLeader(roleHierarchy, teamLookup))
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(
