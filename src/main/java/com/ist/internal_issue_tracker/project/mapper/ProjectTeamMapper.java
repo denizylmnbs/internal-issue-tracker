@@ -22,6 +22,7 @@ public class ProjectTeamMapper {
         projectTeam.getId(),
         projectTeam.getTeamId(),
         projectTeam.getProjectId(),
-        projectTeam.getIsActive());
+        projectTeam.getIsActive(),
+        projectTeam.getUpdatedAt());
   }
 }

@@ -30,6 +30,7 @@ import com.ist.internal_issue_tracker.team.UserTeamsController;
 import com.ist.internal_issue_tracker.team.dto.TeamMemberResponse;
 import com.ist.internal_issue_tracker.user.UserController;
 import com.ist.internal_issue_tracker.user.UserService;
+import java.time.OffsetDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -250,7 +251,7 @@ class SecurityConfigTest {
       names = {"EDITOR", "ADMIN"})
   void addTeamMember_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
     when(teamMemberService.createTeamMember(eq(1), any()))
-        .thenReturn(new TeamMemberResponse(10, 7, 1, true));
+        .thenReturn(new TeamMemberResponse(10, 7, 1, true, OffsetDateTime.now()));
 
     addMemberToTeam1(99, role).andExpect(status().isCreated());
   }
@@ -265,7 +266,7 @@ class SecurityConfigTest {
   void addTeamMember_isAllowed_forTheLeaderOfThatTeam() throws Exception {
     when(teamLookup.isLeaderOfTeam(1, 5)).thenReturn(true);
     when(teamMemberService.createTeamMember(eq(1), any()))
-        .thenReturn(new TeamMemberResponse(10, 7, 1, true));
+        .thenReturn(new TeamMemberResponse(10, 7, 1, true, OffsetDateTime.now()));
 
     addMemberToTeam1(5, Role.DEVELOPER).andExpect(status().isCreated());
   }
@@ -454,7 +455,7 @@ class SecurityConfigTest {
   void addProjectMember_isAllowed_forTheLeaderOfThatProject() throws Exception {
     when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
     when(projectMemberService.createProjectMember(eq(1), any()))
-        .thenReturn(new ProjectMemberResponse(10, 7, 1, true));
+        .thenReturn(new ProjectMemberResponse(10, 7, 1, true, OffsetDateTime.now()));
 
     mockMvc
         .perform(
@@ -506,7 +507,7 @@ class SecurityConfigTest {
   void addProjectTeam_isAllowed_forTheLeaderOfThatProject() throws Exception {
     when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
     when(projectTeamService.createProjectTeam(eq(1), any()))
-        .thenReturn(new ProjectTeamResponse(10, 3, 1, true));
+        .thenReturn(new ProjectTeamResponse(10, 3, 1, true, OffsetDateTime.now()));
 
     mockMvc
         .perform(

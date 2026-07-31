@@ -21,6 +21,7 @@ public class TeamMemberMapper {
         teamMember.getId(),
         teamMember.getUserId(),
         teamMember.getTeamId(),
-        teamMember.getIsActive());
+        teamMember.getIsActive(),
+        teamMember.getUpdatedAt());
   }
 }

@@ -41,6 +41,7 @@ public class ProjectMemberMapper {
         projectMember.getId(),
         projectMember.getUserId(),
         projectMember.getProjectId(),
-        projectMember.getIsActive());
+        projectMember.getIsActive(),
+        projectMember.getUpdatedAt());
   }
 }
