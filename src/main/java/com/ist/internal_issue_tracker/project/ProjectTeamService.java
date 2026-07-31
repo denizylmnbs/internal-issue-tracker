@@ -36,6 +36,23 @@ public class ProjectTeamService {
     }
   }
 
+  /**
+   * Revives an assignment that was soft-deleted, or rejects one that is still live - the mirror of
+   * {@code ProjectMemberService}'s, over {@code unique_active_project_team}.
+   */
+  private static ProjectTeam requireInactive(ProjectTeam assignment) {
+    if (Boolean.TRUE.equals(assignment.getIsActive())) {
+      throw new AppException(ProjectTeamErrorCode.PROJECT_TEAM_ALREADY_EXIST);
+    }
+
+    assignment.setIsActive(true);
+    return assignment;
+  }
+
+  /**
+   * Putting back a team that was removed earlier reactivates its original row rather than opening a
+   * second one, so a project's history stays one row per team.
+   */
   public ProjectTeamResponse createProjectTeam(
       Integer projectId, ProjectTeamCreateRequest request) {
     // a soft-deleted project takes no new teams
@@ -46,12 +63,17 @@ public class ProjectTeamService {
       throw new AppException(ProjectTeamErrorCode.TEAM_NOT_FOUND);
     }
 
-    ProjectTeam projectTeam = projectTeamMapper.toEntity(projectId, request);
+    ProjectTeam projectTeam =
+        projectTeamRepository
+            .findFirstByProjectIdAndTeamIdOrderByIdDesc(projectId, request.teamId())
+            .map(ProjectTeamService::requireInactive)
+            .orElseGet(() -> projectTeamMapper.toEntity(projectId, request));
+
     ProjectTeam savedProjectTeam;
     try {
       savedProjectTeam = projectTeamRepository.save(projectTeam);
     } catch (DataIntegrityViolationException e) {
-      // unique_active_project_team: the team is already assigned to this project
+      // unique_active_project_team: another request assigned the same team first
       throw new AppException(ProjectTeamErrorCode.PROJECT_TEAM_ALREADY_EXIST);
     }
 

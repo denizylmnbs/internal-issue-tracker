@@ -35,6 +35,13 @@ public interface ProjectTeamRepository extends JpaRepository<ProjectTeam, Intege
   Optional<ProjectTeam> findByProjectIdAndTeamIdAndIsActiveTrue(Integer projectId, Integer teamId);
 
   /**
+   * The pair's latest assignment row, live or not, so putting a team back on a project revives its
+   * old row instead of stacking another one behind it - see {@code ProjectMemberRepository}.
+   */
+  Optional<ProjectTeam> findFirstByProjectIdAndTeamIdOrderByIdDesc(
+      Integer projectId, Integer teamId);
+
+  /**
    * Native SQL only because a soft-deleted team must not be counted, and {@code teams} belongs to
    * another module - see the note on {@code ProjectMemberRepository}.
    */

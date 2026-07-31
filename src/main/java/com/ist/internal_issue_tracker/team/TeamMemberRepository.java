@@ -63,17 +63,32 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Integer>
   Optional<TeamMember> findByTeamIdAndUserIdAndIsActiveTrue(Integer teamId, Integer userId);
 
   /**
+   * The pair's latest membership row, live or not, so re-adding someone who was removed can revive
+   * their old row instead of stacking another one behind it. Unlike the lookup above this one is not
+   * covered by the partial index - nothing stops several soft-deleted rows for the same pair, rows
+   * this method's own use is meant to stop accumulating - so it takes the newest and leaves whatever
+   * history predates it alone.
+   */
+  Optional<TeamMember> findFirstByTeamIdAndUserIdOrderByIdDesc(Integer teamId, Integer userId);
+
+  /**
    * The user's own memberships, joined to the owning team so a caller can render team names without
    * a lookup per row. {@code TeamMember} holds a plain {@code teamId} rather than a {@code @ManyToOne
    * Team} (see {@link Team}), so the join is expressed explicitly; both entities live in this module,
    * so it crosses no boundary. The count query is spelled out because Spring Data cannot derive one
    * from a constructor expression.
+   *
+   * <p>{@code joinedAt} comes from {@code updatedAt}, not {@code createdAt}: a membership that was
+   * removed and granted again is the same row revived, so its creation date is when the person first
+   * joined years ago rather than when they came back. Only active rows reach this query and the only
+   * thing that ever writes to one is joining or leaving, so for every row returned here the last
+   * write was a join.
    */
   @Query(
       value =
           """
           select new com.ist.internal_issue_tracker.team.dto.UserTeamMembershipResponse(
-              tm.id, t.id, t.name, t.field, tm.createdAt)
+              tm.id, t.id, t.name, t.field, tm.updatedAt)
           from TeamMember tm
           join Team t on t.id = tm.teamId
           where tm.userId = :userId and tm.isActive = true and t.isActive = true

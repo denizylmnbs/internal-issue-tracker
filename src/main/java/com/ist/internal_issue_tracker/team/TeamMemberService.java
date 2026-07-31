@@ -17,7 +17,6 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @AllArgsConstructor
@@ -37,6 +36,26 @@ public class TeamMemberService {
     return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by("id"));
   }
 
+  /**
+   * Revives a membership that was soft-deleted, or rejects one that is still live. Removing a member
+   * only clears {@code isActive}, so the row outlives them and would collide with a fresh insert on
+   * {@code unique_active_team_membership} the moment they were added back.
+   */
+  private static TeamMember requireInactive(TeamMember membership) {
+    if (Boolean.TRUE.equals(membership.getIsActive())) {
+      throw new AppException(TeamMemberErrorCode.TEAM_MEMBER_ALREADY_EXIST);
+    }
+
+    membership.setIsActive(true);
+    return membership;
+  }
+
+  /**
+   * Adding someone who was removed earlier reactivates their original row rather than opening a
+   * second one, so a team's history stays one row per person. The row keeps the {@code createdAt} of
+   * their first ever join; what callers are shown as {@code joinedAt} is {@code updatedAt}, which
+   * this reactivation moves to now.
+   */
   public TeamMemberResponse createTeamMember(Integer teamId, TeamMemberCreateRequest request) {
     // variables
     Integer userId = request.userId();
@@ -57,12 +76,17 @@ public class TeamMemberService {
       throw new AppException(TeamMemberErrorCode.USER_ROLE_NOT_ENOUGH);
     }
 
-    TeamMember teamMember = teamMemberMapper.toEntity(teamId, request);
+    TeamMember membership =
+        teamMemberRepository
+            .findFirstByTeamIdAndUserIdOrderByIdDesc(teamId, userId)
+            .map(TeamMemberService::requireInactive)
+            .orElseGet(() -> teamMemberMapper.toEntity(teamId, request));
+
     TeamMember savedTeamMember;
     try {
-      savedTeamMember = teamMemberRepository.save(teamMember);
+      savedTeamMember = teamMemberRepository.save(membership);
     } catch (DataIntegrityViolationException e) {
-      // unique_active_team_membership: the user is already an active member of this team
+      // unique_active_team_membership: another request added the same user first
       throw new AppException(TeamMemberErrorCode.TEAM_MEMBER_ALREADY_EXIST);
     }
 

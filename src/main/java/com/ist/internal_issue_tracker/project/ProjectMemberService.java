@@ -38,6 +38,25 @@ public class ProjectMemberService {
     }
   }
 
+  /**
+   * Revives an assignment that was soft-deleted, or rejects one that is still live. Removing a
+   * member only clears {@code isActive}, so the row outlives them and would collide with a fresh
+   * insert on {@code unique_active_project_user} the moment they were added back.
+   */
+  private static ProjectMember requireInactive(ProjectMember membership) {
+    if (Boolean.TRUE.equals(membership.getIsActive())) {
+      throw new AppException(ProjectMemberErrorCode.PROJECT_MEMBER_ALREADY_EXIST);
+    }
+
+    membership.setIsActive(true);
+    return membership;
+  }
+
+  /**
+   * Adding someone who was taken off the project earlier reactivates their original row rather than
+   * opening a second one, so a project's history stays one row per person - see {@code
+   * TeamMemberService#createTeamMember}.
+   */
   public ProjectMemberResponse createProjectMember(
       Integer projectId, ProjectMemberCreateRequest request) {
     // variables
@@ -57,12 +76,17 @@ public class ProjectMemberService {
       throw new AppException(ProjectMemberErrorCode.USER_ROLE_NOT_ENOUGH);
     }
 
-    ProjectMember projectMember = projectMemberMapper.toEntity(projectId, request);
+    ProjectMember projectMember =
+        projectMemberRepository
+            .findFirstByProjectIdAndUserIdOrderByIdDesc(projectId, userId)
+            .map(ProjectMemberService::requireInactive)
+            .orElseGet(() -> projectMemberMapper.toEntity(projectId, request));
+
     ProjectMember savedProjectMember;
     try {
       savedProjectMember = projectMemberRepository.save(projectMember);
     } catch (DataIntegrityViolationException e) {
-      // unique_active_project_user: the user is already assigned to this project
+      // unique_active_project_user: another request assigned the same user first
       throw new AppException(ProjectMemberErrorCode.PROJECT_MEMBER_ALREADY_EXIST);
     }
 

@@ -48,6 +48,14 @@ public interface ProjectMemberRepository extends JpaRepository<ProjectMember, In
       Integer projectId, Integer userId);
 
   /**
+   * The pair's latest assignment row, live or not, so re-adding someone who was taken off the
+   * project revives their old row instead of stacking another one behind it. The partial index only
+   * keeps the active rows unique, so several soft-deleted ones may sit behind the newest.
+   */
+  Optional<ProjectMember> findFirstByProjectIdAndUserIdOrderByIdDesc(
+      Integer projectId, Integer userId);
+
+  /**
    * Everyone working on the project, counted once. {@code UNION} removes the overlap between the two
    * routes, which is the whole reason this is not two additions.
    */
