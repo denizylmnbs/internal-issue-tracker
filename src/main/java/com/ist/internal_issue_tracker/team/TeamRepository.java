@@ -40,13 +40,13 @@ public interface TeamRepository extends JpaRepository<Team, Integer> {
    */
   @Query(
       """
-            SELECT t FROM Team t
-            WHERE t.isActive = true
-            AND (CAST(:name AS String) IS NULL
-                   OR lower(t.name) LIKE lower(concat('%', CAST(:name AS String), '%')))
-            AND (:field IS NULL OR t.field = :field)
-            AND (:leaderId IS NULL OR t.leaderId = :leaderId)
-            """)
+              SELECT t FROM Team t
+              WHERE t.isActive = true
+              AND (CAST(:name AS String) IS NULL
+                     OR lower(t.name) LIKE lower(concat('%', CAST(:name AS String), '%')))
+              AND (:field IS NULL OR t.field = :field)
+              AND (:leaderId IS NULL OR t.leaderId = :leaderId)
+              """)
   Page<Team> findAllByFilters(
       @Param("name") String name,
       @Param("field") TeamField field,
