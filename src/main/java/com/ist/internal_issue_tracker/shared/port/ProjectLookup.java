@@ -10,4 +10,11 @@ public interface ProjectLookup {
    * the project a sprint hangs off without ever naming a {@code project} type.
    */
   boolean existsActiveProject(Integer projectId);
+
+  /**
+   * Whether the user works on the project, either by a direct assignment or through a team assigned
+   * to it. Distinct from {@link #isLeaderOfProject}: a leader is named on the project row and need
+   * not be a member of it, while a participant is a member and need not lead anything.
+   */
+  boolean isParticipantOfProject(Integer projectId, Integer userId);
 }
