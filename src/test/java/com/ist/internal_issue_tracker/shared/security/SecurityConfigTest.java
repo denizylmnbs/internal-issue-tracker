@@ -15,6 +15,12 @@ import com.ist.internal_issue_tracker.epic.EpicController;
 import com.ist.internal_issue_tracker.epic.EpicService;
 import com.ist.internal_issue_tracker.epic.EpicStatus;
 import com.ist.internal_issue_tracker.epic.dto.EpicResponse;
+import com.ist.internal_issue_tracker.issue.IssueController;
+import com.ist.internal_issue_tracker.issue.IssuePriority;
+import com.ist.internal_issue_tracker.issue.IssueService;
+import com.ist.internal_issue_tracker.issue.IssueStatus;
+import com.ist.internal_issue_tracker.issue.IssueType;
+import com.ist.internal_issue_tracker.issue.dto.IssueResponse;
 import com.ist.internal_issue_tracker.project.ProjectController;
 import com.ist.internal_issue_tracker.project.ProjectMemberController;
 import com.ist.internal_issue_tracker.project.ProjectMemberService;
@@ -73,7 +79,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
       ProjectTeamController.class,
       UserProjectsController.class,
       SprintController.class,
-      EpicController.class
+      EpicController.class,
+      IssueController.class
     })
 @Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 class SecurityConfigTest {
@@ -93,6 +100,10 @@ class SecurityConfigTest {
   private static final String CHANGE_SPRINT_STATUS_BODY = "{\"status\":\"IN_PROGRESS\"}";
   private static final String EPIC_BODY = "{\"name\":\"Checkout rewrite\",\"description\":\"x\"}";
   private static final String CHANGE_EPIC_STATUS_BODY = "{\"status\":\"ON_HOLD\"}";
+  private static final String ISSUE_BODY =
+      "{\"name\":\"Login fails\",\"description\":\"x\",\"type\":\"BUG\",\"priority\":\"HIGH\"}";
+  private static final String CHANGE_ISSUE_STATUS_BODY = "{\"status\":\"IN_PROGRESS\"}";
+  private static final String CHANGE_ASSIGNEE_BODY = "{\"assigneeUserId\":7,\"assigneeTeamId\":3}";
 
   @Autowired private MockMvc mockMvc;
 
@@ -107,6 +118,7 @@ class SecurityConfigTest {
   @MockitoBean private ProjectTeamService projectTeamService;
   @MockitoBean private SprintService sprintService;
   @MockitoBean private EpicService epicService;
+  @MockitoBean private IssueService issueService;
 
   /** {@code securityFilterChain} takes the ports directly, so the slice has to supply them. */
   @MockitoBean private TeamLookup teamLookup;
@@ -840,5 +852,186 @@ class SecurityConfigTest {
   void getEpics_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
     mockMvc.perform(get("/api/projects/1/epics").with(as(1, role))).andExpect(status().isOk());
     mockMvc.perform(get("/api/projects/1/epics/20").with(as(1, role))).andExpect(status().isOk());
+  }
+
+  private static IssueResponse issueResponse() {
+    return new IssueResponse(
+        30,
+        1,
+        null,
+        null,
+        IssueType.BUG,
+        "Login fails",
+        "x",
+        IssueStatus.BACKLOG,
+        IssuePriority.HIGH,
+        null,
+        99,
+        null,
+        null,
+        OffsetDateTime.now(),
+        OffsetDateTime.now());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"EDITOR", "ADMIN"})
+  void createIssue_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
+    when(issueService.createIssue(eq(1), eq(99), any())).thenReturn(issueResponse());
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/issues")
+                .with(as(99, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ISSUE_BODY))
+        .andExpect(status().isCreated());
+  }
+
+  @Test
+  void createIssue_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+    when(issueService.createIssue(eq(1), eq(5), any())).thenReturn(issueResponse());
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/issues")
+                .with(as(5, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ISSUE_BODY))
+        .andExpect(status().isCreated());
+  }
+
+  /**
+   * The rule these routes exist to prove: a developer who neither is an editor nor leads the project
+   * may still file work on it, so long as they actually work on it.
+   */
+  @Test
+  void createIssue_isAllowed_forAParticipantOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 6)).thenReturn(false);
+    when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
+    when(issueService.createIssue(eq(1), eq(6), any())).thenReturn(issueResponse());
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/issues")
+                .with(as(6, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ISSUE_BODY))
+        .andExpect(status().isCreated());
+  }
+
+  /** Both ports answer no, so having the role alone is not enough. */
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void createIssue_returns403_forEveryRoleBelowEditorOffTheProject(Role role) throws Exception {
+    mockMvc
+        .perform(
+            post("/api/projects/1/issues")
+                .with(as(6, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(ISSUE_BODY))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void updateIssue_isAllowed_forAParticipantOfThatProject() throws Exception {
+    when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
+    when(issueService.updateIssue(eq(1), eq(30), any())).thenReturn(issueResponse());
+
+    mockMvc
+        .perform(
+            put("/api/projects/1/issues/30")
+                .with(as(6, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"name\":\"Login fails\",\"description\":\"x\",\"type\":\"BUG\","
+                        + "\"priority\":\"HIGH\"}"))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void changeIssueStatus_isAllowed_forAParticipantOfThatProject() throws Exception {
+    when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
+    when(issueService.changeStatus(eq(1), eq(30), any())).thenReturn(issueResponse());
+
+    mockMvc
+        .perform(
+            patch("/api/projects/1/issues/30/status")
+                .with(as(6, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(CHANGE_ISSUE_STATUS_BODY))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void changeIssueAssignee_isAllowed_forAParticipantOfThatProject() throws Exception {
+    when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
+    when(issueService.changeAssignee(eq(1), eq(30), any())).thenReturn(issueResponse());
+
+    mockMvc
+        .perform(
+            patch("/api/projects/1/issues/30/assignee")
+                .with(as(6, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(CHANGE_ASSIGNEE_BODY))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void removeIssueAssignee_isAllowed_forAParticipantOfThatProject() throws Exception {
+    when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
+    when(issueService.removeAssignee(1, 30)).thenReturn(issueResponse());
+
+    mockMvc
+        .perform(delete("/api/projects/1/issues/30/assignee").with(as(6, Role.DEVELOPER)))
+        .andExpect(status().isOk());
+  }
+
+  /**
+   * Deleting is the one issue route participation does not open. The stub says user 6 works on the
+   * project and it still makes no difference, which is what separates this matcher from the five
+   * above it.
+   */
+  @Test
+  void deleteIssue_returns403_forAParticipantWhoDoesNotLeadTheProject() throws Exception {
+    when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1/issues/30").with(as(6, Role.DEVELOPER)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void deleteIssue_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1/issues/30").with(as(5, Role.DEVELOPER)))
+        .andExpect(status().isOk());
+  }
+
+  /**
+   * The trailing {@code {issueId}} must not be mistaken for the project the rule authorizes against:
+   * user 30 leads project 30, not project 1.
+   */
+  @Test
+  void deleteIssue_returns403_forTheLeaderOfADifferentProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(30, 30)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1/issues/30").with(as(30, Role.DEVELOPER)))
+        .andExpect(status().isForbidden());
+  }
+
+  /** Reading is not restricted beyond being logged in, participation or not. */
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void getIssues_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc.perform(get("/api/projects/1/issues").with(as(1, role))).andExpect(status().isOk());
+    mockMvc.perform(get("/api/projects/1/issues/30").with(as(1, role))).andExpect(status().isOk());
   }
 }
