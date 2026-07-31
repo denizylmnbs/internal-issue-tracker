@@ -15,4 +15,9 @@ public class ProjectLookupAdapter implements ProjectLookup {
         && projectId != null
         && projectRepository.existsByIdAndLeaderId(projectId, userId);
   }
+
+  @Override
+  public boolean existsActiveProject(Integer projectId) {
+    return projectId != null && projectRepository.existsByIdAndIsActiveTrue(projectId);
+  }
 }
