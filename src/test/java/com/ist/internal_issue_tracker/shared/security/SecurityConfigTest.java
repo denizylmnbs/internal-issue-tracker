@@ -22,6 +22,10 @@ import com.ist.internal_issue_tracker.project.dto.ProjectMemberResponse;
 import com.ist.internal_issue_tracker.project.dto.ProjectTeamResponse;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
+import com.ist.internal_issue_tracker.sprint.SprintController;
+import com.ist.internal_issue_tracker.sprint.SprintService;
+import com.ist.internal_issue_tracker.sprint.SprintStatus;
+import com.ist.internal_issue_tracker.sprint.dto.SprintResponse;
 import com.ist.internal_issue_tracker.team.TeamController;
 import com.ist.internal_issue_tracker.team.TeamMemberController;
 import com.ist.internal_issue_tracker.team.TeamMemberService;
@@ -30,6 +34,7 @@ import com.ist.internal_issue_tracker.team.UserTeamsController;
 import com.ist.internal_issue_tracker.team.dto.TeamMemberResponse;
 import com.ist.internal_issue_tracker.user.UserController;
 import com.ist.internal_issue_tracker.user.UserService;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -62,7 +67,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
       ProjectController.class,
       ProjectMemberController.class,
       ProjectTeamController.class,
-      UserProjectsController.class
+      UserProjectsController.class,
+      SprintController.class
     })
 @Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 class SecurityConfigTest {
@@ -77,6 +83,9 @@ class SecurityConfigTest {
   private static final String CHANGE_STATUS_BODY = "{\"status\":\"ACTIVE\"}";
   private static final String CHANGE_LEADER_BODY = "{\"leaderId\":7}";
   private static final String ADD_PROJECT_TEAM_BODY = "{\"teamId\":3}";
+  private static final String SPRINT_BODY =
+      "{\"name\":\"Sprint 1\",\"description\":\"x\",\"startDate\":\"2026-01-01\",\"endDate\":\"2026-01-15\"}";
+  private static final String CHANGE_SPRINT_STATUS_BODY = "{\"status\":\"IN_PROGRESS\"}";
 
   @Autowired private MockMvc mockMvc;
 
@@ -89,6 +98,7 @@ class SecurityConfigTest {
   @MockitoBean private ProjectService projectService;
   @MockitoBean private ProjectMemberService projectMemberService;
   @MockitoBean private ProjectTeamService projectTeamService;
+  @MockitoBean private SprintService sprintService;
 
   /** {@code securityFilterChain} takes the ports directly, so the slice has to supply them. */
   @MockitoBean private TeamLookup teamLookup;
@@ -551,5 +561,139 @@ class SecurityConfigTest {
     mockMvc
         .perform(get("/api/projects/1/participants").with(as(1, role)))
         .andExpect(status().isOk());
+  }
+
+  private static SprintResponse sprintResponse() {
+    return new SprintResponse(
+        10,
+        1,
+        "Sprint 1",
+        "x",
+        LocalDate.of(2026, 1, 1),
+        LocalDate.of(2026, 1, 15),
+        SprintStatus.TODO,
+        OffsetDateTime.now(),
+        OffsetDateTime.now());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"EDITOR", "ADMIN"})
+  void createSprint_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
+    when(sprintService.createSprint(eq(1), any())).thenReturn(sprintResponse());
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/sprints")
+                .with(as(99, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(SPRINT_BODY))
+        .andExpect(status().isCreated());
+  }
+
+  /** Planning a project's sprints is the leader's own job, so it is not editor-only. */
+  @Test
+  void createSprint_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+    when(sprintService.createSprint(eq(1), any())).thenReturn(sprintResponse());
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/sprints")
+                .with(as(5, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(SPRINT_BODY))
+        .andExpect(status().isCreated());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void createSprint_returns403_forEveryRoleBelowEditorThatDoesNotLeadTheProject(Role role)
+      throws Exception {
+    mockMvc
+        .perform(
+            post("/api/projects/1/sprints")
+                .with(as(5, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(SPRINT_BODY))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void updateSprint_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+    when(sprintService.updateSprint(eq(1), eq(10), any())).thenReturn(sprintResponse());
+
+    mockMvc
+        .perform(
+            put("/api/projects/1/sprints/10")
+                .with(as(5, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(SPRINT_BODY))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void changeSprintStatus_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+    when(sprintService.changeStatus(eq(1), eq(10), any())).thenReturn(sprintResponse());
+
+    mockMvc
+        .perform(
+            patch("/api/projects/1/sprints/10/status")
+                .with(as(5, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(CHANGE_SPRINT_STATUS_BODY))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void deleteSprint_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1/sprints/10").with(as(5, Role.DEVELOPER)))
+        .andExpect(status().isOk());
+  }
+
+  /**
+   * The trailing {@code {sprintId}} must not be mistaken for the project the rule authorizes
+   * against: user 10 leads project 10, not project 1, so the request is still refused. The service
+   * layer then has to make the same distinction for its own reasons - see {@code
+   * SprintRepository#findByIdAndProjectIdAndDeletedAtIsNull}.
+   */
+  @Test
+  void deleteSprint_returns403_forTheLeaderOfADifferentProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(10, 10)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1/sprints/10").with(as(10, Role.DEVELOPER)))
+        .andExpect(status().isForbidden());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void changeSprintStatus_returns403_forEveryRoleBelowEditorThatDoesNotLeadTheProject(Role role)
+      throws Exception {
+    mockMvc
+        .perform(
+            patch("/api/projects/1/sprints/10/status")
+                .with(as(5, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(CHANGE_SPRINT_STATUS_BODY))
+        .andExpect(status().isForbidden());
+  }
+
+  /** Sprints are readable by anyone logged in, like every other listing. */
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void getSprints_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc.perform(get("/api/projects/1/sprints").with(as(1, role))).andExpect(status().isOk());
+    mockMvc.perform(get("/api/projects/1/sprints/10").with(as(1, role))).andExpect(status().isOk());
   }
 }
