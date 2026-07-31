@@ -128,6 +128,21 @@ public class SecurityConfig {
                     .access(editorOrProjectLeader(roleHierarchy, projectLookup))
                     .requestMatchers(HttpMethod.DELETE, "/api/projects/{id}/epics/{epicId}")
                     .access(editorOrProjectLeader(roleHierarchy, projectLookup))
+                    // deleting an issue is the one issue route participants do not get
+                    .requestMatchers(HttpMethod.DELETE, "/api/projects/{id}/issues/{issueId}")
+                    .access(editorOrProjectLeader(roleHierarchy, projectLookup))
+                    .requestMatchers(HttpMethod.POST, "/api/projects/{id}/issues")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    .requestMatchers(HttpMethod.PUT, "/api/projects/{id}/issues/{issueId}")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    .requestMatchers(HttpMethod.PATCH, "/api/projects/{id}/issues/{issueId}/status")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    .requestMatchers(
+                        HttpMethod.PATCH, "/api/projects/{id}/issues/{issueId}/assignee")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    .requestMatchers(
+                        HttpMethod.DELETE, "/api/projects/{id}/issues/{issueId}/assignee")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(
@@ -166,6 +181,25 @@ public class SecurityConfig {
   private AuthorizationManager<RequestAuthorizationContext> editorOrProjectLeader(
       RoleHierarchy roleHierarchy, ProjectLookup projectLookup) {
     return editorOrLeader(roleHierarchy, projectLookup::isLeaderOfProject);
+  }
+
+  /**
+   * The rule the issue routes run on: an editor, the project's leader, or anyone actually working on
+   * the project. Sprints and epics are planning artifacts and stay with the first two, but refusing
+   * a developer the right to file or move their own work would make the tracker unusable.
+   *
+   * <p>{@link #editorOrLeader} already takes the leadership question as a predicate, so widening it
+   * is a matter of handing it a wider question rather than writing a second manager. Leadership is
+   * asked first because it is a single indexed column, while participation is a union across direct
+   * and team-based membership.
+   */
+  private AuthorizationManager<RequestAuthorizationContext> editorLeaderOrParticipant(
+      RoleHierarchy roleHierarchy, ProjectLookup projectLookup) {
+    return editorOrLeader(
+        roleHierarchy,
+        (projectId, userId) ->
+            projectLookup.isLeaderOfProject(projectId, userId)
+                || projectLookup.isParticipantOfProject(projectId, userId));
   }
 
   /**
