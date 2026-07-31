@@ -11,6 +11,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ist.internal_issue_tracker.comment.CommentController;
+import com.ist.internal_issue_tracker.comment.CommentService;
+import com.ist.internal_issue_tracker.comment.dto.CommentResponse;
 import com.ist.internal_issue_tracker.epic.EpicController;
 import com.ist.internal_issue_tracker.epic.EpicService;
 import com.ist.internal_issue_tracker.epic.EpicStatus;
@@ -80,7 +83,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
       UserProjectsController.class,
       SprintController.class,
       EpicController.class,
-      IssueController.class
+      IssueController.class,
+      CommentController.class
     })
 @Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 class SecurityConfigTest {
@@ -104,6 +108,7 @@ class SecurityConfigTest {
       "{\"name\":\"Login fails\",\"description\":\"x\",\"type\":\"BUG\",\"priority\":\"HIGH\"}";
   private static final String CHANGE_ISSUE_STATUS_BODY = "{\"status\":\"IN_PROGRESS\"}";
   private static final String CHANGE_ASSIGNEE_BODY = "{\"assigneeUserId\":7,\"assigneeTeamId\":3}";
+  private static final String COMMENT_BODY = "{\"content\":\"Reproduced on staging.\"}";
 
   @Autowired private MockMvc mockMvc;
 
@@ -119,6 +124,7 @@ class SecurityConfigTest {
   @MockitoBean private SprintService sprintService;
   @MockitoBean private EpicService epicService;
   @MockitoBean private IssueService issueService;
+  @MockitoBean private CommentService commentService;
 
   /** {@code securityFilterChain} takes the ports directly, so the slice has to supply them. */
   @MockitoBean private TeamLookup teamLookup;
@@ -1033,5 +1039,127 @@ class SecurityConfigTest {
   void getIssues_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
     mockMvc.perform(get("/api/projects/1/issues").with(as(1, role))).andExpect(status().isOk());
     mockMvc.perform(get("/api/projects/1/issues/30").with(as(1, role))).andExpect(status().isOk());
+  }
+
+  private static CommentResponse commentResponse() {
+    return new CommentResponse(
+        40, 30, 6, "Reproduced on staging.", OffsetDateTime.now(), OffsetDateTime.now());
+  }
+
+  /**
+   * These tests cover the coarse gate only. Whether a caller who gets through may touch a
+   * <em>particular</em> comment is decided by {@code CommentService} from the author column, which a
+   * request matcher cannot see and this slice therefore cannot exercise.
+   */
+  @Test
+  void createComment_isAllowed_forAParticipantOfThatProject() throws Exception {
+    when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
+    when(commentService.createComment(eq(1), eq(30), eq(6), any())).thenReturn(commentResponse());
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/issues/30/comments")
+                .with(as(6, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(COMMENT_BODY))
+        .andExpect(status().isCreated());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"EDITOR", "ADMIN"})
+  void createComment_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
+    when(commentService.createComment(eq(1), eq(30), eq(99), any())).thenReturn(commentResponse());
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/issues/30/comments")
+                .with(as(99, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(COMMENT_BODY))
+        .andExpect(status().isCreated());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void createComment_returns403_forEveryRoleBelowEditorOffTheProject(Role role) throws Exception {
+    mockMvc
+        .perform(
+            post("/api/projects/1/issues/30/comments")
+                .with(as(6, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(COMMENT_BODY))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void updateComment_passesTheGate_forAParticipantOfThatProject() throws Exception {
+    when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
+    when(commentService.updateComment(eq(1), eq(30), eq(40), any(), any()))
+        .thenReturn(commentResponse());
+
+    mockMvc
+        .perform(
+            put("/api/projects/1/issues/30/comments/40")
+                .with(as(6, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(COMMENT_BODY))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void updateComment_returns403_forSomeoneOffTheProject() throws Exception {
+    mockMvc
+        .perform(
+            put("/api/projects/1/issues/30/comments/40")
+                .with(as(6, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(COMMENT_BODY))
+        .andExpect(status().isForbidden());
+  }
+
+  /** Deleting is gated the same way as editing; the two diverge inside the service, not here. */
+  @Test
+  void deleteComment_passesTheGate_forAParticipantOfThatProject() throws Exception {
+    when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1/issues/30/comments/40").with(as(6, Role.DEVELOPER)))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void deleteComment_returns403_forSomeoneOffTheProject() throws Exception {
+    mockMvc
+        .perform(delete("/api/projects/1/issues/30/comments/40").with(as(6, Role.DEVELOPER)))
+        .andExpect(status().isForbidden());
+  }
+
+  /**
+   * The rule reads {@code {id}} and nothing else, however many path variables follow it: user 40
+   * leads project 40, not project 1.
+   */
+  @Test
+  void deleteComment_returns403_forTheLeaderOfADifferentProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(40, 40)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1/issues/30/comments/40").with(as(40, Role.DEVELOPER)))
+        .andExpect(status().isForbidden());
+  }
+
+  /** Reading a thread is not restricted beyond being logged in. */
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void getComments_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc
+        .perform(get("/api/projects/1/issues/30/comments").with(as(1, role)))
+        .andExpect(status().isOk());
+    mockMvc
+        .perform(get("/api/projects/1/issues/30/comments/40").with(as(1, role)))
+        .andExpect(status().isOk());
   }
 }
