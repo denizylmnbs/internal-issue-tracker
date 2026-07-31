@@ -34,11 +34,11 @@ public interface SprintRepository extends JpaRepository<Sprint, Integer> {
       Integer projectId, String name, Integer id);
 
   /**
-   * Pre-check for {@code one_active_sprint_per_project}. That index is <em>not</em> partial on
-   * {@code deleted_at} - it reserves the slot for any row reading {@code IN_PROGRESS}, deleted or
-   * not. This method deliberately ignores deleted rows anyway, because it answers the question the
-   * API cares about; keeping the two in agreement is {@code SprintService#deleteSprint}'s job, which
-   * stops a running sprint before dropping it so no deleted row is ever left holding the slot.
+   * Pre-check for {@code one_active_sprint_per_project}, whose {@code WHERE} clause this mirrors
+   * term for term: that index covers {@code (project_id)} where the status is {@code IN_PROGRESS}
+   * <em>and</em> {@code deleted_at} is null. Dropping the {@code DeletedAtIsNull} here would make
+   * this method stricter than the constraint it stands in for, refusing a sprint the database would
+   * have accepted.
    */
   boolean existsByProjectIdAndStatusAndDeletedAtIsNull(Integer projectId, SprintStatus status);
 

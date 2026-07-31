@@ -278,9 +278,13 @@ CREATE UNIQUE INDEX unique_active_sprint_name_per_project
 CREATE UNIQUE INDEX unique_active_epic_name_per_project
     ON "epics" ("project_id", "name") WHERE "deleted_at" IS NULL;
 
--- Bir projede aynı anda sadece bir sprint IN_PROGRESS olabilir
+-- Bir projede aynı anda sadece bir SİLİNMEMİŞ sprint IN_PROGRESS olabilir.
+-- deleted_at koşulu şart: onsuz, silinmiş bir IN_PROGRESS satırı projenin tek
+-- slotunu tutmaya devam eder. Her okuma silinmiş satırları elediği için o proje
+-- bir daha hiç sprint başlatamaz ve dönen 409 kimsenin göremediği bir sprinti
+-- işaret eder.
 CREATE UNIQUE INDEX one_active_sprint_per_project
-    ON "sprints" ("project_id") WHERE "status" = 'IN_PROGRESS';
+    ON "sprints" ("project_id") WHERE "status" = 'IN_PROGRESS' AND "deleted_at" IS NULL;
 
 -- ============================================================
 -- SPRING MODULITH EVENT PUBLICATION REGISTRY

@@ -143,26 +143,18 @@ public class SprintService {
   }
 
   /**
-   * Soft delete: the row stays and {@code deletedAt} is stamped.
+   * Soft delete: the row stays and {@code deletedAt} is stamped. The status is left exactly where it
+   * was, so the record still says what the sprint was doing when it was dropped.
    *
-   * <p>A running sprint is stopped on the way out, and that is not tidiness. {@code
-   * one_active_sprint_per_project} indexes {@code (project_id) WHERE status = 'IN_PROGRESS'} with no
-   * condition on {@code deleted_at}, so a deleted row still reading {@code IN_PROGRESS} would go on
-   * holding the project's only slot - invisibly, since every read filters deleted rows out. The
-   * project would then refuse to start any sprint ever again, with a 409 naming a sprint nobody can
-   * see or reopen. Releasing the slot here is what keeps that from happening.
-   *
-   * <p>{@code COMPLETED} is the only terminal status this enum offers; it means "no longer running"
-   * here rather than "finished successfully".
+   * <p>That is only safe because {@code one_active_sprint_per_project} is partial on {@code
+   * deleted_at} as well as on the status. Were it not, a deleted row still reading {@code
+   * IN_PROGRESS} would go on holding the project's only slot - invisibly, since every read filters
+   * deleted rows out - and the project could never start another sprint.
    */
   public void deleteSprint(Integer projectId, Integer sprintId) {
     requireActiveProject(projectId);
 
     Sprint sprint = requireLiveSprint(projectId, sprintId);
-
-    if (sprint.getStatus() == SprintStatus.IN_PROGRESS) {
-      sprint.setStatus(SprintStatus.COMPLETED);
-    }
 
     sprint.setDeletedAt(OffsetDateTime.now());
 
