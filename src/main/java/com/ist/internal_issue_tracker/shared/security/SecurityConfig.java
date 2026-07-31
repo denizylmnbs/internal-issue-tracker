@@ -111,6 +111,15 @@ public class SecurityConfig {
                     .access(editorOrProjectLeader(roleHierarchy, projectLookup))
                     .requestMatchers(HttpMethod.DELETE, "/api/projects/{id}/teams/{teamId}")
                     .access(editorOrProjectLeader(roleHierarchy, projectLookup))
+                    .requestMatchers(HttpMethod.POST, "/api/projects/{id}/sprints")
+                    .access(editorOrProjectLeader(roleHierarchy, projectLookup))
+                    .requestMatchers(HttpMethod.PUT, "/api/projects/{id}/sprints/{sprintId}")
+                    .access(editorOrProjectLeader(roleHierarchy, projectLookup))
+                    .requestMatchers(
+                        HttpMethod.PATCH, "/api/projects/{id}/sprints/{sprintId}/status")
+                    .access(editorOrProjectLeader(roleHierarchy, projectLookup))
+                    .requestMatchers(HttpMethod.DELETE, "/api/projects/{id}/sprints/{sprintId}")
+                    .access(editorOrProjectLeader(roleHierarchy, projectLookup))
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(
