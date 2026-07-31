@@ -143,6 +143,17 @@ public class SecurityConfig {
                     .requestMatchers(
                         HttpMethod.DELETE, "/api/projects/{id}/issues/{issueId}/assignee")
                     .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    // the coarse gate only; who may touch a given comment is CommentService's call
+                    .requestMatchers(
+                        HttpMethod.POST, "/api/projects/{id}/issues/{issueId}/comments")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    .requestMatchers(
+                        HttpMethod.PUT, "/api/projects/{id}/issues/{issueId}/comments/{commentId}")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    .requestMatchers(
+                        HttpMethod.DELETE,
+                        "/api/projects/{id}/issues/{issueId}/comments/{commentId}")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(
