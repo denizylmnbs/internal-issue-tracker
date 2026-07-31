@@ -11,6 +11,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ist.internal_issue_tracker.epic.EpicController;
+import com.ist.internal_issue_tracker.epic.EpicService;
+import com.ist.internal_issue_tracker.epic.EpicStatus;
+import com.ist.internal_issue_tracker.epic.dto.EpicResponse;
 import com.ist.internal_issue_tracker.project.ProjectController;
 import com.ist.internal_issue_tracker.project.ProjectMemberController;
 import com.ist.internal_issue_tracker.project.ProjectMemberService;
@@ -68,7 +72,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
       ProjectMemberController.class,
       ProjectTeamController.class,
       UserProjectsController.class,
-      SprintController.class
+      SprintController.class,
+      EpicController.class
     })
 @Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 class SecurityConfigTest {
@@ -86,6 +91,8 @@ class SecurityConfigTest {
   private static final String SPRINT_BODY =
       "{\"name\":\"Sprint 1\",\"description\":\"x\",\"startDate\":\"2026-01-01\",\"endDate\":\"2026-01-15\"}";
   private static final String CHANGE_SPRINT_STATUS_BODY = "{\"status\":\"IN_PROGRESS\"}";
+  private static final String EPIC_BODY = "{\"name\":\"Checkout rewrite\",\"description\":\"x\"}";
+  private static final String CHANGE_EPIC_STATUS_BODY = "{\"status\":\"ON_HOLD\"}";
 
   @Autowired private MockMvc mockMvc;
 
@@ -99,6 +106,7 @@ class SecurityConfigTest {
   @MockitoBean private ProjectMemberService projectMemberService;
   @MockitoBean private ProjectTeamService projectTeamService;
   @MockitoBean private SprintService sprintService;
+  @MockitoBean private EpicService epicService;
 
   /** {@code securityFilterChain} takes the ports directly, so the slice has to supply them. */
   @MockitoBean private TeamLookup teamLookup;
@@ -695,5 +703,142 @@ class SecurityConfigTest {
   void getSprints_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
     mockMvc.perform(get("/api/projects/1/sprints").with(as(1, role))).andExpect(status().isOk());
     mockMvc.perform(get("/api/projects/1/sprints/10").with(as(1, role))).andExpect(status().isOk());
+  }
+
+  private static EpicResponse epicResponse() {
+    return new EpicResponse(
+        20,
+        1,
+        "Checkout rewrite",
+        "x",
+        EpicStatus.TODO,
+        99,
+        OffsetDateTime.now(),
+        OffsetDateTime.now());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"EDITOR", "ADMIN"})
+  void createEpic_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
+    when(epicService.createEpic(eq(1), eq(99), any())).thenReturn(epicResponse());
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/epics")
+                .with(as(99, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(EPIC_BODY))
+        .andExpect(status().isCreated());
+  }
+
+  /**
+   * Doubles as the check that the reporter is the caller: the stub only answers for reporter 5, so
+   * a 201 here means the controller passed the principal's id and not something from the body.
+   */
+  @Test
+  void createEpic_isAllowed_forTheLeaderOfThatProject_andReportsThemAsTheReporter()
+      throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+    when(epicService.createEpic(eq(1), eq(5), any())).thenReturn(epicResponse());
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/epics")
+                .with(as(5, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(EPIC_BODY))
+        .andExpect(status().isCreated());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void createEpic_returns403_forEveryRoleBelowEditorThatDoesNotLeadTheProject(Role role)
+      throws Exception {
+    mockMvc
+        .perform(
+            post("/api/projects/1/epics")
+                .with(as(5, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(EPIC_BODY))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void updateEpic_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+    when(epicService.updateEpic(eq(1), eq(20), any())).thenReturn(epicResponse());
+
+    mockMvc
+        .perform(
+            put("/api/projects/1/epics/20")
+                .with(as(5, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(EPIC_BODY))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void changeEpicStatus_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+    when(epicService.changeStatus(eq(1), eq(20), any())).thenReturn(epicResponse());
+
+    mockMvc
+        .perform(
+            patch("/api/projects/1/epics/20/status")
+                .with(as(5, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(CHANGE_EPIC_STATUS_BODY))
+        .andExpect(status().isOk());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void changeEpicStatus_returns403_forEveryRoleBelowEditorThatDoesNotLeadTheProject(Role role)
+      throws Exception {
+    mockMvc
+        .perform(
+            patch("/api/projects/1/epics/20/status")
+                .with(as(5, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(CHANGE_EPIC_STATUS_BODY))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void deleteEpic_isAllowed_forTheLeaderOfThatProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1/epics/20").with(as(5, Role.DEVELOPER)))
+        .andExpect(status().isOk());
+  }
+
+  /**
+   * The trailing {@code {epicId}} must not be mistaken for the project the rule authorizes against:
+   * user 20 leads project 20, not project 1, so the request is still refused - see {@code
+   * EpicRepository#findByIdAndProjectIdAndDeletedAtIsNull} for the service-layer half of the same
+   * distinction.
+   */
+  @Test
+  void deleteEpic_returns403_forTheLeaderOfADifferentProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(20, 20)).thenReturn(true);
+
+    mockMvc
+        .perform(delete("/api/projects/1/epics/20").with(as(20, Role.DEVELOPER)))
+        .andExpect(status().isForbidden());
+  }
+
+  /** Epics are readable by anyone logged in, like every other listing. */
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void getEpics_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc.perform(get("/api/projects/1/epics").with(as(1, role))).andExpect(status().isOk());
+    mockMvc.perform(get("/api/projects/1/epics/20").with(as(1, role))).andExpect(status().isOk());
   }
 }
