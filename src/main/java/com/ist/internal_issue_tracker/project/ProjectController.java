@@ -6,6 +6,7 @@ import com.ist.internal_issue_tracker.project.dto.ProjectCreateRequest;
 import com.ist.internal_issue_tracker.project.dto.ProjectDetailResponse;
 import com.ist.internal_issue_tracker.project.dto.ProjectResponse;
 import com.ist.internal_issue_tracker.project.dto.ProjectUpdateRequest;
+import com.ist.internal_issue_tracker.shared.security.AuthenticatedUser;
 import com.ist.internal_issue_tracker.shared.web.ApiResponse;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import jakarta.validation.Valid;
@@ -15,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,9 +27,10 @@ public class ProjectController {
 
   @PostMapping
   public ResponseEntity<ApiResponse<ProjectResponse>> createProject(
+      @AuthenticationPrincipal AuthenticatedUser caller,
       @Valid @RequestBody ProjectCreateRequest request) {
 
-    ProjectResponse projectResponse = projectService.createProject(request);
+    ProjectResponse projectResponse = projectService.createProject(caller.getId(), request);
 
     return ResponseEntity.created(URI.create("/api/projects/" + projectResponse.id()))
         .body(ApiResponse.ok(projectResponse));
@@ -66,39 +69,47 @@ public class ProjectController {
 
   @PutMapping("/{id}")
   public ResponseEntity<ApiResponse<ProjectResponse>> updateProject(
-      @PathVariable Integer id, @Valid @RequestBody ProjectUpdateRequest request) {
-    ProjectResponse projectResponse = projectService.updateProject(id, request);
+      @AuthenticationPrincipal AuthenticatedUser caller,
+      @PathVariable Integer id,
+      @Valid @RequestBody ProjectUpdateRequest request) {
+    ProjectResponse projectResponse = projectService.updateProject(id, caller.getId(), request);
 
     return ResponseEntity.ok(ApiResponse.ok(projectResponse));
   }
 
   @PatchMapping("/{id}/leader")
   public ResponseEntity<ApiResponse<ProjectResponse>> changeLeader(
-      @PathVariable Integer id, @Valid @RequestBody ChangeLeaderRequest request) {
-    ProjectResponse projectResponse = projectService.changeLeader(id, request);
+      @AuthenticationPrincipal AuthenticatedUser caller,
+      @PathVariable Integer id,
+      @Valid @RequestBody ChangeLeaderRequest request) {
+    ProjectResponse projectResponse = projectService.changeLeader(id, caller.getId(), request);
 
     return ResponseEntity.ok(ApiResponse.ok(projectResponse));
   }
 
   /** Leaves the project with no leader; only an editor can act on it until a new one is named. */
   @DeleteMapping("/{id}/leader")
-  public ResponseEntity<ApiResponse<ProjectResponse>> removeLeader(@PathVariable Integer id) {
-    ProjectResponse projectResponse = projectService.removeLeader(id);
+  public ResponseEntity<ApiResponse<ProjectResponse>> removeLeader(
+      @AuthenticationPrincipal AuthenticatedUser caller, @PathVariable Integer id) {
+    ProjectResponse projectResponse = projectService.removeLeader(id, caller.getId());
 
     return ResponseEntity.ok(ApiResponse.ok(projectResponse));
   }
 
   @PatchMapping("/{id}/status")
   public ResponseEntity<ApiResponse<ProjectResponse>> changeStatus(
-      @PathVariable Integer id, @Valid @RequestBody ChangeStatusRequest request) {
-    ProjectResponse projectResponse = projectService.changeStatus(id, request);
+      @AuthenticationPrincipal AuthenticatedUser caller,
+      @PathVariable Integer id,
+      @Valid @RequestBody ChangeStatusRequest request) {
+    ProjectResponse projectResponse = projectService.changeStatus(id, caller.getId(), request);
 
     return ResponseEntity.ok(ApiResponse.ok(projectResponse));
   }
 
   @DeleteMapping("/{id}")
-  public ResponseEntity<ApiResponse<Void>> deleteProject(@PathVariable Integer id) {
-    projectService.deleteProject(id);
+  public ResponseEntity<ApiResponse<Void>> deleteProject(
+      @AuthenticationPrincipal AuthenticatedUser caller, @PathVariable Integer id) {
+    projectService.deleteProject(id, caller.getId());
 
     return ResponseEntity.ok(ApiResponse.ok());
   }

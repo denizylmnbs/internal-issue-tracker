@@ -490,7 +490,7 @@ class SecurityConfigTest {
   @Test
   void addProjectMember_isAllowed_forTheLeaderOfThatProject() throws Exception {
     when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
-    when(projectMemberService.createProjectMember(eq(1), any()))
+    when(projectMemberService.createProjectMember(eq(1), eq(5), any()))
         .thenReturn(new ProjectMemberResponse(10, 7, 1, true, OffsetDateTime.now()));
 
     mockMvc
@@ -542,7 +542,7 @@ class SecurityConfigTest {
   @Test
   void addProjectTeam_isAllowed_forTheLeaderOfThatProject() throws Exception {
     when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
-    when(projectTeamService.createProjectTeam(eq(1), any()))
+    when(projectTeamService.createProjectTeam(eq(1), eq(5), any()))
         .thenReturn(new ProjectTeamResponse(10, 3, 1, true, OffsetDateTime.now()));
 
     mockMvc
@@ -607,7 +607,7 @@ class SecurityConfigTest {
       value = Role.class,
       names = {"EDITOR", "ADMIN"})
   void createSprint_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
-    when(sprintService.createSprint(eq(1), any())).thenReturn(sprintResponse());
+    when(sprintService.createSprint(eq(1), eq(99), any())).thenReturn(sprintResponse());
 
     mockMvc
         .perform(
@@ -622,7 +622,7 @@ class SecurityConfigTest {
   @Test
   void createSprint_isAllowed_forTheLeaderOfThatProject() throws Exception {
     when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
-    when(sprintService.createSprint(eq(1), any())).thenReturn(sprintResponse());
+    when(sprintService.createSprint(eq(1), eq(5), any())).thenReturn(sprintResponse());
 
     mockMvc
         .perform(
@@ -651,7 +651,7 @@ class SecurityConfigTest {
   @Test
   void updateSprint_isAllowed_forTheLeaderOfThatProject() throws Exception {
     when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
-    when(sprintService.updateSprint(eq(1), eq(10), any())).thenReturn(sprintResponse());
+    when(sprintService.updateSprint(eq(1), eq(10), eq(5), any())).thenReturn(sprintResponse());
 
     mockMvc
         .perform(
@@ -665,7 +665,7 @@ class SecurityConfigTest {
   @Test
   void changeSprintStatus_isAllowed_forTheLeaderOfThatProject() throws Exception {
     when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
-    when(sprintService.changeStatus(eq(1), eq(10), any())).thenReturn(sprintResponse());
+    when(sprintService.changeStatus(eq(1), eq(10), eq(5), any())).thenReturn(sprintResponse());
 
     mockMvc
         .perform(
@@ -946,7 +946,7 @@ class SecurityConfigTest {
   @Test
   void updateIssue_isAllowed_forAParticipantOfThatProject() throws Exception {
     when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
-    when(issueService.updateIssue(eq(1), eq(30), any())).thenReturn(issueResponse());
+    when(issueService.updateIssue(eq(1), eq(30), eq(6), any())).thenReturn(issueResponse());
 
     mockMvc
         .perform(
@@ -962,7 +962,7 @@ class SecurityConfigTest {
   @Test
   void changeIssueStatus_isAllowed_forAParticipantOfThatProject() throws Exception {
     when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
-    when(issueService.changeStatus(eq(1), eq(30), any())).thenReturn(issueResponse());
+    when(issueService.changeStatus(eq(1), eq(30), eq(6), any())).thenReturn(issueResponse());
 
     mockMvc
         .perform(
@@ -976,7 +976,7 @@ class SecurityConfigTest {
   @Test
   void changeIssueAssignee_isAllowed_forAParticipantOfThatProject() throws Exception {
     when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
-    when(issueService.changeAssignee(eq(1), eq(30), any())).thenReturn(issueResponse());
+    when(issueService.changeAssignee(eq(1), eq(30), eq(6), any())).thenReturn(issueResponse());
 
     mockMvc
         .perform(
@@ -990,7 +990,7 @@ class SecurityConfigTest {
   @Test
   void removeIssueAssignee_isAllowed_forAParticipantOfThatProject() throws Exception {
     when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
-    when(issueService.removeAssignee(1, 30)).thenReturn(issueResponse());
+    when(issueService.removeAssignee(1, 30, 6)).thenReturn(issueResponse());
 
     mockMvc
         .perform(delete("/api/projects/1/issues/30/assignee").with(as(6, Role.DEVELOPER)))

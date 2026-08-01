@@ -7,31 +7,52 @@ import com.ist.internal_issue_tracker.project.dto.UserProjectMembershipResponse;
 import com.ist.internal_issue_tracker.project.exception.ProjectMemberErrorCode;
 import com.ist.internal_issue_tracker.project.exception.ProjectNotFoundException;
 import com.ist.internal_issue_tracker.project.mapper.ProjectMemberMapper;
+import com.ist.internal_issue_tracker.shared.event.ProjectMembershipEvent;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
+import com.ist.internal_issue_tracker.shared.port.TeamLookup;
 import com.ist.internal_issue_tracker.shared.port.UserLookup;
 import com.ist.internal_issue_tracker.shared.security.Role;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
+import java.util.Set;
+import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Users assigned to a project directly. Membership through an assigned team is {@link
  * ProjectTeamService}'s business, and the two together are what "works on this project" means.
+ *
+ * <p><b>Two user ids, and they are not the same person.</b> The one on the request - or the path, on
+ * a removal - is the <em>subject</em>, whose membership is being added or retired. {@code actorId} is
+ * whoever is performing that, and is the one bound for {@code project_activities.user_id}: a lead
+ * taking someone off a project is a fact about the lead, not about the person removed. See {@code
+ * IssueService} for the full reasoning.
  */
 @Service
 @RequiredArgsConstructor
 public class ProjectMemberService {
 
+  /**
+   * Stands in for an empty team list, because {@code IN ()} is a syntax error rather than an empty
+   * result. No team can carry it, so the team half of the union matches nothing - which is exactly
+   * what a user on no team should see.
+   */
+  private static final Set<Integer> NO_TEAMS = Set.of(-1);
+
   private final ProjectMemberRepository projectMemberRepository;
   private final ProjectMemberMapper projectMemberMapper;
   private final ProjectRepository projectRepository;
   private final UserLookup userLookup;
+  private final TeamLookup teamLookup;
+  private final ApplicationEventPublisher eventPublisher;
 
   private void requireActiveProject(Integer projectId) {
     if (!projectRepository.existsByIdAndIsActiveTrue(projectId)) {
@@ -58,8 +79,9 @@ public class ProjectMemberService {
    * opening a second one, so a project's history stays one row per person - see {@code
    * TeamMemberService#createTeamMember}.
    */
+  @Transactional
   public ProjectMemberResponse createProjectMember(
-      Integer projectId, ProjectMemberCreateRequest request) {
+      Integer projectId, Integer actorId, ProjectMemberCreateRequest request) {
     // variables
     Integer userId = request.userId();
     Role role = Role.DEVELOPER; // minimum role to be assigned to a project
@@ -91,6 +113,16 @@ public class ProjectMemberService {
       throw new AppException(ProjectMemberErrorCode.PROJECT_MEMBER_ALREADY_EXIST);
     }
 
+    // userId is the subject being added; actorId is whoever is adding them
+    eventPublisher.publishEvent(
+        new ProjectMembershipEvent(
+            projectId,
+            userId,
+            ProjectMembershipEvent.Subject.USER,
+            ProjectMembershipEvent.Change.ADDED,
+            actorId,
+            OffsetDateTime.now()));
+
     return projectMemberMapper.toResponse(savedProjectMember);
   }
 
@@ -102,11 +134,8 @@ public class ProjectMemberService {
       Integer projectId, Pageable pageable) {
     requireActiveProject(projectId);
 
-    Pageable byId =
-        PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by("id"));
-
     Page<ProjectMember> projectMembers =
-        projectMemberRepository.findActiveMembersOfProject(projectId, byId);
+        projectMemberRepository.findAllByProjectIdAndIsActiveTrue(projectId, pageable);
     Page<ProjectMemberResponse> responsePage = projectMembers.map(projectMemberMapper::toResponse);
 
     return PagedResponse.from(responsePage);
@@ -134,6 +163,9 @@ public class ProjectMemberService {
   /**
    * The projects a user works on, by either route. Sorting is fixed for the same reason as {@link
    * #getProjectParticipants}.
+   *
+   * <p>The team route is resolved in two steps - team ids from {@code team}, then the projects those
+   * teams are on - so that the query below reads none of {@code team}'s tables.
    */
   public PagedResponse<UserProjectMembershipResponse> getProjectsByUserId(
       Integer userId, Pageable pageable) {
@@ -146,14 +178,18 @@ public class ProjectMemberService {
     Pageable byProjectId =
         PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by("project_id"));
 
+    Set<Integer> teamIds = teamLookup.activeTeamIdsOfUser(userId);
+
     Page<UserProject> projects =
-        projectMemberRepository.findActiveProjectsByUserId(userId, byProjectId);
+        projectMemberRepository.findActiveProjectsByUserId(
+            userId, teamIds.isEmpty() ? NO_TEAMS : teamIds, byProjectId);
 
     return PagedResponse.from(projects.map(projectMemberMapper::toUserProjectResponse));
   }
 
   /** Soft delete - see {@code TeamMemberService#removeTeamMember} for why the entity is loaded. */
-  public void removeProjectMember(Integer projectId, Integer userId) {
+  @Transactional
+  public void removeProjectMember(Integer projectId, Integer userId, Integer actorId) {
     ProjectMember membership =
         projectMemberRepository
             .findByProjectIdAndUserIdAndIsActiveTrue(projectId, userId)
@@ -161,5 +197,14 @@ public class ProjectMemberService {
 
     membership.setIsActive(false);
     projectMemberRepository.save(membership);
+
+    eventPublisher.publishEvent(
+        new ProjectMembershipEvent(
+            projectId,
+            userId,
+            ProjectMembershipEvent.Subject.USER,
+            ProjectMembershipEvent.Change.REMOVED,
+            actorId,
+            OffsetDateTime.now()));
   }
 }

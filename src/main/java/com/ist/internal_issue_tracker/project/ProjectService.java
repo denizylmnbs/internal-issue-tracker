@@ -10,15 +10,29 @@ import com.ist.internal_issue_tracker.project.exception.ProjectLeaderNotFoundExc
 import com.ist.internal_issue_tracker.project.exception.ProjectNameAlreadyExistsException;
 import com.ist.internal_issue_tracker.project.exception.ProjectNotFoundException;
 import com.ist.internal_issue_tracker.project.mapper.ProjectMapper;
+import com.ist.internal_issue_tracker.shared.event.ProjectChangedEvent;
+import com.ist.internal_issue_tracker.shared.event.ProjectCreatedEvent;
+import com.ist.internal_issue_tracker.shared.event.ProjectDeactivatedEvent;
+import com.ist.internal_issue_tracker.shared.event.ProjectDeletedEvent;
+import com.ist.internal_issue_tracker.shared.event.ProjectFieldChange;
 import com.ist.internal_issue_tracker.shared.port.UserLookup;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * {@code actorId} on every write is whoever is making the change, bound for {@code
+ * project_activities.user_id}. It is not the leader and not a member - see {@code IssueService} for
+ * the full reasoning.
+ */
 @Service
 @RequiredArgsConstructor
 public class ProjectService {
@@ -27,7 +41,21 @@ public class ProjectService {
   private final ProjectMemberRepository projectMemberRepository;
   private final ProjectTeamRepository projectTeamRepository;
   private final ProjectMapper projectMapper;
+  private final ProjectChangeDetector projectChangeDetector;
   private final UserLookup userLookup;
+  private final ApplicationEventPublisher eventPublisher;
+
+  /** Publishes only if something moved - see {@code IssueService#publishChanges}. */
+  private void publishChanges(Integer actorId, ProjectSnapshot before, Project after) {
+    List<ProjectFieldChange> changes = projectChangeDetector.diff(before, after);
+
+    if (changes.isEmpty()) {
+      return;
+    }
+
+    eventPublisher.publishEvent(
+        new ProjectChangedEvent(after.getId(), actorId, OffsetDateTime.now(), changes));
+  }
 
   /**
    * The database only guarantees that {@code leader_id} points at an existing row; the "must still
@@ -49,7 +77,8 @@ public class ProjectService {
         .orElseThrow(() -> new ProjectNotFoundException(id));
   }
 
-  public ProjectResponse createProject(ProjectCreateRequest request) {
+  @Transactional
+  public ProjectResponse createProject(Integer actorId, ProjectCreateRequest request) {
 
     // name unique check
     if (projectRepository.existsByName(request.name())) {
@@ -73,6 +102,9 @@ public class ProjectService {
       throw new ProjectNameAlreadyExistsException(request.name());
     }
 
+    eventPublisher.publishEvent(
+        new ProjectCreatedEvent(savedProject.getId(), actorId, OffsetDateTime.now()));
+
     return projectMapper.toResponse(savedProject);
   }
 
@@ -83,7 +115,7 @@ public class ProjectService {
     return projectMapper.toDetailResponse(
         project,
         projectMemberRepository.countActiveMembers(id),
-        projectTeamRepository.countActiveTeams(id));
+        projectTeamRepository.countByProjectIdAndIsActiveTrue(id));
   }
 
   public PagedResponse<ProjectResponse> getAllProjects(
@@ -101,7 +133,9 @@ public class ProjectService {
     return PagedResponse.from(responsePage);
   }
 
-  public ProjectResponse updateProject(Integer id, ProjectUpdateRequest request) {
+  @Transactional
+  public ProjectResponse updateProject(
+      Integer id, Integer actorId, ProjectUpdateRequest request) {
 
     // fetch existing project
     Project project = requireActiveProject(id);
@@ -110,6 +144,9 @@ public class ProjectService {
     if (projectRepository.existsByNameAndIdNot(request.name(), id)) {
       throw new ProjectNameAlreadyExistsException(request.name());
     }
+
+    // before updateEntity, which is what makes the old values still readable
+    ProjectSnapshot before = ProjectSnapshot.of(project);
 
     // apply changes to the managed entity
     projectMapper.updateEntity(project, request);
@@ -123,18 +160,28 @@ public class ProjectService {
       throw new ProjectNameAlreadyExistsException(request.name());
     }
 
+    publishChanges(actorId, before, savedProject);
+
     return projectMapper.toResponse(savedProject);
   }
 
-  public ProjectResponse changeLeader(Integer id, ChangeLeaderRequest request) {
+  @Transactional
+  public ProjectResponse changeLeader(
+      Integer id, Integer actorId, ChangeLeaderRequest request) {
     // authorization (editor-only) is enforced in SecurityConfig
     Project project = requireActiveProject(id);
 
     requireActiveUser(request.leaderId());
 
+    ProjectSnapshot before = ProjectSnapshot.of(project);
+
     project.setLeaderId(request.leaderId());
 
-    return projectMapper.toResponse(projectRepository.save(project));
+    Project savedProject = projectRepository.save(project);
+
+    publishChanges(actorId, before, savedProject);
+
+    return projectMapper.toResponse(savedProject);
   }
 
   /**
@@ -142,31 +189,58 @@ public class ProjectService {
    * leader at all - the same state it can be created in - and forcing a replacement would mean a
    * departing leader has to be swapped for an arbitrary stand-in.
    */
-  public ProjectResponse removeLeader(Integer id) {
+  @Transactional
+  public ProjectResponse removeLeader(Integer id, Integer actorId) {
     Project project = requireActiveProject(id);
+
+    ProjectSnapshot before = ProjectSnapshot.of(project);
 
     project.setLeaderId(null);
 
-    return projectMapper.toResponse(projectRepository.save(project));
+    Project savedProject = projectRepository.save(project);
+
+    publishChanges(actorId, before, savedProject);
+
+    return projectMapper.toResponse(savedProject);
   }
 
   /**
    * Any status may follow any other - a project can be reopened out of {@code COMPLETED} or {@code
    * CANCELLED}. If that ever needs narrowing, this is the one place it has to happen.
    */
-  public ProjectResponse changeStatus(Integer id, ChangeStatusRequest request) {
+  @Transactional
+  public ProjectResponse changeStatus(
+      Integer id, Integer actorId, ChangeStatusRequest request) {
     Project project = requireActiveProject(id);
+
+    ProjectSnapshot before = ProjectSnapshot.of(project);
 
     project.setStatus(request.status());
 
-    return projectMapper.toResponse(projectRepository.save(project));
+    Project savedProject = projectRepository.save(project);
+
+    publishChanges(actorId, before, savedProject);
+
+    return projectMapper.toResponse(savedProject);
   }
 
-  public void deleteProject(Integer id) {
+  /**
+   * Soft-deletes the project and retires its member and team assignment rows, so nothing reachable
+   * from a deleted project has to be filtered out again at read time.
+   */
+  @Transactional
+  public void deleteProject(Integer id, Integer actorId) {
     Project project = requireActiveProject(id);
 
     project.setIsActive(false);
 
     projectRepository.save(project);
+
+    // Two events for one moment, and neither can stand in for the other. The deactivation is
+    // consumed inline, in this transaction, so the memberships are retired before anyone can read
+    // them; the deletion is consumed after the commit so a fault in the audit path cannot fail the
+    // delete. See ProjectDeletedEvent.
+    eventPublisher.publishEvent(new ProjectDeactivatedEvent(id));
+    eventPublisher.publishEvent(new ProjectDeletedEvent(id, actorId, OffsetDateTime.now()));
   }
 }

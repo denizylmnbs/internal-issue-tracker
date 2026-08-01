@@ -23,6 +23,9 @@ import org.springframework.web.bind.annotation.*;
  * <p>These are the first routes open to project participants rather than only editors and leaders,
  * which is what {@code SecurityConfig}'s {@code editorLeaderOrParticipant} is for. Deleting an issue
  * stays with editors and leaders.
+ *
+ * <p>Every write here passes the caller down as well as the request - see {@link IssueService} for
+ * what that identity is for and why it is taken from the principal rather than the body.
  */
 @RestController
 @RequestMapping("/api/projects/{id}/issues")
@@ -88,30 +91,33 @@ public class IssueController {
 
   @PutMapping("/{issueId}")
   public ResponseEntity<ApiResponse<IssueResponse>> updateIssue(
+      @AuthenticationPrincipal AuthenticatedUser caller,
       @PathVariable Integer id,
       @PathVariable Integer issueId,
       @Valid @RequestBody IssueUpdateRequest request) {
-    IssueResponse issueResponse = issueService.updateIssue(id, issueId, request);
+    IssueResponse issueResponse = issueService.updateIssue(id, issueId, caller.getId(), request);
 
     return ResponseEntity.ok(ApiResponse.ok(issueResponse));
   }
 
   @PatchMapping("/{issueId}/status")
   public ResponseEntity<ApiResponse<IssueResponse>> changeStatus(
+      @AuthenticationPrincipal AuthenticatedUser caller,
       @PathVariable Integer id,
       @PathVariable Integer issueId,
       @Valid @RequestBody ChangeStatusRequest request) {
-    IssueResponse issueResponse = issueService.changeStatus(id, issueId, request);
+    IssueResponse issueResponse = issueService.changeStatus(id, issueId, caller.getId(), request);
 
     return ResponseEntity.ok(ApiResponse.ok(issueResponse));
   }
 
   @PatchMapping("/{issueId}/assignee")
   public ResponseEntity<ApiResponse<IssueResponse>> changeAssignee(
+      @AuthenticationPrincipal AuthenticatedUser caller,
       @PathVariable Integer id,
       @PathVariable Integer issueId,
       @Valid @RequestBody ChangeAssigneeRequest request) {
-    IssueResponse issueResponse = issueService.changeAssignee(id, issueId, request);
+    IssueResponse issueResponse = issueService.changeAssignee(id, issueId, caller.getId(), request);
 
     return ResponseEntity.ok(ApiResponse.ok(issueResponse));
   }
@@ -119,16 +125,20 @@ public class IssueController {
   /** Leaves the issue with no assignee at all - see {@code ProjectController#removeLeader}. */
   @DeleteMapping("/{issueId}/assignee")
   public ResponseEntity<ApiResponse<IssueResponse>> removeAssignee(
-      @PathVariable Integer id, @PathVariable Integer issueId) {
-    IssueResponse issueResponse = issueService.removeAssignee(id, issueId);
+      @AuthenticationPrincipal AuthenticatedUser caller,
+      @PathVariable Integer id,
+      @PathVariable Integer issueId) {
+    IssueResponse issueResponse = issueService.removeAssignee(id, issueId, caller.getId());
 
     return ResponseEntity.ok(ApiResponse.ok(issueResponse));
   }
 
   @DeleteMapping("/{issueId}")
   public ResponseEntity<ApiResponse<Void>> deleteIssue(
-      @PathVariable Integer id, @PathVariable Integer issueId) {
-    issueService.deleteIssue(id, issueId);
+      @AuthenticationPrincipal AuthenticatedUser caller,
+      @PathVariable Integer id,
+      @PathVariable Integer issueId) {
+    issueService.deleteIssue(id, issueId, caller.getId());
 
     return ResponseEntity.ok(ApiResponse.ok());
   }

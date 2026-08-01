@@ -1,5 +1,9 @@
 package com.ist.internal_issue_tracker.sprint;
 
+import com.ist.internal_issue_tracker.shared.event.SprintChangedEvent;
+import com.ist.internal_issue_tracker.shared.event.SprintCreatedEvent;
+import com.ist.internal_issue_tracker.shared.event.SprintDeletedEvent;
+import com.ist.internal_issue_tracker.shared.event.SprintFieldChange;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
@@ -12,19 +16,41 @@ import com.ist.internal_issue_tracker.sprint.exception.SprintNameAlreadyExistsEx
 import com.ist.internal_issue_tracker.sprint.exception.SprintNotFoundException;
 import com.ist.internal_issue_tracker.sprint.mapper.SprintMapper;
 import java.time.OffsetDateTime;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
+/**
+ * {@code actorId} on every write is whoever is making the change, bound for {@code
+ * sprint_activities.user_id} - see {@code IssueService} for the full reasoning, and for why every
+ * write that publishes an event has to be {@code @Transactional} for that event to arrive at all.
+ */
 @Service
 @RequiredArgsConstructor
 public class SprintService {
 
   private final SprintRepository sprintRepository;
   private final SprintMapper sprintMapper;
+  private final SprintChangeDetector sprintChangeDetector;
   private final ProjectLookup projectLookup;
+  private final ApplicationEventPublisher eventPublisher;
+
+  /** Publishes only if something moved - see {@code IssueService#publishChanges}. */
+  private void publishChanges(Integer actorId, SprintSnapshot before, Sprint after) {
+    List<SprintFieldChange> changes = sprintChangeDetector.diff(before, after);
+
+    if (changes.isEmpty()) {
+      return;
+    }
+
+    eventPublisher.publishEvent(
+        new SprintChangedEvent(after.getId(), actorId, OffsetDateTime.now(), changes));
+  }
 
   /**
    * Every path into this service starts here, so a sprint on a soft-deleted project is unreachable
@@ -43,7 +69,9 @@ public class SprintService {
         .orElseThrow(() -> new SprintNotFoundException(sprintId));
   }
 
-  public SprintResponse createSprint(Integer projectId, SprintCreateRequest request) {
+  @Transactional
+  public SprintResponse createSprint(
+      Integer projectId, Integer actorId, SprintCreateRequest request) {
     requireActiveProject(projectId);
 
     if (sprintRepository.existsByProjectIdAndNameAndDeletedAtIsNull(projectId, request.name())) {
@@ -60,6 +88,9 @@ public class SprintService {
       // the check above lost a race; a new sprint cannot trip the IN_PROGRESS index
       throw new SprintNameAlreadyExistsException(request.name());
     }
+
+    eventPublisher.publishEvent(
+        new SprintCreatedEvent(savedSprint.getId(), actorId, OffsetDateTime.now()));
 
     return sprintMapper.toResponse(savedSprint);
   }
@@ -80,8 +111,9 @@ public class SprintService {
     return PagedResponse.from(sprints.map(sprintMapper::toResponse));
   }
 
+  @Transactional
   public SprintResponse updateSprint(
-      Integer projectId, Integer sprintId, SprintUpdateRequest request) {
+      Integer projectId, Integer sprintId, Integer actorId, SprintUpdateRequest request) {
     requireActiveProject(projectId);
 
     Sprint sprint = requireLiveSprint(projectId, sprintId);
@@ -90,6 +122,9 @@ public class SprintService {
         projectId, request.name(), sprintId)) {
       throw new SprintNameAlreadyExistsException(request.name());
     }
+
+    // before updateEntity, which is what makes the old values still readable
+    SprintSnapshot before = SprintSnapshot.of(sprint);
 
     sprintMapper.updateEntity(sprint, request);
 
@@ -100,6 +135,8 @@ public class SprintService {
       // the name is the only constraint this write can trip - the status is not touched here
       throw new SprintNameAlreadyExistsException(request.name());
     }
+
+    publishChanges(actorId, before, savedSprint);
 
     return sprintMapper.toResponse(savedSprint);
   }
@@ -114,11 +151,14 @@ public class SprintService {
    * <p>The check is a pre-check, not a guarantee: two requests can pass it at the same time and the
    * partial index is what actually decides, so the save is wrapped to report the loser the same way.
    */
+  @Transactional
   public SprintResponse changeStatus(
-      Integer projectId, Integer sprintId, ChangeStatusRequest request) {
+      Integer projectId, Integer sprintId, Integer actorId, ChangeStatusRequest request) {
     requireActiveProject(projectId);
 
     Sprint sprint = requireLiveSprint(projectId, sprintId);
+
+    SprintSnapshot before = SprintSnapshot.of(sprint);
 
     boolean startingAnother =
         request.status() == SprintStatus.IN_PROGRESS && sprint.getStatus() != SprintStatus.IN_PROGRESS;
@@ -139,6 +179,8 @@ public class SprintService {
       throw new AppException(SprintErrorCode.SPRINT_ALREADY_IN_PROGRESS);
     }
 
+    publishChanges(actorId, before, savedSprint);
+
     return sprintMapper.toResponse(savedSprint);
   }
 
@@ -151,13 +193,19 @@ public class SprintService {
    * IN_PROGRESS} would go on holding the project's only slot - invisibly, since every read filters
    * deleted rows out - and the project could never start another sprint.
    */
-  public void deleteSprint(Integer projectId, Integer sprintId) {
+  @Transactional
+  public void deleteSprint(Integer projectId, Integer sprintId, Integer actorId) {
     requireActiveProject(projectId);
 
     Sprint sprint = requireLiveSprint(projectId, sprintId);
 
-    sprint.setDeletedAt(OffsetDateTime.now());
+    // one reading for both the stamp and the event, so the two cannot disagree
+    OffsetDateTime deletedAt = OffsetDateTime.now();
+
+    sprint.setDeletedAt(deletedAt);
 
     sprintRepository.save(sprint);
+
+    eventPublisher.publishEvent(new SprintDeletedEvent(sprintId, actorId, deletedAt));
   }
 }

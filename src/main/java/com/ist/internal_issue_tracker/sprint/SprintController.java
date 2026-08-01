@@ -1,5 +1,6 @@
 package com.ist.internal_issue_tracker.sprint;
 
+import com.ist.internal_issue_tracker.shared.security.AuthenticatedUser;
 import com.ist.internal_issue_tracker.shared.web.ApiResponse;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import com.ist.internal_issue_tracker.sprint.dto.ChangeStatusRequest;
@@ -11,6 +12,7 @@ import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -28,8 +30,10 @@ public class SprintController {
 
   @PostMapping
   public ResponseEntity<ApiResponse<SprintResponse>> createSprint(
-      @PathVariable Integer id, @Valid @RequestBody SprintCreateRequest request) {
-    SprintResponse sprintResponse = sprintService.createSprint(id, request);
+      @AuthenticationPrincipal AuthenticatedUser caller,
+      @PathVariable Integer id,
+      @Valid @RequestBody SprintCreateRequest request) {
+    SprintResponse sprintResponse = sprintService.createSprint(id, caller.getId(), request);
 
     return ResponseEntity.created(
             URI.create("/api/projects/" + id + "/sprints/" + sprintResponse.id()))
@@ -59,28 +63,32 @@ public class SprintController {
 
   @PutMapping("/{sprintId}")
   public ResponseEntity<ApiResponse<SprintResponse>> updateSprint(
+      @AuthenticationPrincipal AuthenticatedUser caller,
       @PathVariable Integer id,
       @PathVariable Integer sprintId,
       @Valid @RequestBody SprintUpdateRequest request) {
-    SprintResponse sprintResponse = sprintService.updateSprint(id, sprintId, request);
+    SprintResponse sprintResponse = sprintService.updateSprint(id, sprintId, caller.getId(), request);
 
     return ResponseEntity.ok(ApiResponse.ok(sprintResponse));
   }
 
   @PatchMapping("/{sprintId}/status")
   public ResponseEntity<ApiResponse<SprintResponse>> changeStatus(
+      @AuthenticationPrincipal AuthenticatedUser caller,
       @PathVariable Integer id,
       @PathVariable Integer sprintId,
       @Valid @RequestBody ChangeStatusRequest request) {
-    SprintResponse sprintResponse = sprintService.changeStatus(id, sprintId, request);
+    SprintResponse sprintResponse = sprintService.changeStatus(id, sprintId, caller.getId(), request);
 
     return ResponseEntity.ok(ApiResponse.ok(sprintResponse));
   }
 
   @DeleteMapping("/{sprintId}")
   public ResponseEntity<ApiResponse<Void>> deleteSprint(
-      @PathVariable Integer id, @PathVariable Integer sprintId) {
-    sprintService.deleteSprint(id, sprintId);
+      @AuthenticationPrincipal AuthenticatedUser caller,
+      @PathVariable Integer id,
+      @PathVariable Integer sprintId) {
+    sprintService.deleteSprint(id, sprintId, caller.getId());
 
     return ResponseEntity.ok(ApiResponse.ok());
   }

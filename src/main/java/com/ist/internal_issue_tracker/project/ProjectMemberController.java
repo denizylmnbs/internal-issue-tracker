@@ -3,6 +3,7 @@ package com.ist.internal_issue_tracker.project;
 import com.ist.internal_issue_tracker.project.dto.ProjectMemberCreateRequest;
 import com.ist.internal_issue_tracker.project.dto.ProjectMemberResponse;
 import com.ist.internal_issue_tracker.project.dto.ProjectParticipantResponse;
+import com.ist.internal_issue_tracker.shared.security.AuthenticatedUser;
 import com.ist.internal_issue_tracker.shared.web.ApiResponse;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import jakarta.validation.Valid;
@@ -10,6 +11,7 @@ import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 /**
@@ -25,8 +27,11 @@ public class ProjectMemberController {
 
   @PostMapping("/{id}/members")
   public ResponseEntity<ApiResponse<ProjectMemberResponse>> createProjectMember(
-      @PathVariable Integer id, @Valid @RequestBody ProjectMemberCreateRequest request) {
-    ProjectMemberResponse response = projectMemberService.createProjectMember(id, request);
+      @AuthenticationPrincipal AuthenticatedUser caller,
+      @PathVariable Integer id,
+      @Valid @RequestBody ProjectMemberCreateRequest request) {
+    ProjectMemberResponse response =
+        projectMemberService.createProjectMember(id, caller.getId(), request);
 
     return ResponseEntity.created(URI.create("/api/projects/" + id + "/members/" + response.userId()))
         .body(ApiResponse.ok(response));
@@ -53,8 +58,10 @@ public class ProjectMemberController {
   /** Soft delete, keyed by the pair {@code unique_active_project_user} keys a live assignment on. */
   @DeleteMapping("/{id}/members/{userId}")
   public ResponseEntity<ApiResponse<Void>> removeProjectMember(
-      @PathVariable Integer id, @PathVariable Integer userId) {
-    projectMemberService.removeProjectMember(id, userId);
+      @AuthenticationPrincipal AuthenticatedUser caller,
+      @PathVariable Integer id,
+      @PathVariable Integer userId) {
+    projectMemberService.removeProjectMember(id, userId, caller.getId());
 
     return ResponseEntity.ok(ApiResponse.ok());
   }
