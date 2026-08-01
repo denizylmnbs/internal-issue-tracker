@@ -1,5 +1,6 @@
 package com.ist.internal_issue_tracker.sprint;
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -21,6 +22,14 @@ interface SprintRepository extends JpaRepository<Sprint, Integer> {
    * sees the project, so the mismatch has to be caught here or not at all.
    */
   Optional<Sprint> findByIdAndProjectIdAndDeletedAtIsNull(Integer id, Integer projectId);
+
+  /**
+   * One project's live sprints in the order they ran, for {@code SprintLookupAdapter} to hand across
+   * as summaries. Unpaged on purpose - a velocity chart plots all of them - and the {@code id}
+   * tie-break keeps two sprints starting the same day in a stable order rather than whichever the
+   * planner happened to return.
+   */
+  List<Sprint> findAllByProjectIdAndDeletedAtIsNullOrderByStartDateAscIdAsc(Integer projectId);
 
   /**
    * Scoped to the project and blind to deleted rows, matching

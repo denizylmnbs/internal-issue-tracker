@@ -1,10 +1,17 @@
 package com.ist.internal_issue_tracker.activity.metrics;
 
+import com.ist.internal_issue_tracker.activity.metrics.dto.BurndownResponse;
+import com.ist.internal_issue_tracker.activity.metrics.dto.CumulativeFlowResponse;
+import com.ist.internal_issue_tracker.activity.metrics.dto.DefectRatioResponse;
 import com.ist.internal_issue_tracker.activity.metrics.dto.DurationStatsResponse;
 import com.ist.internal_issue_tracker.activity.metrics.dto.FlowEfficiencyResponse;
+import com.ist.internal_issue_tracker.activity.metrics.dto.NetFlowResponse;
 import com.ist.internal_issue_tracker.activity.metrics.dto.ReopenRateResponse;
+import com.ist.internal_issue_tracker.activity.metrics.dto.ThroughputBreakdownResponse;
 import com.ist.internal_issue_tracker.activity.metrics.dto.ThroughputResponse;
 import com.ist.internal_issue_tracker.activity.metrics.dto.TimeInStatusResponse;
+import com.ist.internal_issue_tracker.activity.metrics.dto.VelocityResponse;
+import com.ist.internal_issue_tracker.activity.metrics.dto.WipResponse;
 import com.ist.internal_issue_tracker.shared.web.ApiResponse;
 import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
@@ -97,5 +104,99 @@ public class IssueMetricsController {
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
           OffsetDateTime to) {
     return ResponseEntity.ok(ApiResponse.ok(issueMetricsService.reopenRate(id, from, to)));
+  }
+
+  /**
+   * What is on the board right now and what has been stuck longest.
+   *
+   * <p>{@code asOf} rather than {@code from}/{@code to}, and it defaults to now - work in progress is
+   * a level, not a flow. Passing a past instant asks what the board looked like then, which is what
+   * makes a screenshot of this reproducible.
+   */
+  @GetMapping("/wip")
+  public ResponseEntity<ApiResponse<WipResponse>> getWip(
+      @PathVariable Integer id,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime asOf) {
+    return ResponseEntity.ok(ApiResponse.ok(issueMetricsService.wip(id, asOf)));
+  }
+
+  /** Work arriving against work leaving - whether the pile is growing, regardless of how fast it moves. */
+  @GetMapping("/net-flow")
+  public ResponseEntity<ApiResponse<NetFlowResponse>> getNetFlow(
+      @PathVariable Integer id,
+      @RequestParam(defaultValue = "WEEK") MetricsBucket bucket,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime from,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime to) {
+    return ResponseEntity.ok(ApiResponse.ok(issueMetricsService.netFlow(id, bucket, from, to)));
+  }
+
+  /** Throughput split by type or priority - see {@link MetricsDimension} for why those two only. */
+  @GetMapping("/throughput-breakdown")
+  public ResponseEntity<ApiResponse<ThroughputBreakdownResponse>> getThroughputBreakdown(
+      @PathVariable Integer id,
+      @RequestParam(defaultValue = "TYPE") MetricsDimension dimension,
+      @RequestParam(defaultValue = "WEEK") MetricsBucket bucket,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime from,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime to) {
+    return ResponseEntity.ok(
+        ApiResponse.ok(issueMetricsService.throughputBreakdown(id, dimension, bucket, from, to)));
+  }
+
+  /** Bugs filed against everything filed, and bugs filed against work delivered. */
+  @GetMapping("/defect-ratio")
+  public ResponseEntity<ApiResponse<DefectRatioResponse>> getDefectRatio(
+      @PathVariable Integer id,
+      @RequestParam(defaultValue = "WEEK") MetricsBucket bucket,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime from,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime to) {
+    return ResponseEntity.ok(ApiResponse.ok(issueMetricsService.defectRatio(id, bucket, from, to)));
+  }
+
+  /** How long bugs take to fix, measured from when they were reported rather than picked up. */
+  @GetMapping("/bug-mttr")
+  public ResponseEntity<ApiResponse<DurationStatsResponse>> getBugMttr(
+      @PathVariable Integer id,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime from,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime to) {
+    return ResponseEntity.ok(ApiResponse.ok(issueMetricsService.bugMttr(id, from, to)));
+  }
+
+  /**
+   * Committed against delivered, per sprint. No window: a sprint is its own, and the series is every
+   * sprint the project has run.
+   */
+  @GetMapping("/velocity")
+  public ResponseEntity<ApiResponse<VelocityResponse>> getVelocity(@PathVariable Integer id) {
+    return ResponseEntity.ok(ApiResponse.ok(issueMetricsService.velocity(id)));
+  }
+
+  /**
+   * One sprint's burndown. The dates come from the sprint, so this takes no window either - only the
+   * sprint to draw.
+   */
+  @GetMapping("/burndown")
+  public ResponseEntity<ApiResponse<BurndownResponse>> getBurndown(
+      @PathVariable Integer id, @RequestParam Integer sprintId) {
+    return ResponseEntity.ok(ApiResponse.ok(issueMetricsService.burndown(id, sprintId)));
+  }
+
+  /** A cumulative flow diagram, bucketed by day because a coarser cut hides the queue it exists to show. */
+  @GetMapping("/cfd")
+  public ResponseEntity<ApiResponse<CumulativeFlowResponse>> getCumulativeFlow(
+      @PathVariable Integer id,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime from,
+      @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+          OffsetDateTime to) {
+    return ResponseEntity.ok(ApiResponse.ok(issueMetricsService.cumulativeFlow(id, from, to)));
   }
 }

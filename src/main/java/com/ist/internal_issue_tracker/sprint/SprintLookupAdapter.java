@@ -1,6 +1,8 @@
 package com.ist.internal_issue_tracker.sprint;
 
 import com.ist.internal_issue_tracker.shared.port.SprintLookup;
+import com.ist.internal_issue_tracker.shared.port.SprintSummary;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
@@ -15,5 +17,27 @@ public class SprintLookupAdapter implements SprintLookup {
     return projectId != null
         && sprintId != null
         && sprintRepository.findByIdAndProjectIdAndDeletedAtIsNull(sprintId, projectId).isPresent();
+  }
+
+  /** Entities in, records out - {@code Sprint} never leaves this module. */
+  @Override
+  public List<SprintSummary> findSprintSummaries(Integer projectId) {
+    if (projectId == null) {
+      return List.of();
+    }
+
+    return sprintRepository.findAllByProjectIdAndDeletedAtIsNullOrderByStartDateAscIdAsc(projectId)
+        .stream()
+        .map(
+            sprint ->
+                new SprintSummary(
+                    sprint.getId(),
+                    sprint.getName(),
+                    sprint.getStatus().name(),
+                    sprint.getStartDate(),
+                    sprint.getEndDate(),
+                    sprint.getCommittedPoints(),
+                    sprint.getCommittedAt()))
+        .toList();
   }
 }

@@ -1225,8 +1225,12 @@ class SecurityConfigTest {
   }
 
   /**
-   * One matcher covers all six metric routes through {@code /metrics/**}, so these walk every route
-   * rather than trusting the wildcard.
+   * One matcher covers every metric route through {@code /metrics/**}, so these walk each of them
+   * rather than trusting the wildcard. A route added to the controller and not to this list is a
+   * route nothing checks.
+   *
+   * <p>{@code burndown} carries its query string because {@code sprintId} is required there - without
+   * it the request fails to bind and returns 400, which would pass the 403 test for the wrong reason.
    */
   @ParameterizedTest
   @ValueSource(
@@ -1236,7 +1240,15 @@ class SecurityConfigTest {
         "throughput",
         "time-in-status",
         "flow-efficiency",
-        "reopen-rate"
+        "reopen-rate",
+        "wip",
+        "net-flow",
+        "throughput-breakdown",
+        "defect-ratio",
+        "bug-mttr",
+        "velocity",
+        "burndown?sprintId=1",
+        "cfd"
       })
   void getMetrics_returns403_forADeveloperThatDoesNotWorkOnTheProject(String metric)
       throws Exception {
@@ -1253,7 +1265,15 @@ class SecurityConfigTest {
         "throughput",
         "time-in-status",
         "flow-efficiency",
-        "reopen-rate"
+        "reopen-rate",
+        "wip",
+        "net-flow",
+        "throughput-breakdown",
+        "defect-ratio",
+        "bug-mttr",
+        "velocity",
+        "burndown?sprintId=1",
+        "cfd"
       })
   void getMetrics_isAllowed_forAParticipantOfThatProject(String metric) throws Exception {
     when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
