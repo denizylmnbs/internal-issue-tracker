@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ist.internal_issue_tracker.activity.ActivityController;
+import com.ist.internal_issue_tracker.activity.ActivityService;
 import com.ist.internal_issue_tracker.comment.CommentController;
 import com.ist.internal_issue_tracker.comment.CommentService;
 import com.ist.internal_issue_tracker.comment.dto.CommentResponse;
@@ -84,7 +86,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
       SprintController.class,
       EpicController.class,
       IssueController.class,
-      CommentController.class
+      CommentController.class,
+      ActivityController.class
     })
 @Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 class SecurityConfigTest {
@@ -125,6 +128,7 @@ class SecurityConfigTest {
   @MockitoBean private EpicService epicService;
   @MockitoBean private IssueService issueService;
   @MockitoBean private CommentService commentService;
+  @MockitoBean private ActivityService activityService;
 
   /** {@code securityFilterChain} takes the ports directly, so the slice has to supply them. */
   @MockitoBean private TeamLookup teamLookup;
@@ -1161,5 +1165,55 @@ class SecurityConfigTest {
     mockMvc
         .perform(get("/api/projects/1/issues/30/comments/40").with(as(1, role)))
         .andExpect(status().isOk());
+  }
+
+  /**
+   * The activity feeds are the one place reading is restricted, so these three assert the opposite of
+   * every other GET in this class: being logged in is not enough.
+   */
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void getActivities_returns403_forEveryRoleBelowEditorThatDoesNotWorkOnTheProject(Role role)
+      throws Exception {
+    mockMvc.perform(get("/api/projects/1/activities").with(as(5, role))).andExpect(status().isForbidden());
+    mockMvc
+        .perform(get("/api/projects/1/issues/30/activities").with(as(5, role)))
+        .andExpect(status().isForbidden());
+    mockMvc
+        .perform(get("/api/projects/1/sprints/10/activities").with(as(5, role)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void getActivities_isAllowed_forAParticipantOfThatProject() throws Exception {
+    when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
+
+    mockMvc.perform(get("/api/projects/1/activities").with(as(6, Role.DEVELOPER))).andExpect(status().isOk());
+    mockMvc
+        .perform(get("/api/projects/1/issues/30/activities").with(as(6, Role.DEVELOPER)))
+        .andExpect(status().isOk());
+    mockMvc
+        .perform(get("/api/projects/1/sprints/10/activities").with(as(6, Role.DEVELOPER)))
+        .andExpect(status().isOk());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"EDITOR", "ADMIN"})
+  void getActivities_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
+    mockMvc.perform(get("/api/projects/1/activities").with(as(99, role))).andExpect(status().isOk());
+  }
+
+  /** {@code {id}} is the project, whatever follows it - see the comment rule above. */
+  @Test
+  void getActivities_returns403_forTheLeaderOfADifferentProject() throws Exception {
+    when(projectLookup.isLeaderOfProject(40, 40)).thenReturn(true);
+
+    mockMvc
+        .perform(get("/api/projects/1/issues/30/activities").with(as(40, Role.DEVELOPER)))
+        .andExpect(status().isForbidden());
   }
 }

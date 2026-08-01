@@ -154,6 +154,18 @@ public class SecurityConfig {
                         HttpMethod.DELETE,
                         "/api/projects/{id}/issues/{issueId}/comments/{commentId}")
                     .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    // The only reads restricted beyond being logged in. Everything else falls
+                    // through to authenticated(), which is defensible for a board; a feed of who
+                    // changed what and when is not the same kind of thing, so it is held to the
+                    // same participation rule as writing.
+                    .requestMatchers(HttpMethod.GET, "/api/projects/{id}/activities")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    .requestMatchers(
+                        HttpMethod.GET, "/api/projects/{id}/issues/{issueId}/activities")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    .requestMatchers(
+                        HttpMethod.GET, "/api/projects/{id}/sprints/{sprintId}/activities")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(
