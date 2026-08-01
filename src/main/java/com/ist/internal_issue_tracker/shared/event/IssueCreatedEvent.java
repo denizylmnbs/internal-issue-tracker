@@ -26,6 +26,14 @@ import java.time.OffsetDateTime;
  * <p>{@code projectId} is carried so the consumer never has to ask {@code issue} which project an
  * issue belongs to. It is the same denormalisation {@code issue_activities.project_id} makes, for
  * the same reason, and it is safe for the same reason: an issue does not move between projects.
+ *
+ * <p>{@code dimensions} is the same idea applied to the attributes that <em>can</em> change - see
+ * {@link IssueDimensions}. On this event they describe the issue as it was filed, which is what makes
+ * "how many bugs were opened this week" answerable without reading {@code issues}.
  */
 public record IssueCreatedEvent(
-    Integer issueId, Integer projectId, Integer actorId, OffsetDateTime occurredAt) {}
+    Integer issueId,
+    Integer projectId,
+    Integer actorId,
+    OffsetDateTime occurredAt,
+    IssueDimensions dimensions) {}

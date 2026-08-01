@@ -11,8 +11,17 @@ import java.time.OffsetDateTime;
  * existed have no row and cannot get one - {@code issues.deleted_at} records when, but nothing
  * records who, and an audit row naming the wrong person is worse than an absent one.
  *
+ * <p>{@code dimensions} is carried even though nothing is being changed, because the deletion is
+ * what removes the issue from a sprint's scope: a burndown reading the log forward has to know how
+ * many points left the sprint on that day, and the DELETED row is the only place that can say. See
+ * {@link IssueDimensions}.
+ *
  * <p>See {@link IssueCreatedEvent} for why delivery is asynchronous and why the timestamp travels
  * with the event.
  */
 public record IssueDeletedEvent(
-    Integer issueId, Integer projectId, Integer actorId, OffsetDateTime occurredAt) {}
+    Integer issueId,
+    Integer projectId,
+    Integer actorId,
+    OffsetDateTime occurredAt,
+    IssueDimensions dimensions) {}

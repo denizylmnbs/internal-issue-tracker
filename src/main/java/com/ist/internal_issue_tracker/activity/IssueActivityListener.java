@@ -3,6 +3,7 @@ package com.ist.internal_issue_tracker.activity;
 import com.ist.internal_issue_tracker.shared.event.IssueChangedEvent;
 import com.ist.internal_issue_tracker.shared.event.IssueCreatedEvent;
 import com.ist.internal_issue_tracker.shared.event.IssueDeletedEvent;
+import com.ist.internal_issue_tracker.shared.event.IssueDimensions;
 import com.ist.internal_issue_tracker.shared.event.IssueField;
 import com.ist.internal_issue_tracker.shared.event.IssueFieldChange;
 import java.time.OffsetDateTime;
@@ -41,12 +42,14 @@ class IssueActivityListener {
         IssueActionType.CREATED,
         null,
         null,
-        event.occurredAt());
+        event.occurredAt(),
+        event.dimensions());
   }
 
   /**
    * One row per changed field, all of them stamped with the event's single {@code occurredAt} -
-   * they describe one operation, not several.
+   * they describe one operation, not several - and all of them carrying the same dimensions, which
+   * are the issue's state after the whole operation rather than after each field of it.
    */
   @ApplicationModuleListener
   void on(IssueChangedEvent event) {
@@ -58,7 +61,8 @@ class IssueActivityListener {
           toActionType(change.field()),
           change.oldValue(),
           change.newValue(),
-          event.occurredAt());
+          event.occurredAt(),
+          event.dimensions());
     }
   }
 
@@ -71,7 +75,8 @@ class IssueActivityListener {
         IssueActionType.DELETED,
         null,
         null,
-        event.occurredAt());
+        event.occurredAt(),
+        event.dimensions());
   }
 
   /** The one place the publisher's vocabulary meets the table's - see {@link IssueActionType}. */
@@ -94,7 +99,8 @@ class IssueActivityListener {
       IssueActionType actionType,
       String oldValue,
       String newValue,
-      OffsetDateTime occurredAt) {
+      OffsetDateTime occurredAt,
+      IssueDimensions dimensions) {
 
     // see IssueActivityRepository#existsByIssueIdAndActionTypeAndCreatedAt for why this is a check
     // and not a constraint
@@ -111,6 +117,13 @@ class IssueActivityListener {
     activity.setOldValue(oldValue);
     activity.setNewValue(newValue);
     activity.setCreatedAt(occurredAt);
+
+    if (dimensions != null) {
+      activity.setIssueType(dimensions.type());
+      activity.setPriority(dimensions.priority());
+      activity.setStoryPoint(dimensions.storyPoint());
+      activity.setSprintId(dimensions.sprintId());
+    }
 
     issueActivityRepository.save(activity);
   }

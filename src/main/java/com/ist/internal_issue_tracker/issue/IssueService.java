@@ -11,6 +11,7 @@ import com.ist.internal_issue_tracker.issue.mapper.IssueMapper;
 import com.ist.internal_issue_tracker.shared.event.IssueChangedEvent;
 import com.ist.internal_issue_tracker.shared.event.IssueCreatedEvent;
 import com.ist.internal_issue_tracker.shared.event.IssueDeletedEvent;
+import com.ist.internal_issue_tracker.shared.event.IssueDimensions;
 import com.ist.internal_issue_tracker.shared.event.IssueFieldChange;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.port.EpicLookup;
@@ -79,7 +80,24 @@ public class IssueService {
 
     eventPublisher.publishEvent(
         new IssueChangedEvent(
-            after.getId(), projectId, actorId, OffsetDateTime.now(), changes));
+            after.getId(), projectId, actorId, OffsetDateTime.now(), changes, dimensionsOf(after)));
+  }
+
+  /**
+   * The issue's type, priority, estimate and sprint as they stand right now, travelling with the
+   * event so the activity row can freeze them - see {@link IssueDimensions}. Read from the saved
+   * entity rather than from the request, so a field the request did not mention still reports what
+   * the issue actually holds.
+   *
+   * <p>The enums are rendered by {@code name()}, which is what the CHECK constraints on {@code
+   * issue_activities} and the metric queries' string literals both expect.
+   */
+  private static IssueDimensions dimensionsOf(Issue issue) {
+    return new IssueDimensions(
+        issue.getType() != null ? issue.getType().name() : null,
+        issue.getPriority() != null ? issue.getPriority().name() : null,
+        issue.getStoryPoint(),
+        issue.getSprintId());
   }
 
   private void requireActiveProject(Integer projectId) {
@@ -142,7 +160,12 @@ public class IssueService {
     Issue savedIssue = issueRepository.save(issue);
 
     eventPublisher.publishEvent(
-        new IssueCreatedEvent(savedIssue.getId(), projectId, reporterId, OffsetDateTime.now()));
+        new IssueCreatedEvent(
+            savedIssue.getId(),
+            projectId,
+            reporterId,
+            OffsetDateTime.now(),
+            dimensionsOf(savedIssue)));
 
     return issueMapper.toResponse(savedIssue);
   }
@@ -292,6 +315,7 @@ public class IssueService {
 
     issueRepository.save(issue);
 
-    eventPublisher.publishEvent(new IssueDeletedEvent(issueId, projectId, actorId, deletedAt));
+    eventPublisher.publishEvent(
+        new IssueDeletedEvent(issueId, projectId, actorId, deletedAt, dimensionsOf(issue)));
   }
 }

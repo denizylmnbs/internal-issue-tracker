@@ -66,6 +66,36 @@ public class IssueActivity {
   private String newValue;
 
   /**
+   * The issue's type, priority, estimate and sprint <em>at this moment</em>, copied from the event.
+   *
+   * <p>Not a cache of the issue's current state and not maintained afterwards - see {@code
+   * IssueDimensions} for why the distinction is the whole point. Together with {@code createdAt} they
+   * make this row a complete fact: a burndown can read the DONE row alone and know how many points
+   * left which sprint, without asking anything that might since have changed its mind.
+   *
+   * <p>Strings rather than enums, mirroring the event. Mapping them onto {@code issue}'s enums would
+   * mean naming that module's types, and holding a private copy of each would put a second
+   * {@code MetricStatus}-shaped coupling in the codebase for no gain: nothing here branches on them,
+   * the metric queries match them as text.
+   *
+   * <p>All four are nullable, and null means the issue had nothing set. Rows written before {@code
+   * V3} carry that migration's approximation instead.
+   */
+  @Size(max = 20)
+  @Column(updatable = false, length = 20)
+  private String issueType;
+
+  @Size(max = 20)
+  @Column(updatable = false, length = 20)
+  private String priority;
+
+  @Column(updatable = false)
+  private Integer storyPoint;
+
+  @Column(updatable = false)
+  private Integer sprintId;
+
+  /**
    * When the change happened, taken verbatim from the event.
    *
    * <p>Deliberately <b>not</b> {@code @CreationTimestamp}, unlike every other entity here. The

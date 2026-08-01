@@ -21,6 +21,12 @@ import java.util.List;
  * to the value it already had is not a change, and recording it would put noise into a log whose
  * whole value is that every row means something happened. Callers check before publishing.
  *
+ * <p>{@code dimensions} describes the issue <em>after</em> this change, not before it, and every row
+ * the event produces carries the same copy. That is what lets a burndown ask "which sprint was this
+ * issue in when it reached DONE" of the DONE row itself - see {@link IssueDimensions}. When the
+ * change list contains a {@code SPRINT} or {@code STORY_POINT} entry, the dimensions hold its new
+ * value; the old one is in the change.
+ *
  * <p>See {@link IssueCreatedEvent} for why delivery is asynchronous and why the timestamp travels
  * with the event.
  */
@@ -29,4 +35,5 @@ public record IssueChangedEvent(
     Integer projectId,
     Integer actorId,
     OffsetDateTime occurredAt,
-    List<IssueFieldChange> changes) {}
+    List<IssueFieldChange> changes,
+    IssueDimensions dimensions) {}
