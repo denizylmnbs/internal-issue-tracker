@@ -12,7 +12,7 @@ import org.springframework.data.repository.query.Param;
  * id - those references are validated through ports, never joined - so every query here stays inside
  * one table and sorting keeps working on the list endpoint.
  */
-public interface IssueRepository extends JpaRepository<Issue, Integer> {
+interface IssueRepository extends JpaRepository<Issue, Integer> {
 
   /**
    * Both keys, always. Looking an issue up by id alone would let the leader of project A pass their

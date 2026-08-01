@@ -13,9 +13,7 @@ import com.ist.internal_issue_tracker.team.mapper.TeamMemberMapper;
 import lombok.AllArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -26,15 +24,6 @@ public class TeamMemberService {
   private final TeamMemberMapper teamMemberMapper;
   private final UserLookup userLookup;
   private final TeamRepository teamRepository;
-
-  /**
-   * The roster queries are native, so a caller's sort property would be handed to PostgreSQL as a
-   * raw column name and fail on anything but an exact match. Ordering is pinned to the membership id
-   * instead: stable, which is what paging actually needs, and never a 500 from a bad sort parameter.
-   */
-  private static Pageable byId(Pageable pageable) {
-    return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by("id"));
-  }
 
   /**
    * Revives a membership that was soft-deleted, or rejects one that is still live. Removing a member
@@ -99,14 +88,14 @@ public class TeamMemberService {
     }
 
     Page<TeamMember> teamMembers =
-        teamMemberRepository.findActiveMembersOfTeam(teamId, byId(pageable));
+        teamMemberRepository.findAllByTeamIdAndIsActiveTrue(teamId, pageable);
     Page<TeamMemberResponse> responsePage = teamMembers.map(teamMemberMapper::toResponse);
 
     return PagedResponse.from(responsePage);
   }
 
   public PagedResponse<TeamMemberResponse> getAllTeamMembers(Pageable pageable) {
-    Page<TeamMember> teamMembers = teamMemberRepository.findAllActiveMemberships(byId(pageable));
+    Page<TeamMember> teamMembers = teamMemberRepository.findAllByIsActiveTrue(pageable);
     Page<TeamMemberResponse> responsePage = teamMembers.map(teamMemberMapper::toResponse);
 
     return PagedResponse.from(responsePage);

@@ -13,7 +13,7 @@ import org.springframework.data.repository.query.Param;
  * module boundary, so none of the reasons that pushed the membership repositories into raw SQL apply
  * - which also means sorting keeps working on the list endpoint.
  */
-public interface SprintRepository extends JpaRepository<Sprint, Integer> {
+interface SprintRepository extends JpaRepository<Sprint, Integer> {
 
   /**
    * Both keys, always. Looking a sprint up by id alone would let the leader of project A pass their

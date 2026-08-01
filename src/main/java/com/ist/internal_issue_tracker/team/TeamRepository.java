@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface TeamRepository extends JpaRepository<Team, Integer> {
+interface TeamRepository extends JpaRepository<Team, Integer> {
 
   /**
    * Deliberately blind to {@code isActive}: {@code teams.name} carries a plain UNIQUE constraint,

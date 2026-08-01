@@ -1,35 +1,37 @@
 package com.ist.internal_issue_tracker.project;
 
+import java.time.OffsetDateTime;
+import java.util.Collection;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface ProjectTeamRepository extends JpaRepository<ProjectTeam, Integer> {
+/**
+ * No native SQL. Both reads used to join {@code teams} - another module's table, spelled out by hand
+ * - only to drop assignments of a team that had been deleted. Those rows are now retired when the
+ * team is, by {@link ProjectAssignmentCleanupListener}, so {@code is_active} on the assignment row
+ * answers the question on its own.
+ */
+interface ProjectTeamRepository extends JpaRepository<ProjectTeam, Integer> {
+
+  /** The teams on a project. */
+  Page<ProjectTeam> findAllByProjectIdAndIsActiveTrue(Integer projectId, Pageable pageable);
+
+  /** Its count, over exactly the same rows - the two can no longer drift apart. */
+  long countByProjectIdAndIsActiveTrue(Integer projectId);
 
   /**
-   * The teams on a project. The {@code teams} join matches {@link #countActiveTeams}: soft-deleting
-   * a team leaves its {@code project_teams} row active, so without it a deleted team stayed on the
-   * list while the count beside it had already dropped to zero.
+   * Whether any of the given teams is on the project - the team half of the participant question,
+   * paired with {@code ProjectMemberRepository#existsByProjectIdAndUserIdAndIsActiveTrue}. The ids
+   * come from {@code TeamLookup#activeTeamIdsOfUser}, so this module never reads {@code team_users}
+   * to answer it. Must not be called with an empty collection; {@link ProjectLookupAdapter} checks.
    */
-  @Query(
-      value =
-          """
-          SELECT pt.* FROM project_teams pt
-            JOIN teams t ON t.id = pt.team_id AND t.is_active
-           WHERE pt.project_id = :projectId AND pt.is_active
-          """,
-      countQuery =
-          """
-          SELECT count(*) FROM project_teams pt
-            JOIN teams t ON t.id = pt.team_id AND t.is_active
-           WHERE pt.project_id = :projectId AND pt.is_active
-          """,
-      nativeQuery = true)
-  Page<ProjectTeam> findActiveTeamsOfProject(
-      @Param("projectId") Integer projectId, Pageable pageable);
+  boolean existsByProjectIdAndTeamIdInAndIsActiveTrue(
+      Integer projectId, Collection<Integer> teamIds);
 
   /** Backed by {@code unique_active_project_team} - see {@code ProjectMemberRepository}. */
   Optional<ProjectTeam> findByProjectIdAndTeamIdAndIsActiveTrue(Integer projectId, Integer teamId);
@@ -42,17 +44,29 @@ public interface ProjectTeamRepository extends JpaRepository<ProjectTeam, Intege
       Integer projectId, Integer teamId);
 
   /**
-   * Native SQL only because a soft-deleted team must not be counted, and {@code teams} belongs to
-   * another module - see the note on {@code ProjectMemberRepository}.
+   * Takes a deleted team off every project it was on. Driven by {@code TeamDeactivatedEvent}; the
+   * reads above depend on this having happened. See {@code
+   * TeamMemberRepository#deactivateAllByUserId} for why {@code updatedAt} is passed in and why both
+   * {@code @Modifying} flags are set.
    */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
   @Query(
-      value =
-          """
-          SELECT count(*)
-            FROM project_teams pt
-            JOIN teams t ON t.id = pt.team_id AND t.is_active
-           WHERE pt.project_id = :projectId AND pt.is_active
-          """,
-      nativeQuery = true)
-  long countActiveTeams(@Param("projectId") Integer projectId);
+      """
+      update ProjectTeam pt
+      set pt.isActive = false, pt.updatedAt = :deactivatedAt
+      where pt.teamId = :teamId and pt.isActive = true
+      """)
+  int deactivateAllByTeamId(
+      @Param("teamId") Integer teamId, @Param("deactivatedAt") OffsetDateTime deactivatedAt);
+
+  /** The same, for every team on a project that has just been deleted. */
+  @Modifying(clearAutomatically = true, flushAutomatically = true)
+  @Query(
+      """
+      update ProjectTeam pt
+      set pt.isActive = false, pt.updatedAt = :deactivatedAt
+      where pt.projectId = :projectId and pt.isActive = true
+      """)
+  int deactivateAllByProjectId(
+      @Param("projectId") Integer projectId, @Param("deactivatedAt") OffsetDateTime deactivatedAt);
 }

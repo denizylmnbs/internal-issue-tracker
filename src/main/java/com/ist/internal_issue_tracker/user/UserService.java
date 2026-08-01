@@ -2,6 +2,7 @@ package com.ist.internal_issue_tracker.user;
 
 import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceException;
+import com.ist.internal_issue_tracker.shared.event.UserDeactivatedEvent;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
 import com.ist.internal_issue_tracker.shared.security.AuthenticatedUser;
 import com.ist.internal_issue_tracker.shared.security.Role;
@@ -11,10 +12,12 @@ import com.ist.internal_issue_tracker.user.exception.UserErrorCode;
 import com.ist.internal_issue_tracker.user.internal.PasswordHasher;
 import com.ist.internal_issue_tracker.user.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -23,10 +26,11 @@ public class UserService {
   private final UserRepository userRepository;
   private final UserMapper userMapper;
   private final PasswordHasher passwordHasher;
+  private final ApplicationEventPublisher eventPublisher;
 
   /**
-   * Used by the {@code auth} module to authenticate a login attempt without exposing password
-   * hashing internals.
+   * Authenticates a login attempt without exposing password hashing internals. Reached by {@code
+   * auth} through {@link UserCredentialsVerifierAdapter}, never directly.
    */
   public AuthenticatedUser verifyCredentials(String email, String rawPassword) {
     User user =
@@ -114,6 +118,16 @@ public class UserService {
     return userMapper.toResponse(savedUser);
   }
 
+  /**
+   * Soft-deletes the user and tells the rest of the application to retire whatever points at them.
+   * {@code team} and {@code project} listen for the event and clear their own membership rows, which
+   * is what lets their roster queries trust {@code is_active} on the row instead of joining back to
+   * {@code users}.
+   *
+   * <p>Transactional because the two have to move together: a user marked inactive while their
+   * memberships stayed live would put them on rosters they are no longer part of.
+   */
+  @Transactional
   public void deleteUser(Integer id) {
     // fetch existing user
     User user =
@@ -122,6 +136,8 @@ public class UserService {
     user.setIsActive(false);
 
     userRepository.save(user);
+
+    eventPublisher.publishEvent(new UserDeactivatedEvent(id));
   }
 
   public UserResponse changePassword(Integer id, ChangePasswordRequest request) {

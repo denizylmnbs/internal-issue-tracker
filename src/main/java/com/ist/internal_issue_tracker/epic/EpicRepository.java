@@ -12,7 +12,7 @@ import org.springframework.data.repository.query.Param;
  * off is validated through {@code ProjectLookup} before any of these run. Nothing crosses a module
  * boundary, so sorting keeps working on the list endpoint - unlike the membership repositories.
  */
-public interface EpicRepository extends JpaRepository<Epic, Integer> {
+interface EpicRepository extends JpaRepository<Epic, Integer> {
 
   /**
    * Both keys, always. Looking an epic up by id alone would let the leader of project A pass their

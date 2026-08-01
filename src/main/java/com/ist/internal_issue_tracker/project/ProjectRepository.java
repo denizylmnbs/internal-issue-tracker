@@ -8,7 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
-public interface ProjectRepository extends JpaRepository<Project, Integer> {
+interface ProjectRepository extends JpaRepository<Project, Integer> {
 
   /**
    * Deliberately blind to {@code isActive}: {@code projects.name} carries a plain UNIQUE constraint,

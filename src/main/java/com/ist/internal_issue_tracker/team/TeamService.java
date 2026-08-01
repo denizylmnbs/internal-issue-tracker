@@ -1,5 +1,6 @@
 package com.ist.internal_issue_tracker.team;
 
+import com.ist.internal_issue_tracker.shared.event.TeamDeactivatedEvent;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
 import com.ist.internal_issue_tracker.shared.port.UserLookup;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
@@ -11,10 +12,12 @@ import com.ist.internal_issue_tracker.team.exception.LeaderNotFoundException;
 import com.ist.internal_issue_tracker.team.exception.TeamNameAlreadyExistsException;
 import com.ist.internal_issue_tracker.team.mapper.TeamMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +26,7 @@ public class TeamService {
   private final TeamRepository teamRepository;
   private final TeamMapper teamMapper;
   private final UserLookup userLookup;
+  private final ApplicationEventPublisher eventPublisher;
 
   /**
    * The database only guarantees that {@code leader_id} points at an existing row; the "must still
@@ -121,6 +125,12 @@ public class TeamService {
     return teamMapper.toResponse(teamRepository.save(team));
   }
 
+  /**
+   * Soft-deletes the team and retires everything hanging off it: its own roster here, and its
+   * project assignments over in {@code project}. Both used to be handled by joining back to {@code
+   * teams} on every read; the event moves that cost to the one moment it is actually needed.
+   */
+  @Transactional
   public void deleteTeam(Integer id) {
     // fetch existing team
     Team team = requireActiveTeam(id);
@@ -128,5 +138,7 @@ public class TeamService {
     team.setIsActive(false);
 
     teamRepository.save(team);
+
+    eventPublisher.publishEvent(new TeamDeactivatedEvent(id));
   }
 }

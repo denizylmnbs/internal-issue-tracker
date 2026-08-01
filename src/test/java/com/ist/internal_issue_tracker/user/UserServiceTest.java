@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.ist.internal_issue_tracker.shared.event.UserDeactivatedEvent;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceException;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
@@ -28,6 +29,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -41,6 +43,7 @@ class UserServiceTest {
   @Mock private UserRepository userRepository;
   @Mock private UserMapper userMapper;
   @Mock private PasswordHasher passwordHasher;
+  @Mock private ApplicationEventPublisher eventPublisher;
   @InjectMocks private UserService userService;
 
   @Test
@@ -208,8 +211,36 @@ class UserServiceTest {
     userService.deleteUser(1);
 
     assertThat(entity.getIsActive()).isFalse();
-    // the write is explicit rather than left to dirty checking - the service is not transactional
+    // the write is explicit rather than left to dirty checking, even though the method is
+    // transactional - it keeps the ordering with the event below obvious
     verify(userRepository).save(entity);
+  }
+
+  /**
+   * The event is the only thing that takes the user off their teams and projects; those modules read
+   * {@code is_active} on the membership row and never join back to {@code users}, so losing it here
+   * would leave a deleted user on every roster they were part of.
+   */
+  @Test
+  void deleteUser_publishesUserDeactivatedEvent_whenExists() {
+    User entity = new User();
+    entity.setIsActive(true);
+
+    when(userRepository.findById(1)).thenReturn(Optional.of(entity));
+
+    userService.deleteUser(1);
+
+    verify(eventPublisher).publishEvent(new UserDeactivatedEvent(1));
+  }
+
+  @Test
+  void deleteUser_publishesNothing_whenNotFound() {
+    when(userRepository.findById(1)).thenReturn(Optional.empty());
+
+    assertThatThrownBy(() -> userService.deleteUser(1))
+        .isInstanceOf(ResourceNotFoundException.class);
+
+    verify(eventPublisher, never()).publishEvent(any(Object.class));
   }
 
   @Test

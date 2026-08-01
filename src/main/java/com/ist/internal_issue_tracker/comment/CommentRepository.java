@@ -12,7 +12,7 @@ import org.springframework.data.repository.query.Param;
  * validated through ports, never joined - so every query stays inside one table and sorting keeps
  * working on the list endpoint.
  */
-public interface CommentRepository extends JpaRepository<Comment, Integer> {
+interface CommentRepository extends JpaRepository<Comment, Integer> {
 
   /**
    * Both keys, always. The authorization rule only ever sees the project, so a comment id belonging
