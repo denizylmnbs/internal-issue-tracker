@@ -5,6 +5,7 @@ import com.ist.internal_issue_tracker.shared.event.SprintCreatedEvent;
 import com.ist.internal_issue_tracker.shared.event.SprintDeletedEvent;
 import com.ist.internal_issue_tracker.shared.event.SprintFieldChange;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
+import com.ist.internal_issue_tracker.shared.port.IssueLookup;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import com.ist.internal_issue_tracker.sprint.dto.ChangeStatusRequest;
@@ -38,6 +39,7 @@ public class SprintService {
   private final SprintMapper sprintMapper;
   private final SprintChangeDetector sprintChangeDetector;
   private final ProjectLookup projectLookup;
+  private final IssueLookup issueLookup;
   private final ApplicationEventPublisher eventPublisher;
 
   /** Publishes only if something moved - see {@code IssueService#publishChanges}. */
@@ -50,6 +52,28 @@ public class SprintService {
 
     eventPublisher.publishEvent(
         new SprintChangedEvent(after.getId(), actorId, OffsetDateTime.now(), changes));
+  }
+
+  /**
+   * Records what the team took on, the first time the sprint starts, and never touches it again.
+   *
+   * <p>The guard is {@code committedAt}, not {@code committedPoints}: a sprint started with nothing
+   * in it commits to zero, and zero is a real commitment that a null-check would mistake for an
+   * unrecorded one and happily overwrite the next time the sprint was restarted. Restarting a
+   * finished sprint is allowed - any status may follow any other here - so this has to survive it.
+   *
+   * <p>The reading is taken from {@code issue} through a port rather than by this module querying
+   * {@code issues}, and it is taken now rather than derived later because there is no "later" that
+   * could recover it. The activity log knows every point that ever moved in or out of the sprint,
+   * but it cannot know which of those movements the team meant as its plan.
+   */
+  private void commitIfStarting(Integer projectId, Sprint sprint, SprintStatus next) {
+    if (next != SprintStatus.IN_PROGRESS || sprint.getCommittedAt() != null) {
+      return;
+    }
+
+    sprint.setCommittedPoints(issueLookup.sumStoryPointsInSprint(projectId, sprint.getId()));
+    sprint.setCommittedAt(OffsetDateTime.now());
   }
 
   /**
@@ -150,6 +174,11 @@ public class SprintService {
    *
    * <p>The check is a pre-check, not a guarantee: two requests can pass it at the same time and the
    * partial index is what actually decides, so the save is wrapped to report the loser the same way.
+   *
+   * <p>This is also where a sprint's commitment is frozen - see {@link #commitIfStarting}. It sits
+   * here rather than in its own endpoint because starting the sprint <em>is</em> the commitment;
+   * asking a team to record it separately would mean the number is missing on exactly the sprints
+   * that ran in a hurry.
    */
   @Transactional
   public SprintResponse changeStatus(
@@ -168,6 +197,8 @@ public class SprintService {
             projectId, SprintStatus.IN_PROGRESS)) {
       throw new AppException(SprintErrorCode.SPRINT_ALREADY_IN_PROGRESS);
     }
+
+    commitIfStarting(projectId, sprint, request.status());
 
     sprint.setStatus(request.status());
 

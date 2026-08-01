@@ -22,6 +22,23 @@ interface IssueRepository extends JpaRepository<Issue, Integer> {
   Optional<Issue> findByIdAndProjectIdAndDeletedAtIsNull(Integer id, Integer projectId);
 
   /**
+   * What one sprint currently holds, in points. {@code coalesce} on both levels: the inner one turns
+   * an unestimated issue into a zero rather than letting it drop out of the sum, and the outer one
+   * turns a sprint with no issues at all into a zero rather than a null.
+   *
+   * <p>Read through {@code IssueLookup} by {@code sprint}, which is the only caller.
+   */
+  @Query(
+      """
+      SELECT coalesce(sum(coalesce(i.storyPoint, 0)), 0) FROM Issue i
+      WHERE i.projectId = :projectId
+      AND i.sprintId = :sprintId
+      AND i.deletedAt IS NULL
+      """)
+  int sumStoryPointsInSprint(
+      @Param("projectId") Integer projectId, @Param("sprintId") Integer sprintId);
+
+  /**
    * One project's issues, deleted ones excluded unconditionally. There is no name-uniqueness check
    * to pair this with - {@code issues} carries no unique index of any kind, so two issues on a
    * project may share a name and the filter below is a search rather than a lookup.

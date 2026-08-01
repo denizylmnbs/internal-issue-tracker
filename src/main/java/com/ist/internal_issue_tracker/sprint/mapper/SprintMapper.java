@@ -42,6 +42,8 @@ public class SprintMapper {
         sprint.getStartDate(),
         sprint.getEndDate(),
         sprint.getStatus(),
+        sprint.getCommittedPoints(),
+        sprint.getCommittedAt(),
         sprint.getCreatedAt(),
         sprint.getUpdatedAt());
   }

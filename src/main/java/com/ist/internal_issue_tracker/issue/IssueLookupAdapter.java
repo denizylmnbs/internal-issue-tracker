@@ -16,4 +16,13 @@ public class IssueLookupAdapter implements IssueLookup {
         && issueId != null
         && issueRepository.findByIdAndProjectIdAndDeletedAtIsNull(issueId, projectId).isPresent();
   }
+
+  @Override
+  public int sumStoryPointsInSprint(Integer projectId, Integer sprintId) {
+    if (projectId == null || sprintId == null) {
+      return 0;
+    }
+
+    return issueRepository.sumStoryPointsInSprint(projectId, sprintId);
+  }
 }

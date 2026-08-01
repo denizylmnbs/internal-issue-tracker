@@ -607,6 +607,8 @@ class SecurityConfigTest {
         LocalDate.of(2026, 1, 1),
         LocalDate.of(2026, 1, 15),
         SprintStatus.TODO,
+        null,
+        null,
         OffsetDateTime.now(),
         OffsetDateTime.now());
   }

@@ -64,6 +64,28 @@ public class Sprint {
   @Column(nullable = false, length = 20)
   private SprintStatus status = SprintStatus.TODO;
 
+  /**
+   * The story points in the sprint at the moment it started, and the moment it started.
+   *
+   * <p>Written once, by {@code SprintService#changeStatus} on the first move to {@code IN_PROGRESS},
+   * and never again - not by {@code updateSprint}, not by a later status change, not by a request
+   * body, which is why neither appears on {@code SprintUpdateRequest}. That is the point of them: a
+   * commitment that can be revised after the fact cannot be missed, and a velocity built on one says
+   * nothing. Work pulled in mid-sprint has to show up as scope the team did not promise.
+   *
+   * <p>Delivered points are <em>not</em> stored here. Those come from the activity log, where the
+   * DONE row carries the estimate the issue had when it got there - see {@code IssueDimensions}. The
+   * two numbers are kept in different places on purpose: one is a decision, the other is an
+   * observation, and only the decision has to be written down at the time.
+   *
+   * <p>Both are null on a sprint that has never started, and both are null on sprints started before
+   * {@code V3}. {@code committedAt} is what tells that apart from a sprint started with nothing in
+   * it, which is a real state and reads zero.
+   */
+  private Integer committedPoints;
+
+  private OffsetDateTime committedAt;
+
   /** Null while the sprint is live; the moment it was dropped once it is not. */
   private OffsetDateTime deletedAt;
 
