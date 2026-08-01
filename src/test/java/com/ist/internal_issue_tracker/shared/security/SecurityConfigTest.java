@@ -13,6 +13,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ist.internal_issue_tracker.activity.ActivityController;
 import com.ist.internal_issue_tracker.activity.ActivityService;
+import com.ist.internal_issue_tracker.activity.metrics.IssueMetricsController;
+import com.ist.internal_issue_tracker.activity.metrics.IssueMetricsService;
 import com.ist.internal_issue_tracker.comment.CommentController;
 import com.ist.internal_issue_tracker.comment.CommentService;
 import com.ist.internal_issue_tracker.comment.dto.CommentResponse;
@@ -55,6 +57,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -87,7 +90,8 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
       EpicController.class,
       IssueController.class,
       CommentController.class,
-      ActivityController.class
+      ActivityController.class,
+      IssueMetricsController.class
     })
 @Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 class SecurityConfigTest {
@@ -129,6 +133,7 @@ class SecurityConfigTest {
   @MockitoBean private IssueService issueService;
   @MockitoBean private CommentService commentService;
   @MockitoBean private ActivityService activityService;
+  @MockitoBean private IssueMetricsService issueMetricsService;
 
   /** {@code securityFilterChain} takes the ports directly, so the slice has to supply them. */
   @MockitoBean private TeamLookup teamLookup;
@@ -1215,5 +1220,54 @@ class SecurityConfigTest {
     mockMvc
         .perform(get("/api/projects/1/issues/30/activities").with(as(40, Role.DEVELOPER)))
         .andExpect(status().isForbidden());
+  }
+
+  /**
+   * One matcher covers all six metric routes through {@code /metrics/**}, so these walk every route
+   * rather than trusting the wildcard.
+   */
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "cycle-time",
+        "lead-time",
+        "throughput",
+        "time-in-status",
+        "flow-efficiency",
+        "reopen-rate"
+      })
+  void getMetrics_returns403_forADeveloperThatDoesNotWorkOnTheProject(String metric)
+      throws Exception {
+    mockMvc
+        .perform(get("/api/projects/1/metrics/" + metric).with(as(5, Role.DEVELOPER)))
+        .andExpect(status().isForbidden());
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "cycle-time",
+        "lead-time",
+        "throughput",
+        "time-in-status",
+        "flow-efficiency",
+        "reopen-rate"
+      })
+  void getMetrics_isAllowed_forAParticipantOfThatProject(String metric) throws Exception {
+    when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
+
+    mockMvc
+        .perform(get("/api/projects/1/metrics/" + metric).with(as(6, Role.DEVELOPER)))
+        .andExpect(status().isOk());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"EDITOR", "ADMIN"})
+  void getMetrics_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
+    mockMvc
+        .perform(get("/api/projects/1/metrics/cycle-time").with(as(99, role)))
+        .andExpect(status().isOk());
   }
 }

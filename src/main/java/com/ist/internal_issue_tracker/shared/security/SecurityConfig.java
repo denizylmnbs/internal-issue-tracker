@@ -166,6 +166,10 @@ public class SecurityConfig {
                     .requestMatchers(
                         HttpMethod.GET, "/api/projects/{id}/sprints/{sprintId}/activities")
                     .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    // one matcher for all six metric routes; the team that does the work is the one
+                    // that has to be able to see its own flow
+                    .requestMatchers(HttpMethod.GET, "/api/projects/{id}/metrics/**")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(
