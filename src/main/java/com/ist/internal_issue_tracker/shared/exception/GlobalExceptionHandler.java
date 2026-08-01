@@ -10,8 +10,11 @@ import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
+import org.hibernate.query.sqm.UnknownPathException;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.data.core.PropertyReferenceException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -221,6 +224,80 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     ApiError error = ApiError.of(CommonErrorCode.TYPE_MISMATCH.code(), message, path(request));
     return handleExceptionInternal(
         ex, ApiResponse.error(error), headers, HttpStatus.BAD_REQUEST, request);
+  }
+
+  /**
+   * A {@code ?sort=} naming a property no entity has, on a listing backed by a <em>derived</em>
+   * finder. Spring Data checks those against the entity metamodel itself and reports the offending
+   * property directly.
+   *
+   * <p>The message is rebuilt rather than passed through: the original reads "No property 'x' found
+   * for type 'User'", which hands out entity class names for free.
+   */
+  @ExceptionHandler(PropertyReferenceException.class)
+  ResponseEntity<ApiResponse<Void>> handleInvalidSortProperty(
+      PropertyReferenceException ex, WebRequest request) {
+    return invalidSortProperty(ex.getPropertyName(), request);
+  }
+
+  /**
+   * The same mistake on a listing backed by {@code @Query}, which is where every paged endpoint in
+   * this application actually lands. Spring Data does not vet sort properties for an explicit query
+   * - it appends them to the JPQL and lets Hibernate parse the result - so the failure surfaces as
+   * an {@code UnknownPathException} wrapped in a translated data-access exception rather than as
+   * {@link PropertyReferenceException}. Without this it reached {@link #handleUnexpected} and turned
+   * a caller's typo into a 500 that logs like a server fault.
+   *
+   * <p>The guard matters: the same exception is what a genuinely broken {@code @Query} of ours would
+   * throw, and answering 400 to that would blame the caller for our bug. So it is only treated as a
+   * client error when the request actually carried a {@code sort} parameter - the only way the
+   * caller can influence which paths a query names.
+   */
+  @ExceptionHandler(InvalidDataAccessApiUsageException.class)
+  ResponseEntity<ApiResponse<Void>> handleInvalidDataAccessApiUsage(
+      InvalidDataAccessApiUsageException ex, WebRequest request) {
+    String sort = callerSuppliedSort(request);
+    if (sort != null && hasCause(ex, UnknownPathException.class)) {
+      return invalidSortProperty(sort, request);
+    }
+    return handleUnexpected(ex, request);
+  }
+
+  private ResponseEntity<ApiResponse<Void>> invalidSortProperty(
+      String property, WebRequest request) {
+    log.debug("Invalid sort property at {}: {}", path(request), property);
+    ApiError error =
+        ApiError.of(
+            CommonErrorCode.INVALID_SORT_PROPERTY.code(),
+            "'" + property + "' is not a sortable property",
+            path(request));
+    return ResponseEntity.badRequest().body(ApiResponse.error(error));
+  }
+
+  /**
+   * The properties named by {@code ?sort=}, with the direction stripped: {@code sort=bogus,desc}
+   * reports {@code bogus}, because {@code desc} is not what the caller got wrong.
+   */
+  private static String callerSuppliedSort(WebRequest request) {
+    String[] values = request.getParameterValues("sort");
+    if (values == null || values.length == 0) {
+      return null;
+    }
+    return Stream.of(values)
+        .map(v -> v.replaceAll("(?i),\\s*(asc|desc|ignorecase)\\b", ""))
+        .collect(java.util.stream.Collectors.joining(", "));
+  }
+
+  private static boolean hasCause(Throwable ex, Class<? extends Throwable> type) {
+    for (Throwable t = ex; t != null; t = t.getCause()) {
+      if (type.isInstance(t)) {
+        return true;
+      }
+      if (t.getCause() == t) {
+        break;
+      }
+    }
+    return false;
   }
 
   @ExceptionHandler(AppException.class)

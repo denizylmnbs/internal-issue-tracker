@@ -8,6 +8,7 @@ import com.ist.internal_issue_tracker.project.exception.ProjectMemberErrorCode;
 import com.ist.internal_issue_tracker.project.exception.ProjectNotFoundException;
 import com.ist.internal_issue_tracker.project.mapper.ProjectMemberMapper;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
+import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
 import com.ist.internal_issue_tracker.shared.port.UserLookup;
 import com.ist.internal_issue_tracker.shared.security.Role;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
@@ -136,8 +137,10 @@ public class ProjectMemberService {
    */
   public PagedResponse<UserProjectMembershipResponse> getProjectsByUserId(
       Integer userId, Pageable pageable) {
+    // 404, not the 422 that PROJECT_MEMBER's USER_NOT_FOUND carries - see
+    // TeamMemberService#getTeamsByUserId for why the two cases differ
     if (!userLookup.existsActiveUser(userId)) {
-      throw new AppException(ProjectMemberErrorCode.USER_NOT_FOUND);
+      throw ResourceNotFoundException.of("User", userId);
     }
 
     Pageable byProjectId =

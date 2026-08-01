@@ -112,11 +112,19 @@ public class TeamMemberService {
     return PagedResponse.from(responsePage);
   }
 
-  /** The teams a user currently belongs to, each carrying its own name and field. */
+  /**
+   * The teams a user currently belongs to, each carrying its own name and field.
+   *
+   * <p>A missing user is a 404 here, not the 422 that {@code TeamMemberErrorCode.USER_NOT_FOUND}
+   * carries. That code is for a user named in a <em>request body</em> - adding a member who does not
+   * exist is a well-formed request pointing at something unusable. Here the user is the addressed
+   * resource itself, so it answers the same way {@code GET /api/users/{id}} does, and the same way
+   * {@link #getTeamMembersByTeamId} already answers for a missing team.
+   */
   public PagedResponse<UserTeamMembershipResponse> getTeamsByUserId(
       Integer userId, Pageable pageable) {
     if (!userLookup.existsActiveUser(userId)) {
-      throw new AppException(TeamMemberErrorCode.USER_NOT_FOUND);
+      throw ResourceNotFoundException.of("User", userId);
     }
 
     Page<UserTeamMembershipResponse> memberships =
