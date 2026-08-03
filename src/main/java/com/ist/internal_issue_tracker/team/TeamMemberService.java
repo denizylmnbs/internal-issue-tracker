@@ -13,7 +13,9 @@ import com.ist.internal_issue_tracker.team.mapper.TeamMemberMapper;
 import lombok.AllArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -88,17 +90,38 @@ public class TeamMemberService {
     }
 
     Page<TeamMember> teamMembers =
-        teamMemberRepository.findAllByTeamIdAndIsActiveTrue(teamId, pageable);
+        teamMemberRepository.findAllByTeamIdAndIsActiveTrue(teamId, remapJoinedAtSort(pageable));
     Page<TeamMemberResponse> responsePage = teamMembers.map(teamMemberMapper::toResponse);
 
     return PagedResponse.from(responsePage);
   }
 
   public PagedResponse<TeamMemberResponse> getAllTeamMembers(Pageable pageable) {
-    Page<TeamMember> teamMembers = teamMemberRepository.findAllByIsActiveTrue(pageable);
+    Page<TeamMember> teamMembers = teamMemberRepository.findAllByIsActiveTrue(remapJoinedAtSort(pageable));
     Page<TeamMemberResponse> responsePage = teamMembers.map(teamMemberMapper::toResponse);
 
     return PagedResponse.from(responsePage);
+  }
+
+  /**
+   * {@code TeamMemberResponse.joinedAt} is served from the entity's {@code updatedAt} ({@link
+   * TeamMemberMapper#toResponse}), but the derived queries above sort directly against {@link
+   * TeamMember}, which has no {@code joinedAt} property. A client sorting by the field it was shown
+   * - the only field this list actually has a meaningful order on - would otherwise fail every
+   * request with a {@code PropertyReferenceException}.
+   */
+  private static Pageable remapJoinedAtSort(Pageable pageable) {
+    Sort remapped =
+        Sort.by(
+            pageable.getSort().stream()
+                .map(
+                    order ->
+                        "joinedAt".equals(order.getProperty())
+                            ? order.withProperty("updatedAt")
+                            : order)
+                .toList());
+
+    return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), remapped);
   }
 
   /**
