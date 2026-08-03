@@ -2,9 +2,12 @@ package com.ist.internal_issue_tracker.shared.security;
 
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
+import java.util.List;
 import java.util.function.BiPredicate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchy;
 import org.springframework.security.access.hierarchicalroles.RoleHierarchyImpl;
@@ -17,6 +20,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
 @EnableWebSecurity
@@ -44,6 +50,39 @@ public class SecurityConfig {
         .build();
   }
 
+  /**
+   * Browser access for the separately deployed frontend. Without this every cross-origin request
+   * fails at the preflight, including the login - a server-side client like {@code curl} never sees
+   * the difference, which is what makes the omission easy to miss.
+   *
+   * <p>Origins are configured rather than wildcarded because {@code allowCredentials} forbids
+   * {@code "*"}, and because a wildcard on an internal tracker would let any page on the internet
+   * make authenticated requests on a logged-in user's behalf if the token ever moves to a cookie.
+   * {@code CORS_ALLOWED_ORIGINS} takes a comma-separated list; the default covers local development
+   * against a Next.js dev server.
+   *
+   * <p>{@code Location} is exposed because the create endpoints return it and a client that cannot
+   * read it has to re-fetch to learn the new resource's URL.
+   */
+  @Bean
+  public CorsConfigurationSource corsConfigurationSource(
+      @Value("${app.cors.allowed-origins}") List<String> allowedOrigins) {
+    CorsConfiguration configuration = new CorsConfiguration();
+    configuration.setAllowedOrigins(allowedOrigins);
+    configuration.setAllowedMethods(
+        List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+    configuration.setAllowedHeaders(
+        List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT));
+    configuration.setExposedHeaders(List.of(HttpHeaders.LOCATION));
+    configuration.setAllowCredentials(true);
+    configuration.setMaxAge(3600L);
+
+    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+    source.registerCorsConfiguration("/api/**", configuration);
+
+    return source;
+  }
+
   @Bean
   public SecurityFilterChain securityFilterChain(
       HttpSecurity http,
@@ -53,9 +92,14 @@ public class SecurityConfig {
       RestAccessDeniedHandler accessDeniedHandler,
       RoleHierarchy roleHierarchy,
       TeamLookup teamLookup,
-      ProjectLookup projectLookup)
+      ProjectLookup projectLookup,
+      CorsConfigurationSource corsConfigurationSource)
       throws Exception {
     http.csrf(csrf -> csrf.disable())
+        // Ahead of the authorization rules on purpose: a CORS preflight carries no Authorization
+        // header, so an OPTIONS request would be rejected before the browser ever learns the real
+        // request was allowed.
+        .cors(cors -> cors.configurationSource(corsConfigurationSource))
         .sessionManagement(
             session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
         .exceptionHandling(
