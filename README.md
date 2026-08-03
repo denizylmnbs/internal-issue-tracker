@@ -136,37 +136,49 @@ configured database.
 ./mvnw test
 ```
 
+## API Documentation
+
+**→ [`docs/API.md`](./docs/API.md)** — the complete reference for all 79 endpoints: request and
+response shapes, query parameters, authorization rules per route, every error code, and the
+behavioural rules a client has to know (full-replacement `PUT`s, sparse metric series, the
+`/members` vs `/participants` distinction, and so on).
+
 ## Project Status
 
-🚧 **Early development — foundational infrastructure and the first module (`user`) are underway.**
+🚀 **Backend feature-complete.** Every domain module is implemented, wired through the event-driven
+activity log, and covered by the authorization model below.
 
-What's currently in place:
+What's in place:
 
-- [x] Project scaffolding (Spring Boot + Maven)
-- [x] Docker Compose setup for local PostgreSQL
-- [x] Database schema designed (dbdiagram.io) and implemented via Flyway migrations
-- [x] Core dependencies wired up (Spring Modulith, Spring Data JPA, Spring Security, Validation)
-- [x] Module boundaries scaffolded (`user`, `team`, `project`, `sprint`, `epic`, `issue`, `comment`, `activity`,
-  `shared`)
-- [x] Shared exception hierarchy and global exception handler
-- [x] Shared API response wrapper with pagination support
-- [x] `user` module: `User` entity and `UserRepository`
-- [x] `user` module: service, controller and DTOs (CRUD + password management)
+- [x] Project scaffolding (Spring Boot + Maven) and Docker Compose PostgreSQL
+- [x] Database schema via Flyway migrations (`V1` init, `V2` activity hardening, `V3` metric dimensions)
+- [x] Module boundaries enforced at build time (`ModularityTests`)
+- [x] Shared exception hierarchy, global exception handler, single response envelope, paged responses
 - [x] JWT authentication (`POST /api/auth/login`), stateless security filter chain
+- [x] Role hierarchy (`ADMIN → EDITOR → DEVELOPER → USER`) plus project-scoped authorization
+- [x] `user` module — CRUD, password management, role changes with lockout guards
+- [x] `team` module — teams, membership, leadership
+- [x] `project` module — projects, direct members, assigned teams, participants, leadership
+- [x] `sprint` module — sprints with one-running-sprint enforcement and commitment snapshots
+- [x] `epic` module — epics and their lifecycle
+- [x] `issue` module — issues, status, dual (user + team) assignment, filtering
+- [x] `comment` module — comments with author-scoped editing
+- [x] `activity` module — issue / sprint / project audit logs via Spring Modulith events
+- [x] `activity.metrics` — 14 agile metrics computed from the log
+- [x] API documentation ([`docs/API.md`](./docs/API.md))
+- [x] CORS for a browser frontend (`CORS_ALLOWED_ORIGINS`, defaults to `http://localhost:3000`)
+- [x] `GET /api/auth/me` — the authenticated caller's own record, role included
 
 ### Roadmap
 
-- [ ] Finish the `user` module (search & filtering endpoints, `GET /api/auth/me`)
-- [x] Authentication (Spring Security + JWT bearer tokens)
-- [ ] Implement remaining domain entities and repositories (team, project, sprint, epic, issue, comment)
-- [ ] Core CRUD APIs for projects, sprints, epics, and issues
-- [ ] Role-based authorization (`ADMIN` / `DEVELOPER` / `USER`) plus project-scoped access
-  — see [Roles & Permissions](#roles--permissions-planned)
-- [ ] Activity/audit logging via Spring Modulith events
-- [ ] API documentation
-- [ ] Test coverage (unit, module, integration)
+- [ ] Next.js frontend
+- [ ] `POST /api/auth/refresh` — refresh tokens; sessions currently end abruptly at expiry
+- [ ] Batch user lookup, so clients stop resolving ids one at a time
+- [ ] OpenAPI/Swagger (`springdoc-openapi`), for generated client types
+- [ ] Broader test coverage — the suite runs without a database today, so anything touching
+  persistence (including `contextLoads`) is verified by hand
 
-## Roles & Permissions (Planned)
+## Roles & Permissions
 
 Authorization is built on **two independent axes**. Keeping them separate matters: a global role answers *"is this
 kind of user allowed to do this kind of thing?"*, while project membership answers *"is this user allowed to do it
@@ -178,19 +190,35 @@ A single enum column on the user, replacing the current `is_admin` boolean.
 
 | Role        | Intent                | Capabilities                                                                          |
 |-------------|-----------------------|---------------------------------------------------------------------------------------|
-| `ADMIN`     | System administrator  | Full access to every endpoint; manages users, roles, teams and projects                |
+| `ADMIN`     | System administrator  | Full access to every endpoint; manages users and roles                                 |
+| `EDITOR`    | Delivery manager      | Creates and deletes teams and projects; may act on any project regardless of leadership |
 | `DEVELOPER` | Regular contributor   | Joins teams, creates issues, takes/receives assignments, comments, moves issues        |
-| `USER`      | Read-only stakeholder | Views only; added to a project solely by that project's leader to follow its progress  |
+| `USER`      | Read-only stakeholder | Views only; cannot be added to a team or a project at all                              |
 
-Roles are hierarchical — `ADMIN` implies `DEVELOPER` implies `USER` — so a rule written as `hasRole('USER')` also
-admits developers and admins, and each endpoint only needs to declare its *minimum* role.
+Roles are hierarchical — `ADMIN` implies `EDITOR` implies `DEVELOPER` implies `USER` — so a rule written as
+`hasRole('DEVELOPER')` also admits editors and admins, and each endpoint only needs to declare its *minimum* role.
+
+Note that `DEVELOPER` is the **minimum role for membership**: adding a plain `USER` to a team or a project is
+rejected with `403 USER_ROLE_NOT_ENOUGH`.
 
 ### 2. Project-scoped access (`projects.leader_id`, `project_users`, `project_teams`)
 
 "Project leader" is deliberately **not** a global role: it is a relationship stored as data. The same person can lead
-one project while being an ordinary member of another. Fine-grained checks ("is the caller a member of this project?",
-"is the caller its leader?") resolve against these tables, exposed to the security layer through a
-`ProjectMembership` port in `shared.security` — the same pattern already used by `AuthenticatedUserLookup`.
+one project while being an ordinary member of another. Fine-grained checks ("is the caller a participant of this
+project?", "is the caller its leader?") resolve against these tables, exposed to the security layer through the
+`ProjectLookup` and `TeamLookup` ports in `shared.port` — the same pattern already used by `AuthenticatedUserLookup`.
+
+Three rules are built on top of those ports in `SecurityConfig`:
+
+| Rule | Admits |
+|------|--------|
+| `editorOrTeamLeader` | `EDITOR`+, or the leader of *this* team |
+| `editorOrProjectLeader` | `EDITOR`+, or the leader of *this* project — planning artifacts (sprints, epics) and destructive issue operations |
+| `editorLeaderOrParticipant` | the above, plus anyone actually working on the project — a direct member **or** a member of an assigned team |
+
+Participation is what the issue and comment routes run on: refusing a developer the right to file or move their own
+work would make the tracker unusable. It also gates the activity feeds and the metrics — the only reads restricted
+beyond being logged in, since a team that cannot see its own flow cannot improve it.
 
 ### Design notes
 
@@ -200,48 +228,43 @@ one project while being an ordinary member of another. Fine-grained checks ("is 
 - Authorization rules stay centralized in `SecurityConfig` rather than scattered across `@PreAuthorize` annotations.
 - Self-registration always creates a `USER`; the create/update DTOs never accept a role field. Promotion is an
   admin-only operation.
-- Role changes are guarded against lockout: an admin cannot change their own role, and the last active admin cannot
-  be demoted.
+- Role changes are guarded against lockout by a single rule: the caller must **strictly outrank both** the target's
+  current role and the requested new role. An admin therefore cannot change their own role, cannot demote another
+  admin, and cannot promote anyone to admin.
+- Nested routes name the project path variable `id` rather than `projectId`, because the authorization managers read
+  it literally out of `RequestAuthorizationContext#getVariables()`. That naming is what lets one rule cover
+  `/api/projects/{id}/issues/{issueId}/comments/{commentId}` without a port of its own.
 
-> **Status:** designed, not yet implemented — scheduled after the `project` and `sprint` modules land, so the
-> project-scoped half of the model can be built against real entities.
+## Endpoints
 
-## User Endpoints (Planned)
+All 79 endpoints are documented in **[`docs/API.md`](./docs/API.md)**. Summary:
 
-### Core CRUD
+| Area | Base path | Count |
+|------|-----------|-------|
+| Auth | `/api/auth` | 2 |
+| Users | `/api/users` | 10 |
+| Teams & membership | `/api/teams` | 10 |
+| Projects | `/api/projects` | 8 |
+| Project members | `/api/projects/{id}/members`, `/participants` | 4 |
+| Project teams | `/api/projects/{id}/teams` | 3 |
+| Sprints | `/api/projects/{id}/sprints` | 6 |
+| Epics | `/api/projects/{id}/epics` | 6 |
+| Issues | `/api/projects/{id}/issues` | 8 |
+| Comments | `/api/projects/{id}/issues/{issueId}/comments` | 5 |
+| Activity log | `/api/projects/{id}/**/activities` | 3 |
+| Metrics | `/api/projects/{id}/metrics` | 14 |
 
-- [x] `POST /api/users/register` — Register a new user (public; always created with the `USER` role)
-- [x] `GET /api/users/{id}` — Get user details by id
-- [x] `GET /api/users` — List users (paginated, filterable)
-- [x] `PUT /api/users/{id}` — Update user details (name/surname/email)
-- [x] `DELETE /api/users/{id}` — Deactivate a user (soft delete, `is_active=false`)
+## Metrics
 
-### Password Management
+The `activity.metrics` module computes 14 agile metrics from the activity log rather than from the issues' current
+state, which is what makes them historical rather than a snapshot: **cycle time**, **lead time**, **bug MTTR**,
+**throughput** (and a breakdown by type or priority), **time in status**, **flow efficiency**, **reopen rate**,
+**net flow**, **defect ratio**, **WIP** with an aging list, **velocity**, **burndown**, and a **cumulative flow
+diagram**.
 
-- [x] `PATCH /api/users/{id}/password` — Change password (requires current password confirmation)
-- [x] `POST /api/users/{id}/reset-password` — Admin-initiated password reset (future phase)
-
-### Role / Permission
-
-- [ ] `PATCH /api/users/{id}/role` — Change a user's global role (Admin only; cannot target self, cannot demote the
-  last active admin)
-
-Until this endpoint exists, roles are set directly in the database by whoever has DB access.
-
-### Authentication (once the security layer is in place)
-
-- [x] `POST /api/auth/login` — Log in, returns a JWT token
-- [ ] `POST /api/auth/refresh` — Refresh token (future phase)
-- [ ] `GET /api/auth/me` — Get the currently authenticated user's details
-
-### Filtering / Utility
-
-- [ ] `GET /api/users/active` — List only active users
-- [ ] `GET /api/users/search?q=...` — Search by name/surname/email (future phase)
-
----
-This README will be updated as the project progresses.
----
+They are project-level aggregates with no per-person breakdown, deliberately: a metric that becomes an individual
+performance measure stops describing the work and starts describing how people respond to being measured — which
+would corrupt the log it is all computed from.
 
 ## License
 
