@@ -1,0 +1,190 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Internal Issue Tracker — "graphite + activity spine"
+ *
+ * Colour carries work state and nothing else. The chrome (background, text,
+ * borders) is achromatic; `signal` is the one interactive accent; the three
+ * status hues are reserved for BUG/CRITICAL/blocked-style semantics and never
+ * used decoratively. See docs/API.md for the domain this renders.
+ */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
+  --font-heading: var(--font-plex-condensed);
+
+  --color-ink: var(--ink);
+  --color-slate: var(--slate);
+  --color-paper: var(--paper);
+  --color-rule: var(--rule);
+  --color-signal: var(--signal);
+  --color-signal-foreground: var(--signal-foreground);
+  --color-moss: var(--moss);
+  --color-amber: var(--amber);
+  --color-rust: var(--rust);
+
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-6: var(--chart-6);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+
+  /* One radius, everywhere — rows over cards, rules over shadows. */
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
+  --radius-2xl: var(--radius);
+  --radius-3xl: var(--radius);
+  --radius-4xl: var(--radius);
+}
+
+:root {
+  --background: oklch(99.2% 0.002 260); /* paper #FBFBFD */
+  --foreground: oklch(19.5% 0.014 265); /* ink #12151C */
+  --ink: oklch(19.5% 0.014 265);
+  --slate: oklch(49% 0.024 265); /* #5A6478 */
+  --paper: oklch(99.2% 0.002 260);
+  --rule: oklch(91.5% 0.008 260); /* #E3E6ED */
+  --signal: oklch(45% 0.19 267); /* #3B4CD6 */
+  --signal-foreground: oklch(99% 0 0);
+  --moss: oklch(46% 0.1 152); /* #2F7A4F */
+  --amber: oklch(58% 0.14 65); /* #C2760B */
+  --rust: oklch(45% 0.16 27); /* #B23A2E */
+
+  --card: var(--paper);
+  --card-foreground: var(--ink);
+  --popover: var(--paper);
+  --popover-foreground: var(--ink);
+  --primary: var(--signal);
+  --primary-foreground: var(--signal-foreground);
+  --secondary: oklch(96% 0.004 260);
+  --secondary-foreground: var(--ink);
+  --muted: oklch(96% 0.004 260);
+  --muted-foreground: var(--slate);
+  --accent: oklch(95% 0.02 267);
+  --accent-foreground: var(--signal);
+  --destructive: var(--rust);
+  --destructive-foreground: oklch(99% 0 0);
+  --border: var(--rule);
+  --input: var(--rule);
+  --ring: var(--signal);
+  --radius: 0.25rem; /* 4px, everywhere */
+
+  --chart-1: var(--signal);
+  --chart-2: var(--moss);
+  --chart-3: var(--amber);
+  --chart-4: var(--rust);
+  --chart-5: var(--slate);
+  --chart-6: oklch(60% 0.1 300);
+
+  --sidebar: oklch(97.5% 0.003 260);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--signal);
+  --sidebar-primary-foreground: var(--signal-foreground);
+  --sidebar-accent: oklch(95% 0.02 267);
+  --sidebar-accent-foreground: var(--signal);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--signal);
+}
+
+.dark {
+  --background: oklch(15% 0.012 265);
+  --foreground: oklch(94% 0.004 260);
+  --ink: oklch(94% 0.004 260);
+  --slate: oklch(66% 0.02 260);
+  --paper: oklch(15% 0.012 265);
+  --rule: oklch(28% 0.014 265);
+  --signal: oklch(72% 0.16 267);
+  --signal-foreground: oklch(15% 0.012 265);
+  --moss: oklch(68% 0.12 152);
+  --amber: oklch(74% 0.14 70);
+  --rust: oklch(68% 0.16 25);
+
+  --card: oklch(18% 0.013 265);
+  --card-foreground: var(--ink);
+  --popover: oklch(18% 0.013 265);
+  --popover-foreground: var(--ink);
+  --primary: var(--signal);
+  --primary-foreground: var(--signal-foreground);
+  --secondary: oklch(22% 0.013 265);
+  --secondary-foreground: var(--ink);
+  --muted: oklch(22% 0.013 265);
+  --muted-foreground: var(--slate);
+  --accent: oklch(24% 0.03 267);
+  --accent-foreground: var(--signal);
+  --destructive: var(--rust);
+  --destructive-foreground: oklch(15% 0 0);
+  --border: var(--rule);
+  --input: var(--rule);
+  --ring: var(--signal);
+
+  --chart-1: var(--signal);
+  --chart-2: var(--moss);
+  --chart-3: var(--amber);
+  --chart-4: var(--rust);
+  --chart-5: var(--slate);
+  --chart-6: oklch(70% 0.1 300);
+
+  --sidebar: oklch(13% 0.012 265);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--signal);
+  --sidebar-primary-foreground: var(--signal-foreground);
+  --sidebar-accent: oklch(24% 0.03 267);
+  --sidebar-accent-foreground: var(--signal);
+  --sidebar-border: var(--rule);
+  --sidebar-ring: var(--signal);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+}
+
+@layer utilities {
+  /* Data — ids, timestamps, durations, metric values — set honestly in mono. */
+  .font-data {
+    font-family: var(--font-plex-mono);
+    font-feature-settings: "tnum" 1, "zero" 1;
+  }
+}
