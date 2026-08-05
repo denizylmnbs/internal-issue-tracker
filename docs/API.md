@@ -1,7 +1,7 @@
 # Internal Issue Tracker — API Reference
 
 Complete reference for every HTTP endpoint the backend exposes, written to be the single source a
-frontend is built against. **79 endpoints across 16 controllers.**
+frontend is built against. **81 endpoints across 16 controllers.**
 
 Generated from the source. When the code and this document disagree, the code in
 `src/main/java/com/ist/internal_issue_tracker/**/*Controller.java` wins — but please fix the document.
@@ -127,7 +127,7 @@ An unknown property yields `400 INVALID_SORT_PROPERTY`.
 
 ### Authentication
 
-Stateless JWT bearer tokens. Send on every request except the two public routes:
+Stateless JWT bearer tokens. Send on every request except the public routes:
 
 ```
 Authorization: Bearer <accessToken>
@@ -141,11 +141,31 @@ Authorization: Bearer <accessToken>
 - Lifetime comes from the `JWT_EXPIRATION` env var (milliseconds).
 - An invalid, expired, or malformed token does not 401 in the filter — it simply leaves the request
   unauthenticated, and the authorization rules reject it afterwards.
-- There is **no refresh endpoint.** When the token expires the user logs in again.
+- **There is a refresh endpoint now.** `POST /api/auth/login` returns an `accessToken` *and* a
+  `refreshToken`. The refresh token is an opaque random string, not a JWT — it is meaningless to the
+  client beyond "hand it back to `/api/auth/refresh`". It is tracked server-side in Redis
+  (`auth/RefreshTokenService.java`), which is what makes it revocable, unlike the access token.
+  - `POST /api/auth/refresh` exchanges a refresh token for a **new** access/refresh pair and
+    invalidates the one you sent — treat every refresh token as single-use. Store whichever one the
+    response gives you back; the old string stops working immediately.
+  - `POST /api/auth/logout` revokes a refresh token so it can no longer be exchanged. It does **not**
+    invalidate the current access token — that one simply expires on its own, so still stop sending
+    it client-side and drop it from memory on logout.
+  - The server also revokes **every** refresh token a user holds (all devices/tabs) when their
+    password changes or their account is deactivated. A refresh call after that returns
+    `401 INVALID_REFRESH_TOKEN` — treat it the same as an expired session and send the user back to
+    login.
+  - Refresh token lifetime comes from the `JWT_REFRESH_EXPIRATION` env var (milliseconds).
 
 ### Errors
 
 All framework and domain exceptions funnel through `GlobalExceptionHandler` into the envelope above.
+
+**Auth-specific codes** (`auth/exception/AuthErrorCode.java`):
+
+| Code                     | Status | Meaning                                                    |
+|--------------------------|--------|-------------------------------------------------------------|
+| `INVALID_REFRESH_TOKEN`  | 401    | Refresh token is unknown, expired, already used, or revoked. |
 
 **Cross-cutting codes** (`shared/exception/CommonErrorCode.java`):
 
@@ -324,14 +344,54 @@ Request:
 
 Response `200`:
 ```json
-{ "success": true, "data": { "accessToken": "eyJhbGciOi..." }, "timestamp": "..." }
+{
+  "success": true,
+  "data": { "accessToken": "eyJhbGciOi...", "refreshToken": "k3F9pQZ..." },
+  "timestamp": "..."
+}
 ```
 
 Errors: `401 INVALID_CREDENTIALS` (same message for a wrong password and an unknown email — do not
 leak which), `400 VALIDATION_FAILED`.
 
-The response carries **only** the token, and the token's only claim is the user's id. Follow it with
-`GET /api/auth/me` to learn who logged in.
+`accessToken`'s only claim is the user's id. Follow it with `GET /api/auth/me` to learn who logged
+in. `refreshToken` is opaque — store it, don't decode it — and use it against `/api/auth/refresh`
+once the access token expires.
+
+#### `POST /api/auth/refresh` — **public**
+
+Request:
+```json
+{ "refreshToken": "k3F9pQZ..." }
+```
+
+Response `200`: same shape as login — a brand-new `accessToken` **and** `refreshToken`. The refresh
+token you sent is consumed; discard it and store the new one.
+
+```json
+{
+  "success": true,
+  "data": { "accessToken": "eyJhbGciOi...", "refreshToken": "n8LpXw..." },
+  "timestamp": "..."
+}
+```
+
+Errors: `401 INVALID_REFRESH_TOKEN` (unknown, expired, already-used, or revoked — e.g. after a
+password change), `400 VALIDATION_FAILED`. On `401`, send the user back to login; there is no third
+token to fall back to.
+
+#### `POST /api/auth/logout` — **public**
+
+Request:
+```json
+{ "refreshToken": "k3F9pQZ..." }
+```
+
+Response `200`: empty envelope (`{ "success": true, "data": null, "timestamp": "..." }`). Revokes the
+refresh token server-side; already-invalid tokens are accepted silently (idempotent). Does **not**
+invalidate the current access token — drop it client-side too, it just expires on its own.
+
+Errors: `400 VALIDATION_FAILED`.
 
 #### `GET /api/auth/me` — **auth**
 
@@ -1340,10 +1400,14 @@ Implemented in `user/CurrentUserController.java`; documented in [§4.1](#41-auth
 authenticated caller's full `UserResponse`, including the **role**, so no client needs to decode the
 JWT.
 
-### 6.3 Still open, workable as-is
+### 6.3 Refresh tokens — **resolved**
 
-- **No refresh token.** Sessions end abruptly at expiry. Handle `401` globally by redirecting to
-  `/login`.
+`POST /api/auth/login` now returns a `refreshToken` alongside the `accessToken`; exchange it via
+`POST /api/auth/refresh` and revoke it via `POST /api/auth/logout`. Documented in [§4.1](#41-auth).
+Single-use (rotated on every exchange) and server-revocable (Redis-backed), unlike the access token.
+
+### 6.4 Still open, workable as-is
+
 - **No batch user lookup.** See note 1 in §5 — cache a user map client-side.
 - **No OpenAPI/Swagger.** `springdoc-openapi` is not a dependency; this document is the spec. If you
   want generated TypeScript types, adding springdoc would give you a schema to generate from.
