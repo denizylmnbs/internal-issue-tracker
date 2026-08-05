@@ -2,6 +2,7 @@ package com.ist.internal_issue_tracker.user;
 
 import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceException;
+import com.ist.internal_issue_tracker.shared.event.UserCredentialsChangedEvent;
 import com.ist.internal_issue_tracker.shared.event.UserDeactivatedEvent;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
 import com.ist.internal_issue_tracker.shared.security.AuthenticatedUser;
@@ -153,7 +154,10 @@ public class UserService {
 
     user.changePassword(passwordHasher.hash(request.newPassword()));
 
-    return userMapper.toResponse(userRepository.save(user));
+    UserResponse response = userMapper.toResponse(userRepository.save(user));
+    eventPublisher.publishEvent(new UserCredentialsChangedEvent(id));
+
+    return response;
   }
 
   public void resetPassword(Integer id, ResetPasswordRequest request) {
@@ -165,6 +169,7 @@ public class UserService {
     user.changePassword(passwordHasher.hash(request.newPassword()));
 
     userRepository.save(user);
+    eventPublisher.publishEvent(new UserCredentialsChangedEvent(id));
   }
 
   public UserResponse changeRole(Integer id, RoleChangeRequest request, AuthenticatedUser caller) {

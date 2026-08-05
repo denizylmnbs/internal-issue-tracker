@@ -2,6 +2,7 @@ package com.ist.internal_issue_tracker.auth;
 
 import com.ist.internal_issue_tracker.auth.dto.LoginRequest;
 import com.ist.internal_issue_tracker.auth.dto.LoginResponse;
+import com.ist.internal_issue_tracker.auth.dto.RefreshTokenRequest;
 import com.ist.internal_issue_tracker.shared.web.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -24,5 +25,20 @@ public class AuthController {
     LoginResponse loginResponse = authService.login(request);
 
     return ResponseEntity.ok(ApiResponse.ok(loginResponse));
+  }
+
+  @PostMapping("/refresh")
+  public ResponseEntity<ApiResponse<LoginResponse>> refresh(
+      @Valid @RequestBody RefreshTokenRequest request) {
+    LoginResponse loginResponse = authService.refresh(request);
+
+    return ResponseEntity.ok(ApiResponse.ok(loginResponse));
+  }
+
+  @PostMapping("/logout")
+  public ResponseEntity<ApiResponse<Void>> logout(@Valid @RequestBody RefreshTokenRequest request) {
+    authService.logout(request);
+
+    return ResponseEntity.ok(ApiResponse.ok());
   }
 }
