@@ -3,6 +3,7 @@ package com.ist.internal_issue_tracker.project;
 import java.time.OffsetDateTime;
 import java.util.Collection;
 import java.util.Optional;
+import java.util.Set;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -32,6 +33,15 @@ interface ProjectTeamRepository extends JpaRepository<ProjectTeam, Integer> {
    */
   boolean existsByProjectIdAndTeamIdInAndIsActiveTrue(
       Integer projectId, Collection<Integer> teamIds);
+
+  /**
+   * The projects a team is currently on, for {@code ProjectParticipantCacheEvictionListener} to fan
+   * an eviction out over when a {@code TeamMembershipEvent} names that team - a user joining or
+   * leaving it can change their participant status on every one of these at once.
+   */
+  @Query(
+      "select pt.projectId from ProjectTeam pt where pt.teamId = :teamId and pt.isActive = true")
+  Set<Integer> findActiveProjectIdsByTeamId(@Param("teamId") Integer teamId);
 
   /** Backed by {@code unique_active_project_team} - see {@code ProjectMemberRepository}. */
   Optional<ProjectTeam> findByProjectIdAndTeamIdAndIsActiveTrue(Integer projectId, Integer teamId);

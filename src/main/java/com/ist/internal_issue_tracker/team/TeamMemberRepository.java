@@ -85,6 +85,10 @@ interface TeamMemberRepository extends JpaRepository<TeamMember, Integer> {
   @Query("select tm.teamId from TeamMember tm where tm.userId = :userId and tm.isActive = true")
   Set<Integer> findActiveTeamIdsByUserId(@Param("userId") Integer userId);
 
+  /** The mirror projection, for {@code TeamLookupAdapter#activeUserIdsOfTeam}. */
+  @Query("select tm.userId from TeamMember tm where tm.teamId = :teamId and tm.isActive = true")
+  Set<Integer> findActiveUserIdsByTeamId(@Param("teamId") Integer teamId);
+
   /**
    * Retires every live membership a user holds, in one statement. Driven by {@code
    * UserDeactivatedEvent}; the reads above depend on this having happened.

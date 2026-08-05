@@ -1,5 +1,6 @@
 package com.ist.internal_issue_tracker.team;
 
+import com.ist.internal_issue_tracker.shared.event.TeamMembershipEvent;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
 import com.ist.internal_issue_tracker.shared.port.UserLookup;
@@ -10,7 +11,10 @@ import com.ist.internal_issue_tracker.team.dto.TeamMemberResponse;
 import com.ist.internal_issue_tracker.team.dto.UserTeamMembershipResponse;
 import com.ist.internal_issue_tracker.team.exception.TeamMemberErrorCode;
 import com.ist.internal_issue_tracker.team.mapper.TeamMemberMapper;
+import java.time.OffsetDateTime;
 import lombok.AllArgsConstructor;
+import org.springframework.cache.CacheManager;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -26,6 +30,20 @@ public class TeamMemberService {
   private final TeamMemberMapper teamMemberMapper;
   private final UserLookup userLookup;
   private final TeamRepository teamRepository;
+  private final CacheManager cacheManager;
+  private final ApplicationEventPublisher eventPublisher;
+
+  /**
+   * {@code activeTeamIdsOfUser} is cached under this name, keyed by the user id alone - see {@link
+   * com.ist.internal_issue_tracker.shared.cache.RedisConfig}. Evicted here rather than left to its
+   * two-minute TTL because it feeds authorization decisions directly.
+   */
+  private void evictUserTeamsCache(Integer userId) {
+    var cache = cacheManager.getCache("user-teams");
+    if (cache != null) {
+      cache.evict(userId);
+    }
+  }
 
   /**
    * Revives a membership that was soft-deleted, or rejects one that is still live. Removing a member
@@ -80,6 +98,11 @@ public class TeamMemberService {
       // unique_active_team_membership: another request added the same user first
       throw new AppException(TeamMemberErrorCode.TEAM_MEMBER_ALREADY_EXIST);
     }
+
+    evictUserTeamsCache(userId);
+    eventPublisher.publishEvent(
+        new TeamMembershipEvent(
+            teamId, userId, TeamMembershipEvent.Change.ADDED, OffsetDateTime.now()));
 
     return teamMemberMapper.toResponse(savedTeamMember);
   }
@@ -159,5 +182,10 @@ public class TeamMemberService {
 
     membership.setIsActive(false);
     teamMemberRepository.save(membership);
+
+    evictUserTeamsCache(userId);
+    eventPublisher.publishEvent(
+        new TeamMembershipEvent(
+            teamId, userId, TeamMembershipEvent.Change.REMOVED, OffsetDateTime.now()));
   }
 }

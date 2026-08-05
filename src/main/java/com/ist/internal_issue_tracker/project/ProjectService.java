@@ -21,6 +21,8 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
@@ -44,6 +46,24 @@ public class ProjectService {
   private final ProjectChangeDetector projectChangeDetector;
   private final UserLookup userLookup;
   private final ApplicationEventPublisher eventPublisher;
+  private final CacheManager cacheManager;
+
+  /**
+   * {@code isLeaderOfProject} is cached under this name, keyed by {@code projectId + ':' + userId} -
+   * see {@code ProjectLookupAdapter}. A leader change touches at most two keys (who it was, who it
+   * is now), both already in hand at the call site, so this evicts exactly them rather than waiting
+   * on the two-minute TTL.
+   */
+  private void evictLeaderCache(Integer projectId, Integer userId) {
+    if (userId == null) {
+      return;
+    }
+
+    Cache cache = cacheManager.getCache("project-leader");
+    if (cache != null) {
+      cache.evict(projectId + ":" + userId);
+    }
+  }
 
   /** Publishes only if something moved - see {@code IssueService#publishChanges}. */
   private void publishChanges(Integer actorId, ProjectSnapshot before, Project after) {
@@ -179,6 +199,8 @@ public class ProjectService {
 
     Project savedProject = projectRepository.save(project);
 
+    evictLeaderCache(id, before.leaderId());
+    evictLeaderCache(id, request.leaderId());
     publishChanges(actorId, before, savedProject);
 
     return projectMapper.toResponse(savedProject);
@@ -199,6 +221,7 @@ public class ProjectService {
 
     Project savedProject = projectRepository.save(project);
 
+    evictLeaderCache(id, before.leaderId());
     publishChanges(actorId, before, savedProject);
 
     return projectMapper.toResponse(savedProject);

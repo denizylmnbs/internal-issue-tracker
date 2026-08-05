@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 /**
@@ -65,6 +66,7 @@ public class IssueMetricsService {
     return new MetricWindow(resolvedFrom, resolvedTo);
   }
 
+  @Cacheable(cacheNames = "metrics-cycleTime")
   public DurationStatsResponse cycleTime(
       Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
@@ -73,6 +75,7 @@ public class IssueMetricsService {
         window, issueMetricsRepository.cycleTime(projectId, window.from(), window.to()));
   }
 
+  @Cacheable(cacheNames = "metrics-leadTime")
   public DurationStatsResponse leadTime(Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
 
@@ -80,6 +83,7 @@ public class IssueMetricsService {
         window, issueMetricsRepository.leadTime(projectId, window.from(), window.to()));
   }
 
+  @Cacheable(cacheNames = "metrics-throughput")
   public ThroughputResponse throughput(
       Integer projectId, MetricsBucket bucket, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
@@ -98,6 +102,7 @@ public class IssueMetricsService {
     return new ThroughputResponse(window, bucket, points);
   }
 
+  @Cacheable(cacheNames = "metrics-timeInStatus")
   public TimeInStatusResponse timeInStatus(
       Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
@@ -116,6 +121,7 @@ public class IssueMetricsService {
     return new TimeInStatusResponse(window, entries);
   }
 
+  @Cacheable(cacheNames = "metrics-flowEfficiency")
   public FlowEfficiencyResponse flowEfficiency(
       Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
@@ -127,6 +133,7 @@ public class IssueMetricsService {
         window, stats.getFlowEfficiency(), stats.getActiveSeconds(), stats.getTotalSeconds());
   }
 
+  @Cacheable(cacheNames = "metrics-reopenRate")
   public ReopenRateResponse reopenRate(Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
 
@@ -148,6 +155,7 @@ public class IssueMetricsService {
    * <p>Takes {@code asOf} instead of a window - see {@code WipStatusCount}. Two queries rather than
    * one because the two halves group differently and neither is a projection of the other.
    */
+  @Cacheable(cacheNames = "metrics-wip")
   public WipResponse wip(Integer projectId, OffsetDateTime asOf) {
     if (!projectLookup.existsActiveProject(projectId)) {
       throw new AppException(ActivityErrorCode.PROJECT_NOT_FOUND);
@@ -184,6 +192,7 @@ public class IssueMetricsService {
     return new WipResponse(resolvedAsOf, byStatus, oldest);
   }
 
+  @Cacheable(cacheNames = "metrics-netFlow")
   public NetFlowResponse netFlow(
       Integer projectId, MetricsBucket bucket, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
@@ -203,6 +212,7 @@ public class IssueMetricsService {
     return new NetFlowResponse(window, bucket, points);
   }
 
+  @Cacheable(cacheNames = "metrics-throughputBreakdown")
   public ThroughputBreakdownResponse throughputBreakdown(
       Integer projectId,
       MetricsDimension dimension,
@@ -228,6 +238,7 @@ public class IssueMetricsService {
     return new ThroughputBreakdownResponse(window, bucket, dimension, points);
   }
 
+  @Cacheable(cacheNames = "metrics-defectRatio")
   public DefectRatioResponse defectRatio(
       Integer projectId, MetricsBucket bucket, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
@@ -253,6 +264,7 @@ public class IssueMetricsService {
     return new DefectRatioResponse(window, bucket, points);
   }
 
+  @Cacheable(cacheNames = "metrics-bugMttr")
   public DurationStatsResponse bugMttr(
       Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
@@ -269,6 +281,7 @@ public class IssueMetricsService {
    * whose {@code sprint_id} names a soft-deleted sprint is dropped, since there is nothing left to
    * label the row with.
    */
+  @Cacheable(cacheNames = "metrics-velocity")
   public VelocityResponse velocity(Integer projectId) {
     if (!projectLookup.existsActiveProject(projectId)) {
       throw new AppException(ActivityErrorCode.PROJECT_NOT_FOUND);
@@ -322,6 +335,7 @@ public class IssueMetricsService {
    *
    * <p>A sprint with no end date runs to today, which is the same thing the client would draw anyway.
    */
+  @Cacheable(cacheNames = "metrics-burndown")
   public BurndownResponse burndown(Integer projectId, Integer sprintId) {
     if (!projectLookup.existsActiveProject(projectId)) {
       throw new AppException(ActivityErrorCode.PROJECT_NOT_FOUND);
@@ -365,6 +379,7 @@ public class IssueMetricsService {
         points);
   }
 
+  @Cacheable(cacheNames = "metrics-cumulativeFlow")
   public CumulativeFlowResponse cumulativeFlow(
       Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);

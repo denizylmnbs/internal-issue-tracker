@@ -129,6 +129,12 @@ public class TeamService {
    * Soft-deletes the team and retires everything hanging off it: its own roster here, and its
    * project assignments over in {@code project}. Both used to be handled by joining back to {@code
    * teams} on every read; the event moves that cost to the one moment it is actually needed.
+   *
+   * <p>{@code ProjectParticipantCacheEvictionListener} also reacts to this event, to evict every
+   * {@code project-participant} entry this team's members held through it - and must run before
+   * {@code TeamMembershipCleanupListener} and {@code ProjectAssignmentCleanupListener} retire the
+   * rows it reads to find them, which is why it is the one {@code @Order}-annotated listener on
+   * this event.
    */
   @Transactional
   public void deleteTeam(Integer id) {

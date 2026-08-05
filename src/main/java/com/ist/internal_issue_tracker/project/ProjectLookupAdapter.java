@@ -4,6 +4,7 @@ import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -14,6 +15,10 @@ public class ProjectLookupAdapter implements ProjectLookup {
   private final ProjectTeamRepository projectTeamRepository;
   private final TeamLookup teamLookup;
 
+  @Cacheable(
+      cacheNames = "project-leader",
+      key = "#projectId + ':' + #userId",
+      condition = "#projectId != null && #userId != null")
   @Override
   public boolean isLeaderOfProject(Integer projectId, Integer userId) {
     return userId != null
@@ -35,6 +40,10 @@ public class ProjectLookupAdapter implements ProjectLookup {
    * version answered: deleting a project retires its assignment rows, so a deleted one has nothing
    * left for either check to find.
    */
+  @Cacheable(
+      cacheNames = "project-participant",
+      key = "#projectId + ':' + #userId",
+      condition = "#projectId != null && #userId != null")
   @Override
   public boolean isParticipantOfProject(Integer projectId, Integer userId) {
     if (projectId == null || userId == null) {

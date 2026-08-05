@@ -20,6 +20,15 @@ public interface TeamLookup {
   Set<Integer> activeTeamIdsOfUser(Integer userId);
 
   /**
+   * The reverse of {@link #activeTeamIdsOfUser}: everyone currently on a team. Exists for {@code
+   * project} to fan an eviction of its participant cache out over a team's roster when the team's
+   * link to a project changes - see {@code ProjectParticipantCacheEvictionListener}. Empty rather
+   * than an error for a team with no members or one that does not exist; callers here only ever loop
+   * over the result.
+   */
+  Set<Integer> activeUserIdsOfTeam(Integer teamId);
+
+  /**
    * {@code false} if no such team exists <em>or</em> the team is soft-deleted, which callers should
    * treat the same way - a deleted team cannot be handed new work. Lets {@code project} validate a
    * team reference when assigning one to a project without ever naming a {@code team} type.
