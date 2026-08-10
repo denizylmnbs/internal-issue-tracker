@@ -6,8 +6,8 @@ import { Trash2, Pencil } from "lucide-react";
 import { useIssue, useDeleteIssue } from "@/lib/hooks/useIssues";
 import { useProjectContext } from "@/lib/project/ProjectContext";
 import { useSession } from "@/lib/auth/session";
-import { canDeleteIssue } from "@/lib/auth/can";
-import { TypeChip, PriorityChip } from "@/components/shell/chips";
+import { canDeleteIssue, canWriteIssue } from "@/lib/auth/can";
+import { TypeChip, PriorityChip, UnitChip } from "@/components/shell/chips";
 import { StatusControl } from "@/components/issue/StatusControl";
 import { AssigneeControl } from "@/components/issue/AssigneeControl";
 import { IssueSpine } from "@/components/issue/IssueSpine";
@@ -51,6 +51,9 @@ export function IssueDetailClient({ projectId, issueId }: { projectId: number; i
   }
 
   const canDelete = canDeleteIssue(user, project?.leaderId);
+  // Narrower than canWork: status/assignee are editor / leader / the issue's
+  // own assignee, not every project participant (docs/API.md §4.10).
+  const canWriteThisIssue = canWriteIssue(user, project?.leaderId, issue);
 
   return (
     <div className="grid h-full grid-cols-1 lg:grid-cols-[1fr_420px]">
@@ -100,9 +103,10 @@ export function IssueDetailClient({ projectId, issueId }: { projectId: number; i
         </h1>
 
         <div className="mb-5 flex flex-wrap items-center gap-3 border-b border-rule pb-4 text-sm">
-          <StatusControl projectId={projectId} issueId={issue.id} status={issue.status} disabled={!canWork} />
+          <StatusControl projectId={projectId} issueId={issue.id} status={issue.status} disabled={!canWriteThisIssue} />
           <TypeChip type={issue.type} />
           <PriorityChip priority={issue.priority} />
+          {issue.resolvingUnit != null && <UnitChip unit={issue.resolvingUnit} />}
           {issue.storyPoint != null && (
             <span className="font-data text-slate">{issue.storyPoint} pts</span>
           )}
@@ -134,7 +138,7 @@ export function IssueDetailClient({ projectId, issueId }: { projectId: number; i
             issueId={issue.id}
             assigneeUserId={issue.assigneeUserId}
             assigneeTeamId={issue.assigneeTeamId}
-            disabled={!canWork}
+            disabled={!canWriteThisIssue}
           />
         </div>
 

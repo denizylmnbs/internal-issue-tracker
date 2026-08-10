@@ -1,11 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { useProjectContext } from "@/lib/project/ProjectContext";
+import { useSession } from "@/lib/auth/session";
+import { canWriteIssue } from "@/lib/auth/can";
 import { useSprintsList } from "@/lib/hooks/useSprints";
 import { useIssuesList, useChangeIssueStatus } from "@/lib/hooks/useIssues";
 import { BoardColumn } from "@/components/board/BoardColumn";
+import { SprintForecastBanner, isForecastable } from "@/components/sprint/SprintForecast";
 import { EmptyState } from "@/components/shell/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -19,19 +23,31 @@ import { BOARD_STATUSES } from "@/lib/api/enums";
 import type { IssueStatus } from "@/lib/api/enums";
 import Link from "next/link";
 
-export default function BoardPage() {
-  const { projectId } = useProjectContext();
+function BoardPageContent() {
+  const { projectId, project } = useProjectContext();
+  const { user } = useSession();
+  const searchParams = useSearchParams();
+  const requestedSprintId = searchParams.get("sprintId");
   const { data: sprints, isLoading: loadingSprints } = useSprintsList(projectId, {
     size: 100,
     sort: "startDate,desc",
   });
-  const [sprintId, setSprintId] = useState<number | undefined>();
+  const [sprintId, setSprintId] = useState<number | undefined>(
+    requestedSprintId ? Number(requestedSprintId) : undefined,
+  );
 
   useEffect(() => {
     if (sprintId != null || !sprints?.content.length) return;
+    if (requestedSprintId) {
+      const requested = Number(requestedSprintId);
+      if (sprints.content.some((s) => s.id === requested)) {
+        setSprintId(requested);
+        return;
+      }
+    }
     const running = sprints.content.find((s) => s.status === "IN_PROGRESS");
     setSprintId(running?.id ?? sprints.content[0].id);
-  }, [sprints, sprintId]);
+  }, [sprints, sprintId, requestedSprintId]);
 
   const { data: issues, isLoading: loadingIssues } = useIssuesList(projectId, {
     sprintId,
@@ -39,6 +55,10 @@ export default function BoardPage() {
     sort: "priority,desc",
   });
   const changeStatus = useChangeIssueStatus(projectId);
+
+  const selected = sprints?.content.find((s) => s.id === sprintId);
+  // a closed-out sprint has nothing left to predict — see isForecastable
+  const selectedSprint = selected && isForecastable(selected) ? selected : undefined;
 
   if (!loadingSprints && sprints?.content.length === 0) {
     return (
@@ -63,6 +83,11 @@ export default function BoardPage() {
     const newStatus = over.id as IssueStatus;
     const current = issues?.content.find((i) => i.id === issueId);
     if (!current || current.status === newStatus) return;
+    // Editor / project leader / the issue's own assignee only — a
+    // participant who is neither cannot move someone else's issue. Cards
+    // are also non-draggable for them (see IssueCard's `disabled`), this is
+    // the belt-and-suspenders check for anything that slips past that.
+    if (!canWriteIssue(user, project?.leaderId, current)) return;
     changeStatus.mutate({ issueId, body: { status: newStatus } });
   };
 
@@ -87,6 +112,12 @@ export default function BoardPage() {
         </Select>
       </div>
 
+      {selectedSprint && (
+        <div className="mb-4">
+          <SprintForecastBanner projectId={projectId} sprint={selectedSprint} />
+        </div>
+      )}
+
       {loadingIssues || !sprintId ? (
         <div className="flex gap-3">
           {BOARD_STATUSES.map((s) => (
@@ -102,11 +133,21 @@ export default function BoardPage() {
                 status={status}
                 projectId={projectId}
                 issues={(issues?.content ?? []).filter((i) => i.status === status)}
+                canWriteIssue={(issue) => canWriteIssue(user, project?.leaderId, issue)}
+                currentUserId={user?.id}
               />
             ))}
           </div>
         </DndContext>
       )}
     </div>
+  );
+}
+
+export default function BoardPage() {
+  return (
+    <Suspense>
+      <BoardPageContent />
+    </Suspense>
   );
 }

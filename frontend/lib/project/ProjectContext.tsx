@@ -26,7 +26,11 @@ type ProjectContextValue = {
   isParticipant: boolean;
   /** editor / leader — planning artifacts (sprints, epics), destructive issue ops. */
   canManage: boolean;
-  /** editor / leader / participant — issue and comment writes, activity, metrics. */
+  /**
+   * editor / leader / participant — issue creation, full-edit, comment writes, activity, metrics.
+   * NOT status or assignee changes: those are narrower (editor / leader / the issue's own
+   * assignee) and need a per-issue check — see `lib/auth/can.ts#canWriteIssue`.
+   */
   canWork: boolean;
   canDeleteProject: boolean;
 };

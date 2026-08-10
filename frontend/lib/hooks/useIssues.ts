@@ -1,4 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useApiMutation } from "./useApiMutation";
 import * as issues from "@/lib/api/endpoints/issues";
 import type {
@@ -6,6 +7,9 @@ import type {
   UpdateIssueRequest,
   ChangeIssueStatusRequest,
   ChangeIssueAssigneeRequest,
+  ChangeIssueClassificationRequest,
+  ChangeIssueEpicRequest,
+  ChangeIssueSprintRequest,
   IssueListQuery,
 } from "@/lib/api/types";
 
@@ -107,6 +111,82 @@ export function useClearIssueAssignee(projectId: number, issueId: number) {
       queryClient.invalidateQueries({ queryKey: issueKeys.all(projectId) });
       queryClient.invalidateQueries({ queryKey: issueKeys.detail(projectId, issueId) });
     },
+  });
+}
+
+export function useChangeIssueSprint(projectId: number) {
+  return useNarrowIssueEdit<ChangeIssueSprintRequest>(projectId, issues.changeIssueSprint);
+}
+
+export function useChangeIssueEpic(projectId: number) {
+  return useNarrowIssueEdit<ChangeIssueEpicRequest>(projectId, issues.changeIssueEpic);
+}
+
+export function useChangeIssueClassification(projectId: number) {
+  return useNarrowIssueEdit<ChangeIssueClassificationRequest>(
+    projectId,
+    issues.changeIssueClassification,
+  );
+}
+
+/** Shaped like useChangeIssueStatus — the issue id is a variable rather than a
+ * hook argument, which is what lets one hook serve a whole selection. */
+function useNarrowIssueEdit<TBody>(
+  projectId: number,
+  call: (projectId: number, issueId: number, body: TBody) => Promise<unknown>,
+) {
+  const queryClient = useQueryClient();
+  return useApiMutation<unknown, { issueId: number; body: TBody }>({
+    mutationFn: ({ issueId, body }) => call(projectId, issueId, body),
+    onSuccess: (_data, { issueId }) => {
+      queryClient.invalidateQueries({ queryKey: issueKeys.all(projectId) });
+      queryClient.invalidateQueries({ queryKey: issueKeys.detail(projectId, issueId) });
+    },
+  });
+}
+
+export type BulkIssueEdit = {
+  issueIds: number[];
+  /** Called once per issue. Per-issue rather than one request because the API has
+   * no bulk route — see docs/API.md §5. */
+  apply: (issueId: number) => Promise<unknown>;
+  /** Renders the success line, e.g. `(n) => \`${n} issues moved to Sprint 4\``. */
+  describe: (count: number) => string;
+};
+
+/**
+ * Applies one change to a whole selection. Partial success is the normal case,
+ * not an edge one — someone else may have deleted an issue, or the caller may be
+ * the assignee of some of them and not others — so this settles every request,
+ * reports what actually landed, and invalidates once at the end rather than N
+ * times.
+ */
+export function useBulkIssueEdit(projectId: number) {
+  const queryClient = useQueryClient();
+
+  return useApiMutation<{ succeeded: number; failed: number }, BulkIssueEdit>({
+    // the toasts below say more than a bare error message could
+    silent: true,
+    mutationFn: async ({ issueIds, apply }) => {
+      const results = await Promise.allSettled(issueIds.map(apply));
+      const rejected = results.filter((r) => r.status === "rejected");
+
+      // nothing landed at all: rethrow so this reads as an ordinary failed
+      // mutation, with useApiMutation's message and its 403 session refetch
+      if (rejected.length === results.length && rejected.length > 0) {
+        throw rejected[0].reason;
+      }
+
+      return { succeeded: results.length - rejected.length, failed: rejected.length };
+    },
+    onSuccess: ({ succeeded, failed }, { describe }) => {
+      if (failed === 0) {
+        toast.success(describe(succeeded));
+      } else {
+        toast.warning(`${describe(succeeded)} — ${failed} couldn't be changed.`);
+      }
+    },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: issueKeys.all(projectId) }),
   });
 }
 

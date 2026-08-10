@@ -53,3 +53,18 @@ export const canDeleteComment = (
 
 /** Deleting an issue is the one operation participants don't get. */
 export const canDeleteIssue = editorOrProjectLeader;
+
+/**
+ * Narrower than {@link editorLeaderOrParticipant}: status changes and
+ * assignee changes (docs/API.md §4.10) are editor / leader / **the issue's
+ * own assignee** — being a project participant alone is not enough. Mirrors
+ * `IssueService#requireEditorLeaderOrAssignee` on the backend, which is the
+ * check that actually matters here.
+ */
+export const canWriteIssue = (
+  caller: Caller,
+  projectLeaderId: number | null | undefined,
+  issue: { assigneeUserId: number | null } | undefined,
+) =>
+  editorOrProjectLeader(caller, projectLeaderId) ||
+  (!!caller && !!issue && caller.id === issue.assigneeUserId);

@@ -8,6 +8,7 @@ import { useSprintsList, useDeleteSprint } from "@/lib/hooks/useSprints";
 import { SprintStatusSelect } from "@/components/pickers/SprintStatusSelect";
 import { SprintFormDialog } from "@/components/pickers/SprintFormDialog";
 import { EmptyState } from "@/components/shell/EmptyState";
+import { SprintForecastBadge, isForecastable } from "@/components/sprint/SprintForecast";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateOnly } from "@/lib/format";
@@ -68,7 +69,7 @@ export default function SprintsPage() {
             <div key={sprint.id} className="flex items-center justify-between gap-4 p-3">
               <div className="min-w-0 flex-1">
                 <Link
-                  href={`/projects/${projectId}/board`}
+                  href={`/projects/${projectId}/board?sprintId=${sprint.id}`}
                   className="text-sm font-medium hover:text-signal"
                 >
                   {sprint.name}
@@ -80,6 +81,12 @@ export default function SprintsPage() {
                   )}
                 </p>
               </div>
+              {/* Only for sprints still in play — a finished one is measured,
+                  not forecast, and this is what keeps the list from firing an
+                  issue query per closed sprint. */}
+              {isForecastable(sprint) && (
+                <SprintForecastBadge projectId={projectId} sprint={sprint} />
+              )}
               <SprintStatusSelect
                 projectId={projectId}
                 sprintId={sprint.id}

@@ -29,14 +29,17 @@ export function AppRail() {
 
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-rule bg-sidebar">
-      <div className="flex h-12 items-center gap-2 border-b border-rule px-4">
+      <Link
+        href="/"
+        className="flex h-12 items-center gap-2 border-b border-rule px-4 hover:bg-secondary"
+      >
         <div className="flex h-6 w-6 items-center justify-center rounded bg-signal font-heading text-xs font-bold text-signal-foreground">
           I
         </div>
         <span className="font-heading text-sm font-semibold tracking-tight">
           Issue Tracker
         </span>
-      </div>
+      </Link>
 
       <nav className="flex-1 space-y-0.5 px-2 py-3">
         {NAV.map(({ href, label, icon: Icon, exact }) => {

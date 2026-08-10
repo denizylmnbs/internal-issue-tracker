@@ -9,14 +9,22 @@ const DOT_FOR_ACTION: Record<string, string> = {
   DELETED: "bg-rust",
 };
 
+/** `activity.scope` (docs/API.md §4.12) is present on every row from every
+ * activity endpoint, including the unioned project feed — so it, not a
+ * page-level prop, is what tells `ValueDelta` how to decode a shared action
+ * type like `STATUS_UPDATED` (issue/sprint/project all have one). */
+const DOMAIN_FOR_SCOPE: Record<string, "issue" | "sprint" | "project"> = {
+  ISSUE: "issue",
+  SPRINT: "sprint",
+  PROJECT: "project",
+};
+
 export function ActivityRow({
   activity,
-  domain,
   projectId,
   showDate,
 }: {
   activity: ActivityResponse;
-  domain: "issue" | "sprint" | "project";
   projectId: number;
   showDate?: boolean;
 }) {
@@ -37,7 +45,7 @@ export function ActivityRow({
           actionType={activity.actionType}
           oldValue={activity.oldValue}
           newValue={activity.newValue}
-          domain={domain}
+          domain={DOMAIN_FOR_SCOPE[activity.scope] ?? "issue"}
           projectId={projectId}
         />
       </div>

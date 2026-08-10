@@ -1,13 +1,31 @@
 import { format, formatDistanceToNow } from "date-fns";
 
 /** Backend timestamps are UTC OffsetDateTime; `new Date()` parses the offset
- * and `format` below renders in the browser's local zone automatically. */
+ * and `format` below renders in the browser's local zone automatically.
+ *
+ * Some "joined"/"assigned" timestamps are derived server-side from a
+ * nullable `updated_at` column (a row that was never touched after being
+ * inserted by hand has no value there) — every formatter below accepts
+ * null/undefined/invalid input and renders "—" rather than epoch. */
 
-export const formatTimestamp = (iso: string) => format(new Date(iso), "MMM d, HH:mm");
-export const formatDateOnly = (iso: string) => format(new Date(iso), "MMM d, yyyy");
-export const formatClock = (iso: string) => format(new Date(iso), "HH:mm");
-export const formatRelative = (iso: string) =>
-  formatDistanceToNow(new Date(iso), { addSuffix: true });
+const EM_DASH = "—";
+
+function safeFormat(iso: string | null | undefined, pattern: string): string {
+  if (!iso) return EM_DASH;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return EM_DASH;
+  return format(date, pattern);
+}
+
+export const formatTimestamp = (iso: string | null | undefined) => safeFormat(iso, "MMM d, HH:mm");
+export const formatDateOnly = (iso: string | null | undefined) => safeFormat(iso, "MMM d, yyyy");
+export const formatClock = (iso: string | null | undefined) => safeFormat(iso, "HH:mm");
+export const formatRelative = (iso: string | null | undefined) => {
+  if (!iso) return EM_DASH;
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return EM_DASH;
+  return formatDistanceToNow(date, { addSuffix: true });
+};
 
 /** All metric durations are seconds (docs/API.md §4.13) — the client picks
  * the presentation. Renders `—` for null so "no data" reads differently from

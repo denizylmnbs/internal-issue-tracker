@@ -7,7 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 
 export default function ProjectActivityPage() {
   const { projectId } = useProjectContext();
-  const { data, isLoading } = useProjectActivity(projectId, { size: 100 });
+  const { data, isLoading, isError } = useProjectActivity(projectId, { size: 100 });
 
   return (
     <div className="max-w-2xl p-6">
@@ -17,8 +17,10 @@ export default function ProjectActivityPage() {
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-10 w-3/4" />
         </div>
+      ) : isError ? (
+        <p className="text-sm text-rust">Could not load activity. Try refreshing.</p>
       ) : (
-        <ActivitySpine activities={data?.content ?? []} domain="project" projectId={projectId} />
+        <ActivitySpine activities={data?.content ?? []} projectId={projectId} />
       )}
     </div>
   );

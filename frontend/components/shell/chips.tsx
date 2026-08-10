@@ -3,6 +3,7 @@ import {
   ISSUE_STATUS_LABEL,
   ISSUE_PRIORITY_LABEL,
   ISSUE_TYPE_LABEL,
+  ISSUE_RESOLVING_UNIT_LABEL,
   PROJECT_STATUS_LABEL,
   SPRINT_STATUS_LABEL,
   EPIC_STATUS_LABEL,
@@ -12,6 +13,7 @@ import type {
   IssueStatus,
   IssuePriority,
   IssueType,
+  IssueResolvingUnit,
   ProjectStatus,
   SprintStatus,
   EpicStatus,
@@ -21,7 +23,9 @@ import type {
 /**
  * Colour is reserved for work state — see app/globals.css. Every chip here
  * is a small text label with a dot or border in a semantic hue, never a
- * filled decorative badge.
+ * filled decorative badge. The one exception is UnitChip: each resolving
+ * unit (backend/frontend/iOS/Android) gets a fixed, filled team colour so
+ * it reads at a glance across the board and issue views.
  */
 
 function Chip({
@@ -90,6 +94,26 @@ export function TypeChip({ type }: { type: IssueType }) {
   return (
     <span className={cn("text-xs font-medium uppercase tracking-wide", TYPE_COLOR[type])}>
       {ISSUE_TYPE_LABEL[type]}
+    </span>
+  );
+}
+
+const UNIT_COLOR: Record<IssueResolvingUnit, string> = {
+  BACKEND: "bg-signal text-signal-foreground",
+  FRONTEND: "bg-moss text-moss-foreground",
+  IOS: "bg-slate text-slate-foreground",
+  ANDROID: "bg-amber text-amber-foreground",
+};
+
+export function UnitChip({ unit }: { unit: IssueResolvingUnit }) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold leading-none shadow-sm",
+        UNIT_COLOR[unit],
+      )}
+    >
+      {ISSUE_RESOLVING_UNIT_LABEL[unit]}
     </span>
   );
 }

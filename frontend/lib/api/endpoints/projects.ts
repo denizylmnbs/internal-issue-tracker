@@ -62,7 +62,10 @@ export const listProjectMembers = (
   query: { page?: number; size?: number } = {},
 ) =>
   apiData<PagedResponse<ProjectMemberResponse>>(
-    `/api/projects/${projectId}/members${toQuery({ sort: "joinedAt,desc", ...query })}`,
+    // `joinedAt` is a DTO field, not an entity property on ProjectMember —
+    // sorting by it 400s (INVALID_SORT_PROPERTY). `updatedAt` is the real
+    // column it's derived from.
+    `/api/projects/${projectId}/members${toQuery({ sort: "updatedAt,desc", ...query })}`,
   );
 
 export const removeProjectMember = (projectId: number, userId: number) =>
@@ -88,7 +91,10 @@ export const listProjectTeams = (
   query: { page?: number; size?: number } = {},
 ) =>
   apiData<PagedResponse<ProjectTeamResponse>>(
-    `/api/projects/${projectId}/teams${toQuery({ sort: "assignedAt,desc", ...query })}`,
+    // `assignedAt` is a DTO field, not an entity property on ProjectTeam —
+    // sorting by it 400s (INVALID_SORT_PROPERTY). `updatedAt` is the real
+    // column it's derived from.
+    `/api/projects/${projectId}/teams${toQuery({ sort: "updatedAt,desc", ...query })}`,
   );
 
 export const removeProjectTeam = (projectId: number, teamId: number) =>

@@ -31,6 +31,7 @@ import { DefectRatioChart } from "@/components/charts/DefectRatioChart";
 import { WipPanel } from "@/components/charts/WipPanel";
 import { VelocityChart } from "@/components/charts/VelocityChart";
 import { BurndownChart } from "@/components/charts/BurndownChart";
+import { SprintForecastBanner, isForecastable } from "@/components/sprint/SprintForecast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -47,8 +48,28 @@ function toDateInput(iso: string) {
   return iso.slice(0, 10);
 }
 
+/** `<input type="date">` reports `value === ""` while the date is incomplete
+ * (e.g. a year field that only has "0" typed into it so far) — `new
+ * Date("").toISOString()` throws a `RangeError` synchronously in the change
+ * handler, which is what was crashing the page. Returns null for "still
+ * typing" as well as for a value that parses but isn't a real date, so the
+ * caller can just ignore the event and leave the window as it was. */
+function parseDateInput(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+/** A floor for the date inputs — otherwise a technically-valid but absurd
+ * date (year 1, typed digit by digit before the rest of the field is filled
+ * in) produces a window `densify.ts#bucketStarts` walks one bucket at a time
+ * from, all the way to today: hundreds of thousands of iterations across
+ * five charts, which reads as the tab hanging rather than erroring. */
+const EARLIEST_WINDOW_DATE = "2000-01-01";
+
 export default function InsightsPage() {
-  const { projectId } = useProjectContext();
+  const { projectId, project } = useProjectContext();
   const [window, setWindow] = useState(defaultWindow());
   const [bucket, setBucket] = useState<MetricsBucket>("WEEK");
   const [dimension, setDimension] = useState<MetricsDimension>("TYPE");
@@ -72,6 +93,11 @@ export default function InsightsPage() {
   const effectiveSprintId = sprintId ?? sprints?.content.find((s) => s.status === "IN_PROGRESS")?.id;
   const burndown = useBurndown(projectId, effectiveSprintId);
 
+  // the forecast rides on the same sprint the burndown is drawn for
+  const selectedSprint = sprints?.content.find((s) => s.id === effectiveSprintId);
+  const forecastSprint =
+    selectedSprint && isForecastable(selectedSprint) ? selectedSprint : undefined;
+
   return (
     <div className="max-w-5xl p-6">
       <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
@@ -82,7 +108,16 @@ export default function InsightsPage() {
             <Input
               type="date"
               value={toDateInput(window.from)}
-              onChange={(e) => setWindow((w) => ({ ...w, from: new Date(e.target.value).toISOString() }))}
+              min={project?.startDate ? toDateInput(project.startDate) : EARLIEST_WINDOW_DATE}
+              max={toDateInput(window.to)}
+              onChange={(e) => {
+                const from = parseDateInput(e.target.value);
+                if (!from) return;
+                // Keep from <= to rather than silently sending an inverted
+                // window to the backend, which doesn't validate the order
+                // and would echo it straight back.
+                setWindow((w) => (from > w.to ? { from, to: from } : { ...w, from }));
+              }}
               className="h-8 w-36"
             />
           </div>
@@ -91,7 +126,12 @@ export default function InsightsPage() {
             <Input
               type="date"
               value={toDateInput(window.to)}
-              onChange={(e) => setWindow((w) => ({ ...w, to: new Date(e.target.value).toISOString() }))}
+              min={toDateInput(window.from)}
+              onChange={(e) => {
+                const to = parseDateInput(e.target.value);
+                if (!to) return;
+                setWindow((w) => (to < w.from ? { from: to, to } : { ...w, to }));
+              }}
               className="h-8 w-36"
             />
           </div>
@@ -184,6 +224,11 @@ export default function InsightsPage() {
                 </SelectContent>
               </Select>
             </div>
+            {forecastSprint && (
+              <div className="mb-2">
+                <SprintForecastBanner projectId={projectId} sprint={forecastSprint} />
+              </div>
+            )}
             <BurndownChart data={burndown.data} isLoading={burndown.isLoading} />
           </div>
         </div>

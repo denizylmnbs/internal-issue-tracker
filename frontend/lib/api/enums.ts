@@ -141,6 +141,21 @@ export const ISSUE_PRIORITY_LABEL: Record<IssuePriority, string> = {
   CRITICAL: "Critical",
 };
 
+export const ISSUE_RESOLVING_UNITS = [
+  "BACKEND",
+  "FRONTEND",
+  "IOS",
+  "ANDROID",
+] as const;
+export type IssueResolvingUnit = (typeof ISSUE_RESOLVING_UNITS)[number];
+
+export const ISSUE_RESOLVING_UNIT_LABEL: Record<IssueResolvingUnit, string> = {
+  BACKEND: "Backend",
+  FRONTEND: "Frontend",
+  IOS: "iOS",
+  ANDROID: "Android",
+};
+
 export const METRICS_BUCKETS = ["DAY", "WEEK", "MONTH"] as const;
 export type MetricsBucket = (typeof METRICS_BUCKETS)[number];
 

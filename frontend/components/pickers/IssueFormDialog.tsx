@@ -27,7 +27,14 @@ import { UserPicker } from "./UserPicker";
 import { TeamPicker } from "./TeamPicker";
 import { SprintPicker, EpicPicker } from "./SprintEpicPickers";
 import { useCreateIssue, useUpdateIssue } from "@/lib/hooks/useIssues";
-import { ISSUE_TYPES, ISSUE_TYPE_LABEL, ISSUE_PRIORITIES, ISSUE_PRIORITY_LABEL } from "@/lib/api/enums";
+import {
+  ISSUE_TYPES,
+  ISSUE_TYPE_LABEL,
+  ISSUE_PRIORITIES,
+  ISSUE_PRIORITY_LABEL,
+  ISSUE_RESOLVING_UNITS,
+  ISSUE_RESOLVING_UNIT_LABEL,
+} from "@/lib/api/enums";
 import type { IssueResponse } from "@/lib/api/types";
 
 // type is required at creation, but never a status field — nothing is ever
@@ -37,6 +44,7 @@ const schema = z.object({
   description: z.string().max(5000).optional(),
   type: z.enum(ISSUE_TYPES),
   priority: z.enum(ISSUE_PRIORITIES),
+  resolvingUnit: z.enum(ISSUE_RESOLVING_UNITS).nullable(),
   storyPoint: z.number().min(0).nullable(),
   sprintId: z.number().nullable(),
   epicId: z.number().nullable(),
@@ -73,6 +81,7 @@ export function IssueFormDialog({
           description: issue.description ?? "",
           type: issue.type,
           priority: issue.priority,
+          resolvingUnit: issue.resolvingUnit,
           storyPoint: issue.storyPoint,
           sprintId: issue.sprintId,
           epicId: issue.epicId,
@@ -84,6 +93,7 @@ export function IssueFormDialog({
           description: "",
           type: "TASK",
           priority: "MEDIUM",
+          resolvingUnit: null,
           storyPoint: null,
           sprintId: defaultSprintId ?? null,
           epicId: null,
@@ -100,6 +110,7 @@ export function IssueFormDialog({
           description: values.description || undefined,
           type: values.type,
           priority: values.priority,
+          resolvingUnit: values.resolvingUnit ?? undefined,
           storyPoint: values.storyPoint ?? undefined,
           sprintId: values.sprintId ?? undefined,
           epicId: values.epicId ?? undefined,
@@ -118,6 +129,7 @@ export function IssueFormDialog({
           description: values.description || undefined,
           type: values.type,
           priority: values.priority,
+          resolvingUnit: values.resolvingUnit ?? undefined,
           storyPoint: values.storyPoint ?? undefined,
           sprintId: values.sprintId ?? undefined,
           epicId: values.epicId ?? undefined,
@@ -201,6 +213,32 @@ export function IssueFormDialog({
                   )}
                 />
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Resolving unit</Label>
+              <Controller
+                control={control}
+                name="resolvingUnit"
+                render={({ field }) => (
+                  <Select
+                    value={field.value ?? "NONE"}
+                    onValueChange={(v) => field.onChange(v === "NONE" ? null : v)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">Unassigned</SelectItem>
+                      {ISSUE_RESOLVING_UNITS.map((u) => (
+                        <SelectItem key={u} value={u}>
+                          {ISSUE_RESOLVING_UNIT_LABEL[u]}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-3">

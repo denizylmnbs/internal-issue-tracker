@@ -6,6 +6,7 @@
 import type {
   EpicStatus,
   IssuePriority,
+  IssueResolvingUnit,
   IssueStatus,
   IssueType,
   MetricsBucket,
@@ -44,7 +45,10 @@ export type PagedResponse<T> = { content: T[]; page: PageInfo };
 // -------------------------------------------------------------------- auth
 
 export type LoginRequest = { email: string; password: string };
-export type LoginResponse = { accessToken: string };
+export type LoginResponse = { accessToken: string; refreshToken: string };
+
+/** Same DTO backend uses for both `/api/auth/refresh` and `/api/auth/logout`. */
+export type RefreshRequest = { refreshToken: string };
 
 // ------------------------------------------------------------------- user
 
@@ -81,7 +85,8 @@ export type UserTeamMembershipResponse = {
   teamId: number;
   teamName: string;
   teamField: TeamField | null;
-  joinedAt: string;
+  /** Derived server-side from a nullable `updated_at` — see lib/format.ts. */
+  joinedAt: string | null;
 };
 
 export type UserProjectMembershipResponse = {
@@ -117,7 +122,8 @@ export type TeamMemberResponse = {
   userId: number;
   teamId: number;
   isActive: boolean;
-  joinedAt: string;
+  /** Derived server-side from a nullable `updated_at` — see lib/format.ts. */
+  joinedAt: string | null;
 };
 
 export type AddTeamMemberRequest = { userId: number };
@@ -165,7 +171,8 @@ export type ProjectMemberResponse = {
   userId: number;
   projectId: number;
   isActive: boolean;
-  joinedAt: string;
+  /** Derived server-side from a nullable `updated_at` — see lib/format.ts. */
+  joinedAt: string | null;
 };
 
 export type AddProjectMemberRequest = { userId: number };
@@ -180,7 +187,8 @@ export type ProjectTeamResponse = {
   teamId: number;
   projectId: number;
   isActive: boolean;
-  assignedAt: string;
+  /** Derived server-side from a nullable `updated_at` — see lib/format.ts. */
+  assignedAt: string | null;
 };
 
 export type AddProjectTeamRequest = { teamId: number };
@@ -246,6 +254,7 @@ export type IssueResponse = {
   description: string | null;
   status: IssueStatus;
   priority: IssuePriority;
+  resolvingUnit: IssueResolvingUnit | null;
   storyPoint: number | null;
   reporterId: number;
   assigneeUserId: number | null;
@@ -259,6 +268,7 @@ export type CreateIssueRequest = {
   description?: string;
   type: IssueType;
   priority?: IssuePriority;
+  resolvingUnit?: IssueResolvingUnit;
   storyPoint?: number;
   sprintId?: number;
   epicId?: number;
@@ -272,12 +282,25 @@ export type UpdateIssueRequest = {
   description?: string;
   type: IssueType;
   priority: IssuePriority;
+  resolvingUnit?: IssueResolvingUnit;
   storyPoint?: number;
   sprintId?: number;
   epicId?: number;
 };
 
 export type ChangeIssueStatusRequest = { status: IssueStatus };
+
+/** null means the backlog, not "leave it alone" — the field is the whole body. */
+export type ChangeIssueSprintRequest = { sprintId: number | null };
+
+export type ChangeIssueEpicRequest = { epicId: number | null };
+
+/** Replaced as a group, so a caller changing one restates the other two as they stand. */
+export type ChangeIssueClassificationRequest = {
+  type: IssueType;
+  priority: IssuePriority;
+  storyPoint: number | null;
+};
 
 /** Both optional and independent, but sending one alone clears the other. */
 export type ChangeIssueAssigneeRequest = {
@@ -290,11 +313,33 @@ export type IssueListQuery = {
   type?: IssueType;
   status?: IssueStatus;
   priority?: IssuePriority;
+  resolvingUnit?: IssueResolvingUnit;
   sprintId?: number;
   epicId?: number;
   reporterId?: number;
   assigneeUserId?: number;
   assigneeTeamId?: number;
+};
+
+/** GET /api/users/{id}/sprint-progress — see docs/API.md §4.2 for the null/semantics rules. */
+export type SprintProgressEntry = {
+  projectId: number;
+  sprintId: number;
+  sprintName: string;
+  startDate: string;
+  endDate: string;
+  assignedPoints: number;
+  completedPoints: number;
+  assignedIssueCount: number;
+  completedIssueCount: number;
+};
+
+export type UserSprintProgressResponse = {
+  current: SprintProgressEntry[];
+  previous: SprintProgressEntry[];
+  /** Null when the user hasn't finished a single sprint yet — never coalesce to 0. */
+  recentAveragePoints: number | null;
+  recentSprintCount: number;
 };
 
 // --------------------------------------------------------------- comment
@@ -313,6 +358,10 @@ export type UpdateCommentRequest = { content: string };
 
 // -------------------------------------------------------------- activity
 
+/** `scope`/`subjectId` say which activity table a row came from and what it
+ * hangs off (docs/API.md §4.12) — constant on the three single-subject
+ * endpoints, but required to make sense of the unioned project feed, where
+ * `id` alone isn't unique across tables. */
 export type ActivityResponse = {
   id: number;
   userId: number;
@@ -320,6 +369,8 @@ export type ActivityResponse = {
   oldValue: string | null;
   newValue: string | null;
   createdAt: string;
+  scope: "PROJECT" | "ISSUE" | "SPRINT";
+  subjectId: number;
 };
 
 // --------------------------------------------------------------- metrics

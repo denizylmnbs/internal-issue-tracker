@@ -9,10 +9,16 @@ export function BoardColumn({
   status,
   issues,
   projectId,
+  canWriteIssue,
+  currentUserId,
 }: {
   status: IssueStatus;
   issues: IssueResponse[];
   projectId: number;
+  /** Editor / project leader / the issue's own assignee — see lib/auth/can.ts. */
+  canWriteIssue: (issue: IssueResponse) => boolean;
+  /** Highlights cards assigned to the signed-in user. */
+  currentUserId?: number;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: status });
   const points = issues.reduce((sum, i) => sum + (i.storyPoint ?? 0), 0);
@@ -28,14 +34,22 @@ export function BoardColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          "flex min-h-24 flex-1 flex-col gap-2 p-2 transition-colors",
+          "flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto p-2 transition-colors",
           isOver && "bg-accent",
         )}
       >
         {issues.length === 0 ? (
           <p className="p-2 text-xs text-slate">Empty</p>
         ) : (
-          issues.map((issue) => <IssueCard key={issue.id} issue={issue} projectId={projectId} />)
+          issues.map((issue) => (
+            <IssueCard
+              key={issue.id}
+              issue={issue}
+              projectId={projectId}
+              disabled={!canWriteIssue(issue)}
+              currentUserId={currentUserId}
+            />
+          ))
         )}
       </div>
     </div>

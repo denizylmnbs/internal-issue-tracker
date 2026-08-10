@@ -1,5 +1,12 @@
 import { cookies } from "next/headers";
 import { NextResponse, type NextRequest } from "next/server";
+import {
+  ACCESS_COOKIE,
+  REFRESH_COOKIE,
+  accessCookieOptions,
+  refreshCookieOptions,
+} from "@/lib/auth/cookies";
+import { refreshSession } from "@/lib/auth/refresh";
 
 /**
  * The BFF proxy. Every browser call goes through here rather than straight to
@@ -12,14 +19,23 @@ import { NextResponse, type NextRequest } from "next/server";
  * This is a raw byte-level proxy, not envelope-aware: it doesn't parse the
  * `ApiResponse<T>` body, it just relays it. Unwrapping happens client-side in
  * lib/api/client.ts.
+ *
+ * A 401 from the backend means the access token is missing/expired/invalid
+ * (docs/API.md — the JWT filter never 401s itself, authorization does). If a
+ * refresh cookie is present we spend it on one `/api/auth/refresh` attempt
+ * (coalesced via lib/auth/refresh.ts so concurrent requests don't race the
+ * same single-use token) and replay the original request exactly once with
+ * the new access token. Only if that also fails do we give up, clear both
+ * cookies, and let the original 401 through — lib/api/client.ts's global
+ * handler then bounces to /login.
  */
 
 const API_BASE_URL = process.env.API_BASE_URL ?? "http://localhost:8080";
-const SESSION_COOKIE = "ist_at";
 
 async function proxy(req: NextRequest, path: string[]): Promise<Response> {
   const cookieStore = await cookies();
-  const token = cookieStore.get(SESSION_COOKIE)?.value;
+  const accessToken = cookieStore.get(ACCESS_COOKIE)?.value;
+  const refreshToken = cookieStore.get(REFRESH_COOKIE)?.value;
 
   // `path` is everything after /bff/ — since client.ts calls `/bff${path}`
   // where `path` already starts with "/api/...", `path` here already
@@ -28,17 +44,34 @@ async function proxy(req: NextRequest, path: string[]): Promise<Response> {
   targetUrl.search = req.nextUrl.search;
 
   const hasBody = !["GET", "HEAD", "DELETE"].includes(req.method);
+  // Read the body once up front — req.text() can't be called again for the
+  // retry after a refresh, the stream is consumed the first time.
+  const body = hasBody ? await req.text() : undefined;
 
-  const upstream = await fetch(targetUrl, {
-    method: req.method,
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: hasBody ? await req.text() : undefined,
-    cache: "no-store",
-  });
+  const forward = (token: string | undefined) =>
+    fetch(targetUrl, {
+      method: req.method,
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body,
+      cache: "no-store",
+    });
+
+  let upstream = await forward(accessToken);
+  let newPair: { accessToken: string; refreshToken: string } | undefined;
+
+  if (upstream.status === 401 && refreshToken) {
+    try {
+      newPair = await refreshSession(refreshToken, API_BASE_URL);
+      upstream = await forward(newPair.accessToken);
+    } catch {
+      // Refresh token invalid/expired/already used (INVALID_REFRESH_TOKEN)
+      // or the backend is unreachable — fall through with the original 401.
+    }
+  }
 
   const responseBody = await upstream.text();
   const headers = new Headers({ "Content-Type": "application/json" });
@@ -50,12 +83,16 @@ async function proxy(req: NextRequest, path: string[]): Promise<Response> {
     headers,
   });
 
-  // The backend never issues a new token itself, but a request that fails
-  // authentication is the signal a stale/expired cookie is worthless — clear
-  // it so the client's global 401 handler lands on a clean login rather than
-  // looping.
-  if (upstream.status === 401) {
-    response.cookies.delete(SESSION_COOKIE);
+  if (newPair) {
+    // Refresh tokens rotate on every exchange — the old ist_rt is already
+    // dead server-side, so the new one must always be stored.
+    response.cookies.set(ACCESS_COOKIE, newPair.accessToken, accessCookieOptions);
+    response.cookies.set(REFRESH_COOKIE, newPair.refreshToken, refreshCookieOptions);
+  } else if (upstream.status === 401) {
+    // Either there was no refresh token to try, or the refresh attempt
+    // itself failed — either way the session is unrecoverable here.
+    response.cookies.delete(ACCESS_COOKIE);
+    response.cookies.delete(REFRESH_COOKIE);
   }
 
   return response;

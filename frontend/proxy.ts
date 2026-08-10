@@ -1,19 +1,23 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { ACCESS_COOKIE, REFRESH_COOKIE } from "@/lib/auth/cookies";
 
 /**
  * Route gate for the authenticated shell. Next.js 16 renamed the
  * `middleware.ts` convention to `proxy.ts` (the exported function is now
  * named `proxy`, not `middleware`) — see the version-16 upgrade guide.
  *
- * This only checks the session cookie's *presence*. Validity is the
- * backend's call: an expired or tampered token still passes this gate and
- * gets caught by the 401 handling in app/bff/[...path]/route.ts and
- * lib/api/client.ts, which clear the cookie and redirect.
+ * This only checks that *some* session cookie is present — access or
+ * refresh. Validity is the backend's call: an expired/tampered access token
+ * still passes this gate and gets caught by the 401 handling in
+ * app/bff/[...path]/route.ts, which tries a refresh before clearing cookies
+ * and redirecting. Gating on ist_at alone would bounce a user to /login the
+ * moment the (short-lived) access token expires, even with a perfectly good
+ * refresh token still in hand — so a live ist_rt also counts as "has session".
  */
-const SESSION_COOKIE = "ist_at";
 
 export function proxy(request: NextRequest) {
-  const hasSession = request.cookies.has(SESSION_COOKIE);
+  const hasSession =
+    request.cookies.has(ACCESS_COOKIE) || request.cookies.has(REFRESH_COOKIE);
 
   if (!hasSession) {
     const loginUrl = new URL("/login", request.url);
