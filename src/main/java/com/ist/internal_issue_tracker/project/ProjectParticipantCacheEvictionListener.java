@@ -19,10 +19,14 @@ import org.springframework.stereotype.Component;
  * one key - but a change that names a team fans out over everyone it currently reaches, since the
  * team route folds every member's participant status into that same boolean.
  *
- * <p>Plain {@code @EventListener}, not {@code @ApplicationModuleListener}: this runs inline in the
- * publisher's transaction, the same choice {@code ProjectAssignmentCleanupListener} makes and for the
- * same reason - an async gap here would let a removed member's cached {@code true} outlive the
- * removal by however long delivery takes, on top of the two-minute TTL that already bounds it.
+ * <p>Plain {@code @EventListener}: this runs inline in the publisher's transaction, the same choice
+ * {@code ProjectAssignmentCleanupListener} makes and for the same reason - a gap here would let a
+ * removed member's cached {@code true} outlive the removal by however long delivery takes, on top of
+ * the two-minute TTL that already bounds it.
+ *
+ * <p>{@code ProjectMembershipEvent} is externalised to {@code project-events} for the activity log,
+ * which changes nothing here: an event goes to the broker <em>and</em> to the listeners in this
+ * process. This one keeps its inline delivery and its guarantee.
  */
 @Component
 @RequiredArgsConstructor

@@ -99,11 +99,11 @@ public class IssueActivity {
    * When the change happened, taken verbatim from the event.
    *
    * <p>Deliberately <b>not</b> {@code @CreationTimestamp}, unlike every other entity here. The
-   * listener that writes this row is asynchronous and runs after the publisher's transaction has
-   * committed, so Hibernate's persist moment is not the moment of the change; after a restart
-   * replays outstanding publications it may not even be the same day. Every metric on this table is
-   * a difference between two of these timestamps, so whatever gap crept in here would be read back
-   * as cycle time. The publisher takes the reading, once, alongside the change itself.
+   * consumer that writes this row reads it off a topic after the publisher's transaction has
+   * committed, so Hibernate's persist moment is not the moment of the change; on a replayed offset
+   * it may not even be the same month. Every metric on this table is a difference between two of
+   * these timestamps, so whatever gap crept in here would be read back as cycle time. The publisher
+   * takes the reading, once, alongside the change itself.
    */
   @Column(nullable = false, updatable = false)
   private OffsetDateTime createdAt;

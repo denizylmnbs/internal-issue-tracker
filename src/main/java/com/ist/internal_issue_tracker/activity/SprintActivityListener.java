@@ -7,21 +7,33 @@ import com.ist.internal_issue_tracker.shared.event.SprintField;
 import com.ist.internal_issue_tracker.shared.event.SprintFieldChange;
 import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
-import org.springframework.modulith.events.ApplicationModuleListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.kafka.annotation.KafkaHandler;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Turns published sprint events into rows of {@code sprint_activities} - the sprint counterpart of
- * {@link IssueActivityListener}, and asynchronous for the same reasons.
+ * Turns sprint events read off {@code sprint-events} into rows of {@code sprint_activities} - the
+ * sprint counterpart of {@link IssueActivityListener}, and a broker consumer for the same reasons.
+ * That class also explains why the handlers are public and why they are {@code @KafkaHandler}s on a
+ * class-level listener rather than three of their own.
+ *
+ * <p>Its own group, so a sprint event that cannot be written leaves the issue feed alone.
  */
 @Component
+@KafkaListener(topics = "sprint-events", groupId = "activity-sprint-writer")
 @RequiredArgsConstructor
 class SprintActivityListener {
 
+  private static final Logger log = LoggerFactory.getLogger(SprintActivityListener.class);
+
   private final SprintActivityRepository sprintActivityRepository;
 
-  @ApplicationModuleListener
-  void on(SprintCreatedEvent event) {
+  @KafkaHandler
+  @Transactional
+  public void on(SprintCreatedEvent event) {
     record(
         event.sprintId(),
         event.projectId(),
@@ -32,8 +44,9 @@ class SprintActivityListener {
         event.occurredAt());
   }
 
-  @ApplicationModuleListener
-  void on(SprintChangedEvent event) {
+  @KafkaHandler
+  @Transactional
+  public void on(SprintChangedEvent event) {
     for (SprintFieldChange change : event.changes()) {
       record(
           event.sprintId(),
@@ -46,8 +59,9 @@ class SprintActivityListener {
     }
   }
 
-  @ApplicationModuleListener
-  void on(SprintDeletedEvent event) {
+  @KafkaHandler
+  @Transactional
+  public void on(SprintDeletedEvent event) {
     record(
         event.sprintId(),
         event.projectId(),
@@ -56,6 +70,14 @@ class SprintActivityListener {
         null,
         null,
         event.occurredAt());
+  }
+
+  /** See {@code IssueActivityListener#unknown}, including why this is a warning. */
+  @KafkaHandler(isDefault = true)
+  public void unknown(Object payload) {
+    log.warn(
+        "Dropping unhandled payload on sprint-events: {}. Nothing was written to sprint_activities.",
+        payload == null ? "null" : payload.getClass().getName());
   }
 
   private static SprintActionType toActionType(SprintField field) {

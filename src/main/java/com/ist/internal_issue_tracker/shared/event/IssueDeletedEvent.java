@@ -1,6 +1,7 @@
 package com.ist.internal_issue_tracker.shared.event;
 
 import java.time.OffsetDateTime;
+import org.springframework.modulith.events.Externalized;
 
 /**
  * Published when an issue is soft-deleted. The status is deliberately not carried: the issue keeps
@@ -16,9 +17,10 @@ import java.time.OffsetDateTime;
  * many points left the sprint on that day, and the DELETED row is the only place that can say. See
  * {@link IssueDimensions}.
  *
- * <p>See {@link IssueCreatedEvent} for why delivery is asynchronous and why the timestamp travels
- * with the event.
+ * <p>See {@link IssueCreatedEvent} for why delivery goes over Kafka, why the timestamp travels with
+ * the event, and what may and may not change about this record now that it is on the wire.
  */
+@Externalized("issue-events::#{#this.issueId().toString()}")
 public record IssueDeletedEvent(
     Integer issueId,
     Integer projectId,

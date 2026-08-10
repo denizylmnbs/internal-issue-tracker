@@ -2,6 +2,7 @@ package com.ist.internal_issue_tracker.shared.event;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import org.springframework.modulith.events.Externalized;
 
 /**
  * Published when a live issue is edited, in any of the ways that leave a trace worth keeping.
@@ -27,9 +28,10 @@ import java.util.List;
  * change list contains a {@code SPRINT} or {@code STORY_POINT} entry, the dimensions hold its new
  * value; the old one is in the change.
  *
- * <p>See {@link IssueCreatedEvent} for why delivery is asynchronous and why the timestamp travels
- * with the event.
+ * <p>See {@link IssueCreatedEvent} for why delivery goes over Kafka, why the timestamp travels with
+ * the event, and what may and may not change about this record now that it is on the wire.
  */
+@Externalized("issue-events::#{#this.issueId().toString()}")
 public record IssueChangedEvent(
     Integer issueId,
     Integer projectId,

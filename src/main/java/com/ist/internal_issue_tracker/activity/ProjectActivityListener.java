@@ -8,30 +8,48 @@ import com.ist.internal_issue_tracker.shared.event.ProjectFieldChange;
 import com.ist.internal_issue_tracker.shared.event.ProjectMembershipEvent;
 import java.time.OffsetDateTime;
 import lombok.RequiredArgsConstructor;
-import org.springframework.modulith.events.ApplicationModuleListener;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.kafka.annotation.KafkaHandler;
+import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Turns published project events into rows of {@code project_activities} - the project counterpart
- * of {@link IssueActivityListener}, and asynchronous for the same reasons.
+ * Turns project events read off {@code project-events} into rows of {@code project_activities} - the
+ * project counterpart of {@link IssueActivityListener}, and a broker consumer for the same reasons.
+ * That class also explains why the handlers are public and why they are {@code @KafkaHandler}s on a
+ * class-level listener rather than four of their own.
  *
- * <p>It listens for {@code ProjectDeletedEvent} and not for {@code ProjectDeactivatedEvent}, which
- * is published in the same breath. The two are separate on purpose; see {@code ProjectDeletedEvent}.
+ * <p>It handles {@code ProjectDeletedEvent} and not {@code ProjectDeactivatedEvent}, which is
+ * published in the same breath. The two are separate on purpose, and now for a second reason: only
+ * the deleted half is on a topic at all. See {@code ProjectDeletedEvent}.
+ *
+ * <p>{@code ProjectMembershipEvent} is the one event this application delivers both ways. It reaches
+ * {@code ProjectParticipantCacheEvictionListener} inline, inside the publishing transaction, because
+ * a stale participant must not be readable; it reaches this class over the topic, because a
+ * membership row is audit and audit must not be able to fail the request. Externalising an event
+ * does not stop it being delivered in process, so both hold at once.
  */
 @Component
+@KafkaListener(topics = "project-events", groupId = "activity-project-writer")
 @RequiredArgsConstructor
 class ProjectActivityListener {
 
+  private static final Logger log = LoggerFactory.getLogger(ProjectActivityListener.class);
+
   private final ProjectActivityRepository projectActivityRepository;
 
-  @ApplicationModuleListener
-  void on(ProjectCreatedEvent event) {
+  @KafkaHandler
+  @Transactional
+  public void on(ProjectCreatedEvent event) {
     record(
         event.projectId(), event.actorId(), ProjectActionType.CREATED, null, null, event.occurredAt());
   }
 
-  @ApplicationModuleListener
-  void on(ProjectChangedEvent event) {
+  @KafkaHandler
+  @Transactional
+  public void on(ProjectChangedEvent event) {
     for (ProjectFieldChange change : event.changes()) {
       record(
           event.projectId(),
@@ -43,8 +61,9 @@ class ProjectActivityListener {
     }
   }
 
-  @ApplicationModuleListener
-  void on(ProjectDeletedEvent event) {
+  @KafkaHandler
+  @Transactional
+  public void on(ProjectDeletedEvent event) {
     record(
         event.projectId(), event.actorId(), ProjectActionType.DELETED, null, null, event.occurredAt());
   }
@@ -53,8 +72,9 @@ class ProjectActivityListener {
    * The subject goes into {@code newValue} when joining and {@code oldValue} when leaving, so the two
    * columns keep saying "what it was" and "what it is" - see {@link ProjectActivity}.
    */
-  @ApplicationModuleListener
-  void on(ProjectMembershipEvent event) {
+  @KafkaHandler
+  @Transactional
+  public void on(ProjectMembershipEvent event) {
     boolean added = event.change() == ProjectMembershipEvent.Change.ADDED;
     String subjectId = String.valueOf(event.subjectId());
 
@@ -65,6 +85,15 @@ class ProjectActivityListener {
         added ? null : subjectId,
         added ? subjectId : null,
         event.occurredAt());
+  }
+
+  /** See {@code IssueActivityListener#unknown}, including why this is a warning. */
+  @KafkaHandler(isDefault = true)
+  public void unknown(Object payload) {
+    log.warn(
+        "Dropping unhandled payload on project-events: {}. Nothing was written to"
+            + " project_activities.",
+        payload == null ? "null" : payload.getClass().getName());
   }
 
   private static ProjectActionType toActionType(ProjectField field) {

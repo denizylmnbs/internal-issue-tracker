@@ -15,9 +15,9 @@ import org.springframework.stereotype.Component;
  * {@code AuthPrincipalCacheEvictionListener}), but refresh tokens are looked up by hash alone and
  * know nothing about the account, so revocation has to be pushed to them explicitly.
  *
- * <p>Plain {@code @EventListener}, not {@code @ApplicationModuleListener}: this is the same
- * synchronous-cleanup choice {@code TeamMembershipCleanupListener} makes for {@code
- * UserDeactivatedEvent} - an async gap here would leave a compromised, just-changed, or
+ * <p>Plain {@code @EventListener}, and the events it consumes are not externalised: this is the
+ * same synchronous-cleanup choice {@code TeamMembershipCleanupListener} makes for {@code
+ * UserDeactivatedEvent} - a trip through a broker here would leave a compromised, just-changed, or
  * just-demoted credential's refresh tokens usable for however long delivery takes.
  */
 @Component
