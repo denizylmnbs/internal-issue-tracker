@@ -71,16 +71,19 @@ public class RedisConfig {
 
   /**
    * Authorization-decision caches: {@code isLeaderOfProject}, {@code isParticipantOfProject} (keyed
-   * {@code projectId + ':' + userId}) and {@code activeTeamIdsOfUser} (keyed by {@code userId}).
-   * Every write path that can change one of these evicts the exact key(s) it affects - see {@code
-   * ProjectService}, {@code TeamMemberService} and {@code ProjectParticipantCacheEvictionListener} -
-   * so this TTL is a safety net for the paths that do not evict (project deletion, user/team
+   * {@code projectId + ':' + userId}), {@code activeTeamIdsOfUser} (keyed by {@code userId}), and
+   * {@code auth-principal} - the {@code (id, role)} pair {@code UserAuthenticatedUserLookup} resolves
+   * for every authenticated request, keyed by {@code userId}. Every write path that can change one of
+   * these evicts the exact key(s) it affects - see {@code ProjectService}, {@code TeamMemberService},
+   * {@code ProjectParticipantCacheEvictionListener}, and, for {@code auth-principal}, {@code
+   * UserService#changeRole}/{@code #deleteUser} via {@code AuthPrincipalCacheEvictionListener} - so
+   * this TTL is a safety net for the paths that do not evict (project deletion, user/team
    * deactivation cascades), not the primary invalidation mechanism the way it is for metrics. Kept
-   * far shorter than the metrics TTL because a stale {@code true} here is a stale grant, not a stale
-   * chart.
+   * far shorter than the metrics TTL because a stale {@code true} - or a stale role - here is a stale
+   * grant, not a stale chart.
    */
   private static final List<String> AUTH_CACHE_NAMES =
-      List.of("project-leader", "project-participant", "user-teams");
+      List.of("project-leader", "project-participant", "user-teams", "auth-principal");
 
   /**
    * Values are JSON, not JDK serialization: a Java-serialized cache entry breaks the moment the
@@ -92,7 +95,7 @@ public class RedisConfig {
   public RedisCacheManager cacheManager(
       RedisConnectionFactory connectionFactory,
       @Value("${app.cache.default-ttl:PT15M}") Duration defaultTtl,
-      @Value("${app.cache.metrics-ttl:PT5M}") Duration metricsTtl,
+      @Value("${app.cache.metrics-ttl:PT30M}") Duration metricsTtl,
       @Value("${app.cache.auth-ttl:PT2M}") Duration authTtl) {
     RedisSerializationContext.SerializationPair<Object> valueSerialization =
         RedisSerializationContext.SerializationPair.fromSerializer(

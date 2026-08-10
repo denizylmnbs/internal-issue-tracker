@@ -4,6 +4,7 @@ import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceException;
 import com.ist.internal_issue_tracker.shared.event.UserCredentialsChangedEvent;
 import com.ist.internal_issue_tracker.shared.event.UserDeactivatedEvent;
+import com.ist.internal_issue_tracker.shared.event.UserRoleChangedEvent;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
 import com.ist.internal_issue_tracker.shared.security.AuthenticatedUser;
 import com.ist.internal_issue_tracker.shared.security.Role;
@@ -172,6 +173,13 @@ public class UserService {
     eventPublisher.publishEvent(new UserCredentialsChangedEvent(id));
   }
 
+  /**
+   * {@code @Transactional} so the save and the event move together - {@link
+   * AuthPrincipalCacheEvictionListener} and {@code auth}'s refresh-token revocation both react to
+   * {@link UserRoleChangedEvent} synchronously, and neither should fire off the back of a role change
+   * that then fails to commit.
+   */
+  @Transactional
   public UserResponse changeRole(Integer id, RoleChangeRequest request, AuthenticatedUser caller) {
     // fetch existing user
     User user =
@@ -188,6 +196,9 @@ public class UserService {
     }
     user.changeRole(newRole);
 
-    return userMapper.toResponse(userRepository.save(user));
+    UserResponse response = userMapper.toResponse(userRepository.save(user));
+    eventPublisher.publishEvent(new UserRoleChangedEvent(id));
+
+    return response;
   }
 }

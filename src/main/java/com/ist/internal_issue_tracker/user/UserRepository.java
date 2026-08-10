@@ -1,6 +1,5 @@
 package com.ist.internal_issue_tracker.user;
 
-import com.ist.internal_issue_tracker.shared.security.Role;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -14,8 +13,6 @@ interface UserRepository extends JpaRepository<User, Integer> {
   Boolean existsByEmailAndIdNot(String email, Integer id);
 
   Optional<User> findByEmail(String email);
-
-  boolean existsByIdAndIsActiveTrue(Integer id);
 
   /**
    * The {@code CAST(... AS String)} wrappers are load-bearing: a bare {@code :name IS NULL} gives
@@ -33,7 +30,4 @@ interface UserRepository extends JpaRepository<User, Integer> {
               """)
   Page<User> findAllByFilters(
       @Param("name") String name, @Param("surname") String surname, Pageable pageable);
-
-  @Query("SELECT u.role FROM User u WHERE u.id = :id AND u.isActive = true")
-  Optional<Role> findActiveRoleById(@Param("id") Integer id);
 }
