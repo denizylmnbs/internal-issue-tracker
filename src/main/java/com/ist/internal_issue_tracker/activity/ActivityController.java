@@ -42,10 +42,17 @@ public class ActivityController {
         ApiResponse.ok(activityService.getSprintActivities(id, sprintId, pageable)));
   }
 
-  /** The project's own history - see {@code ActivityService#getProjectActivities}. */
+  /**
+   * The project-wide feed - see {@code ActivityService#getProjectActivities}. {@code scope} is
+   * optional; omit it (or send anything other than {@code PROJECT}) for the full union of project,
+   * issue and sprint history, or send {@code scope=PROJECT} for the project's own rows alone.
+   */
   @GetMapping("/activities")
   public ResponseEntity<ApiResponse<PagedResponse<ActivityResponse>>> getProjectActivities(
-      @PathVariable Integer id, Pageable pageable) {
-    return ResponseEntity.ok(ApiResponse.ok(activityService.getProjectActivities(id, pageable)));
+      @PathVariable Integer id,
+      @RequestParam(required = false) String scope,
+      Pageable pageable) {
+    return ResponseEntity.ok(
+        ApiResponse.ok(activityService.getProjectActivities(id, scope, pageable)));
   }
 }

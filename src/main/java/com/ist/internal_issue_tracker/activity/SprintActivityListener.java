@@ -22,7 +22,14 @@ class SprintActivityListener {
 
   @ApplicationModuleListener
   void on(SprintCreatedEvent event) {
-    record(event.sprintId(), event.actorId(), SprintActionType.CREATED, null, null, event.occurredAt());
+    record(
+        event.sprintId(),
+        event.projectId(),
+        event.actorId(),
+        SprintActionType.CREATED,
+        null,
+        null,
+        event.occurredAt());
   }
 
   @ApplicationModuleListener
@@ -30,6 +37,7 @@ class SprintActivityListener {
     for (SprintFieldChange change : event.changes()) {
       record(
           event.sprintId(),
+          event.projectId(),
           event.actorId(),
           toActionType(change.field()),
           change.oldValue(),
@@ -40,7 +48,14 @@ class SprintActivityListener {
 
   @ApplicationModuleListener
   void on(SprintDeletedEvent event) {
-    record(event.sprintId(), event.actorId(), SprintActionType.DELETED, null, null, event.occurredAt());
+    record(
+        event.sprintId(),
+        event.projectId(),
+        event.actorId(),
+        SprintActionType.DELETED,
+        null,
+        null,
+        event.occurredAt());
   }
 
   private static SprintActionType toActionType(SprintField field) {
@@ -53,6 +68,7 @@ class SprintActivityListener {
 
   private void record(
       Integer sprintId,
+      Integer projectId,
       Integer actorId,
       SprintActionType actionType,
       String oldValue,
@@ -66,6 +82,7 @@ class SprintActivityListener {
 
     SprintActivity activity = new SprintActivity();
     activity.setSprintId(sprintId);
+    activity.setProjectId(projectId);
     activity.setUserId(actorId);
     activity.setActionType(actionType);
     activity.setOldValue(oldValue);

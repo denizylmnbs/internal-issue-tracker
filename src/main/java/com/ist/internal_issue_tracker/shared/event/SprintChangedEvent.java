@@ -8,10 +8,12 @@ import java.util.List;
  * does - one call may move the name and both dates - and, like it, is never published with an empty
  * one.
  *
- * <p>All rows from one event share its {@code occurredAt}.
+ * <p>All rows from one event share its {@code occurredAt}. {@code projectId} travels with it for the
+ * reason given on {@link SprintCreatedEvent}.
  */
 public record SprintChangedEvent(
     Integer sprintId,
+    Integer projectId,
     Integer actorId,
     OffsetDateTime occurredAt,
     List<SprintFieldChange> changes) {}

@@ -43,7 +43,7 @@ public class SprintService {
   private final ApplicationEventPublisher eventPublisher;
 
   /** Publishes only if something moved - see {@code IssueService#publishChanges}. */
-  private void publishChanges(Integer actorId, SprintSnapshot before, Sprint after) {
+  private void publishChanges(Integer projectId, Integer actorId, SprintSnapshot before, Sprint after) {
     List<SprintFieldChange> changes = sprintChangeDetector.diff(before, after);
 
     if (changes.isEmpty()) {
@@ -51,7 +51,7 @@ public class SprintService {
     }
 
     eventPublisher.publishEvent(
-        new SprintChangedEvent(after.getId(), actorId, OffsetDateTime.now(), changes));
+        new SprintChangedEvent(after.getId(), projectId, actorId, OffsetDateTime.now(), changes));
   }
 
   /**
@@ -114,7 +114,7 @@ public class SprintService {
     }
 
     eventPublisher.publishEvent(
-        new SprintCreatedEvent(savedSprint.getId(), actorId, OffsetDateTime.now()));
+        new SprintCreatedEvent(savedSprint.getId(), projectId, actorId, OffsetDateTime.now()));
 
     return sprintMapper.toResponse(savedSprint);
   }
@@ -160,7 +160,7 @@ public class SprintService {
       throw new SprintNameAlreadyExistsException(request.name());
     }
 
-    publishChanges(actorId, before, savedSprint);
+    publishChanges(projectId, actorId, before, savedSprint);
 
     return sprintMapper.toResponse(savedSprint);
   }
@@ -210,7 +210,7 @@ public class SprintService {
       throw new AppException(SprintErrorCode.SPRINT_ALREADY_IN_PROGRESS);
     }
 
-    publishChanges(actorId, before, savedSprint);
+    publishChanges(projectId, actorId, before, savedSprint);
 
     return sprintMapper.toResponse(savedSprint);
   }
@@ -237,6 +237,6 @@ public class SprintService {
 
     sprintRepository.save(sprint);
 
-    eventPublisher.publishEvent(new SprintDeletedEvent(sprintId, actorId, deletedAt));
+    eventPublisher.publishEvent(new SprintDeletedEvent(sprintId, projectId, actorId, deletedAt));
   }
 }
