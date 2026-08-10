@@ -50,6 +50,11 @@ public class Issue {
   @Column(length = 20)
   private IssueType type;
 
+  /** Which unit resolves the issue - optional, set once triage assigns it to a team. */
+  @Enumerated(EnumType.STRING)
+  @Column(name = "resolving_unit", length = 20)
+  private IssueUnit resolvingUnit;
+
   /** No uniqueness of any kind - two issues on one project may share a name. */
   @NotBlank
   @Size(min = 2, max = 255)

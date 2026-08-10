@@ -3,6 +3,7 @@ package com.ist.internal_issue_tracker.issue.dto;
 import com.ist.internal_issue_tracker.issue.IssuePriority;
 import com.ist.internal_issue_tracker.issue.IssueStatus;
 import com.ist.internal_issue_tracker.issue.IssueType;
+import com.ist.internal_issue_tracker.issue.IssueUnit;
 import java.time.OffsetDateTime;
 
 /**
@@ -22,6 +23,7 @@ public record IssueResponse(
     String description,
     IssueStatus status,
     IssuePriority priority,
+    IssueUnit resolvingUnit,
     Integer storyPoint,
     Integer reporterId,
     Integer assigneeUserId,

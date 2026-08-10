@@ -1,5 +1,7 @@
 package com.ist.internal_issue_tracker.issue;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -57,6 +59,7 @@ interface IssueRepository extends JpaRepository<Issue, Integer> {
       AND (:type IS NULL OR i.type = :type)
       AND (:status IS NULL OR i.status = :status)
       AND (:priority IS NULL OR i.priority = :priority)
+      AND (:resolvingUnit IS NULL OR i.resolvingUnit = :resolvingUnit)
       AND (:sprintId IS NULL OR i.sprintId = :sprintId)
       AND (:epicId IS NULL OR i.epicId = :epicId)
       AND (:reporterId IS NULL OR i.reporterId = :reporterId)
@@ -69,10 +72,61 @@ interface IssueRepository extends JpaRepository<Issue, Integer> {
       @Param("type") IssueType type,
       @Param("status") IssueStatus status,
       @Param("priority") IssuePriority priority,
+      @Param("resolvingUnit") IssueUnit resolvingUnit,
       @Param("sprintId") Integer sprintId,
       @Param("epicId") Integer epicId,
       @Param("reporterId") Integer reporterId,
       @Param("assigneeUserId") Integer assigneeUserId,
       @Param("assigneeTeamId") Integer assigneeTeamId,
       Pageable pageable);
+
+  /**
+   * One person's live issues across every project they hold any, filtered to the given statuses -
+   * "My Work"'s active-issue list. Unlike every other query here there is no {@code projectId}: the
+   * whole point is that a person's work is not confined to one.
+   *
+   * <p>Read through {@code UserWorkService}, the only caller.
+   */
+  @Query(
+      """
+      SELECT i FROM Issue i
+      WHERE i.assigneeUserId = :assigneeUserId
+      AND i.deletedAt IS NULL
+      AND i.status IN :statuses
+      """)
+  Page<Issue> findByAssigneeAndStatuses(
+      @Param("assigneeUserId") Integer assigneeUserId,
+      @Param("statuses") Collection<IssueStatus> statuses,
+      Pageable pageable);
+
+  /**
+   * One person's story points, summed per project-and-sprint pair, read from {@code issues}' current
+   * state - see {@code UserSprintPoints} for why that is a deliberately different reading from the
+   * project-wide velocity query. {@code CANCELLED} issues are excluded entirely, on both sides of the
+   * sum: dropped work was never a commitment either finished or missed.
+   *
+   * <p>Unpaged and un-projectId'd like {@link #findByAssigneeAndStatuses}, for the same reason -
+   * {@code UserWorkService} needs every sprint this person touched, anywhere, to build current,
+   * previous and average progress.
+   */
+  @Query(
+      """
+      SELECT i.projectId AS projectId,
+             i.sprintId AS sprintId,
+             coalesce(sum(coalesce(i.storyPoint, 0)), 0) AS assignedPoints,
+             coalesce(sum(CASE WHEN i.status = :doneStatus THEN coalesce(i.storyPoint, 0) ELSE 0 END), 0)
+                 AS completedPoints,
+             count(i) AS assignedIssueCount,
+             sum(CASE WHEN i.status = :doneStatus THEN 1L ELSE 0L END) AS completedIssueCount
+      FROM Issue i
+      WHERE i.assigneeUserId = :assigneeUserId
+      AND i.deletedAt IS NULL
+      AND i.sprintId IS NOT NULL
+      AND i.status <> :cancelledStatus
+      GROUP BY i.projectId, i.sprintId
+      """)
+  List<UserSprintPoints> sprintPointsByAssignee(
+      @Param("assigneeUserId") Integer assigneeUserId,
+      @Param("doneStatus") IssueStatus doneStatus,
+      @Param("cancelledStatus") IssueStatus cancelledStatus);
 }

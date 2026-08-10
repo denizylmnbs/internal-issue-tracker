@@ -22,6 +22,7 @@ public class IssueMapper {
     issue.setName(request.name());
     issue.setDescription(request.description());
     issue.setType(request.type());
+    issue.setResolvingUnit(request.resolvingUnit());
     issue.setStoryPoint(request.storyPoint());
     issue.setSprintId(request.sprintId());
     issue.setEpicId(request.epicId());
@@ -45,6 +46,7 @@ public class IssueMapper {
     issue.setDescription(request.description());
     issue.setType(request.type());
     issue.setPriority(request.priority());
+    issue.setResolvingUnit(request.resolvingUnit());
     issue.setStoryPoint(request.storyPoint());
     issue.setSprintId(request.sprintId());
     issue.setEpicId(request.epicId());
@@ -61,6 +63,7 @@ public class IssueMapper {
         issue.getDescription(),
         issue.getStatus(),
         issue.getPriority(),
+        issue.getResolvingUnit(),
         issue.getStoryPoint(),
         issue.getReporterId(),
         issue.getAssigneeUserId(),

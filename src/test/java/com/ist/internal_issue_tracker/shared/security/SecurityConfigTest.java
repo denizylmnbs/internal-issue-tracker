@@ -115,6 +115,14 @@ class SecurityConfigTest {
       "{\"name\":\"Login fails\",\"description\":\"x\",\"type\":\"BUG\",\"priority\":\"HIGH\"}";
   private static final String CHANGE_ISSUE_STATUS_BODY = "{\"status\":\"IN_PROGRESS\"}";
   private static final String CHANGE_ASSIGNEE_BODY = "{\"assigneeUserId\":7,\"assigneeTeamId\":3}";
+
+  /** Keyed by the last path segment, so the parameterised planning tests can walk the routes. */
+  private static final java.util.Map<String, String> PLANNING_BODIES =
+      java.util.Map.of(
+          "sprint", "{\"sprintId\":10}",
+          "epic", "{\"epicId\":20}",
+          "classification", "{\"type\":\"BUG\",\"priority\":\"HIGH\",\"storyPoint\":5}");
+
   private static final String COMMENT_BODY = "{\"content\":\"Reproduced on staging.\"}";
 
   @Autowired private MockMvc mockMvc;
@@ -883,6 +891,7 @@ class SecurityConfigTest {
         IssueStatus.BACKLOG,
         IssuePriority.HIGH,
         null,
+        null,
         99,
         null,
         null,
@@ -968,6 +977,45 @@ class SecurityConfigTest {
                     "{\"name\":\"Login fails\",\"description\":\"x\",\"type\":\"BUG\","
                         + "\"priority\":\"HIGH\"}"))
         .andExpect(status().isOk());
+  }
+
+  /**
+   * The three narrow planning PATCHes are {@code PUT /issues/{issueId}} taken apart, so they carry
+   * the same gate rather than the assignee-aware one the status and assignee routes get. A route
+   * added to the controller and left out of {@code SecurityConfig} would fall through to {@code
+   * anyRequest().authenticated()} and quietly open to everyone logged in - which is what these two
+   * walk each of them for.
+   */
+  @ParameterizedTest
+  @ValueSource(strings = {"sprint", "epic", "classification"})
+  void changeIssuePlanningField_isAllowed_forAParticipantOfThatProject(String field)
+      throws Exception {
+    when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
+    when(issueService.changeSprint(eq(1), eq(30), eq(6), any())).thenReturn(issueResponse());
+    when(issueService.changeEpic(eq(1), eq(30), eq(6), any())).thenReturn(issueResponse());
+    when(issueService.changeClassification(eq(1), eq(30), eq(6), any()))
+        .thenReturn(issueResponse());
+
+    mockMvc
+        .perform(
+            patch("/api/projects/1/issues/30/" + field)
+                .with(as(6, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(PLANNING_BODIES.get(field)))
+        .andExpect(status().isOk());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"sprint", "epic", "classification"})
+  void changeIssuePlanningField_returns403_forADeveloperOffTheProject(String field)
+      throws Exception {
+    mockMvc
+        .perform(
+            patch("/api/projects/1/issues/30/" + field)
+                .with(as(6, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(PLANNING_BODIES.get(field)))
+        .andExpect(status().isForbidden());
   }
 
   @Test

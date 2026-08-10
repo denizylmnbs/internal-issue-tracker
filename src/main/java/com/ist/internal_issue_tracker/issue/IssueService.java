@@ -1,6 +1,9 @@
 package com.ist.internal_issue_tracker.issue;
 
 import com.ist.internal_issue_tracker.issue.dto.ChangeAssigneeRequest;
+import com.ist.internal_issue_tracker.issue.dto.ChangeClassificationRequest;
+import com.ist.internal_issue_tracker.issue.dto.ChangeEpicRequest;
+import com.ist.internal_issue_tracker.issue.dto.ChangeSprintRequest;
 import com.ist.internal_issue_tracker.issue.dto.ChangeStatusRequest;
 import com.ist.internal_issue_tracker.issue.dto.IssueCreateRequest;
 import com.ist.internal_issue_tracker.issue.dto.IssueResponse;
@@ -14,11 +17,13 @@ import com.ist.internal_issue_tracker.shared.event.IssueDeletedEvent;
 import com.ist.internal_issue_tracker.shared.event.IssueDimensions;
 import com.ist.internal_issue_tracker.shared.event.IssueFieldChange;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
+import com.ist.internal_issue_tracker.shared.exception.CommonErrorCode;
 import com.ist.internal_issue_tracker.shared.port.EpicLookup;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.SprintLookup;
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
 import com.ist.internal_issue_tracker.shared.port.UserLookup;
+import com.ist.internal_issue_tracker.shared.security.Role;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -129,6 +134,33 @@ public class IssueService {
   }
 
   /**
+   * Narrows {@code SecurityConfig}'s URL-level gate (editor / leader / participant) for the three
+   * routes where "any participant" is too wide: an editor, the project's leader, or the issue's own
+   * assignee may move its status or change who it is assigned to. The gate cannot express this
+   * itself - its {@code AuthorizationManager}s only ever see the project id and the caller's id, not
+   * the issue, so "is the caller this issue's assignee" can only be asked once the issue is loaded,
+   * here.
+   *
+   * <p>A caller who is not a participant at all is still turned away by the URL-level gate before
+   * this method runs, so the effective rule is {@code editor | leader | (participant & assignee)}.
+   */
+  private void requireEditorLeaderOrAssignee(Integer projectId, Integer actorId, Issue issue) {
+    if (userLookup.hasAtLeastRole(actorId, Role.EDITOR)) {
+      return;
+    }
+
+    if (projectLookup.isLeaderOfProject(projectId, actorId)) {
+      return;
+    }
+
+    if (actorId.equals(issue.getAssigneeUserId())) {
+      return;
+    }
+
+    throw new AppException(CommonErrorCode.FORBIDDEN);
+  }
+
+  /**
    * Assignees only have to exist and be active. Being a participant of the project is deliberately
    * <em>not</em> required - work is sometimes handed to someone outside the project for a day, and
    * refusing that would be a stricter rule than anyone asked for. Tightening it later is one call to
@@ -182,6 +214,7 @@ public class IssueService {
       IssueType type,
       IssueStatus status,
       IssuePriority priority,
+      IssueUnit resolvingUnit,
       Integer sprintId,
       Integer epicId,
       Integer reporterId,
@@ -198,6 +231,7 @@ public class IssueService {
             type,
             status,
             priority,
+            resolvingUnit,
             sprintId,
             epicId,
             reporterId,
@@ -243,6 +277,8 @@ public class IssueService {
 
     Issue issue = requireLiveIssue(projectId, issueId);
 
+    requireEditorLeaderOrAssignee(projectId, actorId, issue);
+
     IssueSnapshot before = IssueSnapshot.of(issue);
 
     issue.setStatus(request.status());
@@ -250,6 +286,92 @@ public class IssueService {
     Issue savedIssue = issueRepository.save(issue);
 
     // every cycle time, lead time and throughput number is built from the rows this line writes
+    publishChanges(projectId, actorId, before, savedIssue);
+
+    return issueMapper.toResponse(savedIssue);
+  }
+
+  /**
+   * The narrow counterpart of {@link #updateIssue}: it moves the sprint and touches nothing else, so
+   * a caller planning a sprint does not have to carry every other field through the round trip to
+   * leave it where it was.
+   *
+   * <p>The placement check is the same one {@code updateIssue} makes and is made for the same reason
+   * - see {@link #requireValidPlacement}. The epic is passed as null because this call does not
+   * propose one, not because it clears one.
+   *
+   * <p>No {@link #requireEditorLeaderOrAssignee}. Which sprint an issue sits in is a planning
+   * decision rather than a report on one's own work, so it keeps {@code SecurityConfig}'s wider gate
+   * - the same one {@code updateIssue} runs behind, since this is that method taken apart.
+   */
+  @Transactional
+  public IssueResponse changeSprint(
+      Integer projectId, Integer issueId, Integer actorId, ChangeSprintRequest request) {
+    requireActiveProject(projectId);
+
+    Issue issue = requireLiveIssue(projectId, issueId);
+
+    requireValidPlacement(projectId, request.sprintId(), null);
+
+    IssueSnapshot before = IssueSnapshot.of(issue);
+
+    issue.setSprintId(request.sprintId());
+
+    Issue savedIssue = issueRepository.save(issue);
+
+    publishChanges(projectId, actorId, before, savedIssue);
+
+    return issueMapper.toResponse(savedIssue);
+  }
+
+  /**
+   * As {@link #changeSprint}, for the epic. The one difference is silent: {@code publishChanges}
+   * finds nothing to report, because the epic is the field {@code IssueSnapshot} deliberately omits
+   * for want of an action type to record it under.
+   */
+  @Transactional
+  public IssueResponse changeEpic(
+      Integer projectId, Integer issueId, Integer actorId, ChangeEpicRequest request) {
+    requireActiveProject(projectId);
+
+    Issue issue = requireLiveIssue(projectId, issueId);
+
+    requireValidPlacement(projectId, null, request.epicId());
+
+    IssueSnapshot before = IssueSnapshot.of(issue);
+
+    issue.setEpicId(request.epicId());
+
+    Issue savedIssue = issueRepository.save(issue);
+
+    publishChanges(projectId, actorId, before, savedIssue);
+
+    return issueMapper.toResponse(savedIssue);
+  }
+
+  /**
+   * Replaces the type, priority and estimate together - see {@link ChangeClassificationRequest} for
+   * why those three and no others.
+   *
+   * <p>A caller changing one of them restates the other two as they stand, and the detector answers
+   * with changes for whichever actually moved, so restating a value it already held costs nothing
+   * and writes nothing.
+   */
+  @Transactional
+  public IssueResponse changeClassification(
+      Integer projectId, Integer issueId, Integer actorId, ChangeClassificationRequest request) {
+    requireActiveProject(projectId);
+
+    Issue issue = requireLiveIssue(projectId, issueId);
+
+    IssueSnapshot before = IssueSnapshot.of(issue);
+
+    issue.setType(request.type());
+    issue.setPriority(request.priority());
+    issue.setStoryPoint(request.storyPoint());
+
+    Issue savedIssue = issueRepository.save(issue);
+
     publishChanges(projectId, actorId, before, savedIssue);
 
     return issueMapper.toResponse(savedIssue);
@@ -267,6 +389,7 @@ public class IssueService {
 
     Issue issue = requireLiveIssue(projectId, issueId);
 
+    requireEditorLeaderOrAssignee(projectId, actorId, issue);
     requireValidAssignees(request.assigneeUserId(), request.assigneeTeamId());
 
     IssueSnapshot before = IssueSnapshot.of(issue);
@@ -288,6 +411,8 @@ public class IssueService {
     requireActiveProject(projectId);
 
     Issue issue = requireLiveIssue(projectId, issueId);
+
+    requireEditorLeaderOrAssignee(projectId, actorId, issue);
 
     IssueSnapshot before = IssueSnapshot.of(issue);
 

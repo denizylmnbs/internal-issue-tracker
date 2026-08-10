@@ -2,6 +2,7 @@ package com.ist.internal_issue_tracker.issue.dto;
 
 import com.ist.internal_issue_tracker.issue.IssuePriority;
 import com.ist.internal_issue_tracker.issue.IssueType;
+import com.ist.internal_issue_tracker.issue.IssueUnit;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
@@ -21,6 +22,7 @@ public record IssueUpdateRequest(
     String description,
     @NotNull(message = "Type cannot be null") IssueType type,
     @NotNull(message = "Priority cannot be null") IssuePriority priority,
+    IssueUnit resolvingUnit,
     @PositiveOrZero(message = "Story point cannot be negative") Integer storyPoint,
     Integer sprintId,
     Integer epicId) {}
