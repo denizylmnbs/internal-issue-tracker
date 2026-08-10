@@ -13,13 +13,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaHandler;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Turns project events read off {@code project-events} into rows of {@code project_activities} - the
  * project counterpart of {@link IssueActivityListener}, and a broker consumer for the same reasons.
- * That class also explains why the handlers are public and why they are {@code @KafkaHandler}s on a
- * class-level listener rather than four of their own.
+ * That class also explains why the handlers run without a transaction and why they are
+ * {@code @KafkaHandler}s on a class-level listener rather than four of their own.
  *
  * <p>It handles {@code ProjectDeletedEvent} and not {@code ProjectDeactivatedEvent}, which is
  * published in the same breath. The two are separate on purpose, and now for a second reason: only
@@ -41,15 +40,13 @@ class ProjectActivityListener {
   private final ProjectActivityRepository projectActivityRepository;
 
   @KafkaHandler
-  @Transactional
-  public void on(ProjectCreatedEvent event) {
+  void on(ProjectCreatedEvent event) {
     record(
         event.projectId(), event.actorId(), ProjectActionType.CREATED, null, null, event.occurredAt());
   }
 
   @KafkaHandler
-  @Transactional
-  public void on(ProjectChangedEvent event) {
+  void on(ProjectChangedEvent event) {
     for (ProjectFieldChange change : event.changes()) {
       record(
           event.projectId(),
@@ -62,8 +59,7 @@ class ProjectActivityListener {
   }
 
   @KafkaHandler
-  @Transactional
-  public void on(ProjectDeletedEvent event) {
+  void on(ProjectDeletedEvent event) {
     record(
         event.projectId(), event.actorId(), ProjectActionType.DELETED, null, null, event.occurredAt());
   }
@@ -73,8 +69,7 @@ class ProjectActivityListener {
    * columns keep saying "what it was" and "what it is" - see {@link ProjectActivity}.
    */
   @KafkaHandler
-  @Transactional
-  public void on(ProjectMembershipEvent event) {
+  void on(ProjectMembershipEvent event) {
     boolean added = event.change() == ProjectMembershipEvent.Change.ADDED;
     String subjectId = String.valueOf(event.subjectId());
 
@@ -89,7 +84,7 @@ class ProjectActivityListener {
 
   /** See {@code IssueActivityListener#unknown}, including why this is a warning. */
   @KafkaHandler(isDefault = true)
-  public void unknown(Object payload) {
+  void unknown(Object payload) {
     log.warn(
         "Dropping unhandled payload on project-events: {}. Nothing was written to"
             + " project_activities.",

@@ -13,7 +13,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaHandler;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Turns issue events read off {@code issue-events} into rows of {@code issue_activities}. The only
@@ -31,10 +30,14 @@ import org.springframework.transaction.annotation.Transactional;
  * been written days ago. Nothing here may read the clock or the database for anything the event does
  * not already carry - see {@code IssueActivity#createdAt}.
  *
- * <p>The handlers are {@code public} because {@code @Transactional} is applied by a proxy, and a
- * proxy does not advise methods it cannot override. Package-private here would not fail; it would
- * quietly leave each {@code save} in its own transaction, so a change touching four fields could
- * land as two rows and a rollback.
+ * <p>No transaction is opened around a handler. Each {@code save} commits on its own, so a
+ * multi-field change lands one row at a time rather than all at once - which is fine here, because
+ * delivery is at-least-once and every row is written behind the {@code existsBy…} check below: a
+ * handler that fails half way is redelivered, skips what it already wrote, and finishes the rest.
+ * The one case that does not converge is a failure that outlives its retries and ends in the dead
+ * letter topic, which leaves the rows written before it in place. That is the price of not wrapping
+ * this, and it is worth paying: for an audit log, part of an operation recorded is better than none
+ * of it, and the dead letter says what was lost either way.
  *
  * <p>Class-level {@code @KafkaListener} with {@code @KafkaHandler} methods rather than three
  * separate listeners, because all three types share one topic and one group: the handler is chosen
@@ -50,8 +53,7 @@ class IssueActivityListener {
   private final IssueActivityRepository issueActivityRepository;
 
   @KafkaHandler
-  @Transactional
-  public void on(IssueCreatedEvent event) {
+  void on(IssueCreatedEvent event) {
     record(
         event.issueId(),
         event.projectId(),
@@ -69,8 +71,7 @@ class IssueActivityListener {
    * are the issue's state after the whole operation rather than after each field of it.
    */
   @KafkaHandler
-  @Transactional
-  public void on(IssueChangedEvent event) {
+  void on(IssueChangedEvent event) {
     for (IssueFieldChange change : event.changes()) {
       record(
           event.issueId(),
@@ -85,8 +86,7 @@ class IssueActivityListener {
   }
 
   @KafkaHandler
-  @Transactional
-  public void on(IssueDeletedEvent event) {
+  void on(IssueDeletedEvent event) {
     record(
         event.issueId(),
         event.projectId(),
@@ -112,7 +112,7 @@ class IssueActivityListener {
    * saying so.
    */
   @KafkaHandler(isDefault = true)
-  public void unknown(Object payload) {
+  void unknown(Object payload) {
     log.warn(
         "Dropping unhandled payload on issue-events: {}. Nothing was written to issue_activities.",
         payload == null ? "null" : payload.getClass().getName());

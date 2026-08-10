@@ -12,13 +12,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaHandler;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Turns sprint events read off {@code sprint-events} into rows of {@code sprint_activities} - the
  * sprint counterpart of {@link IssueActivityListener}, and a broker consumer for the same reasons.
- * That class also explains why the handlers are public and why they are {@code @KafkaHandler}s on a
- * class-level listener rather than three of their own.
+ * That class also explains why the handlers run without a transaction and why they are
+ * {@code @KafkaHandler}s on a class-level listener rather than three of their own.
  *
  * <p>Its own group, so a sprint event that cannot be written leaves the issue feed alone.
  */
@@ -32,8 +31,7 @@ class SprintActivityListener {
   private final SprintActivityRepository sprintActivityRepository;
 
   @KafkaHandler
-  @Transactional
-  public void on(SprintCreatedEvent event) {
+  void on(SprintCreatedEvent event) {
     record(
         event.sprintId(),
         event.projectId(),
@@ -45,8 +43,7 @@ class SprintActivityListener {
   }
 
   @KafkaHandler
-  @Transactional
-  public void on(SprintChangedEvent event) {
+  void on(SprintChangedEvent event) {
     for (SprintFieldChange change : event.changes()) {
       record(
           event.sprintId(),
@@ -60,8 +57,7 @@ class SprintActivityListener {
   }
 
   @KafkaHandler
-  @Transactional
-  public void on(SprintDeletedEvent event) {
+  void on(SprintDeletedEvent event) {
     record(
         event.sprintId(),
         event.projectId(),
@@ -74,7 +70,7 @@ class SprintActivityListener {
 
   /** See {@code IssueActivityListener#unknown}, including why this is a warning. */
   @KafkaHandler(isDefault = true)
-  public void unknown(Object payload) {
+  void unknown(Object payload) {
     log.warn(
         "Dropping unhandled payload on sprint-events: {}. Nothing was written to sprint_activities.",
         payload == null ? "null" : payload.getClass().getName());
