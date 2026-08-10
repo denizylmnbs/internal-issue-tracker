@@ -28,8 +28,8 @@ import org.springframework.modulith.events.Externalized;
  * change list contains a {@code SPRINT} or {@code STORY_POINT} entry, the dimensions hold its new
  * value; the old one is in the change.
  *
- * <p>See {@link IssueCreatedEvent} for why delivery goes over Kafka, why the timestamp travels with
- * the event, and what may and may not change about this record now that it is on the wire.
+ * <p>See {@link IssueCreatedEvent} for why delivery is asynchronous and why the timestamp travels
+ * with the event.
  */
 @Externalized("issue-events::#{#this.issueId().toString()}")
 public record IssueChangedEvent(

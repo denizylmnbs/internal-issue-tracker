@@ -14,10 +14,9 @@ import org.springframework.stereotype.Component;
  * only holds if a deactivated user and a deleted team take their rows down with them, which is what
  * this does - once, at delete time, instead of a join on every read.
  *
- * <p>Plain {@code @EventListener}, and the events it consumes are not externalised: delivery over a
- * broker would leave a window in which a deleted team's roster is still being served. The listener
- * runs inline in the publisher's transaction, so the delete and the cleanup commit together or not
- * at all.
+ * <p>Plain {@code @EventListener}, and these events stay in the process: anything asynchronous would
+ * leave a window in which a deleted team's roster is still being served. The listener runs inline in
+ * the publisher's transaction, so the delete and the cleanup commit together or not at all.
  */
 @Component
 @RequiredArgsConstructor

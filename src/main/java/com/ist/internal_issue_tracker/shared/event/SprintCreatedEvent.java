@@ -4,13 +4,8 @@ import java.time.OffsetDateTime;
 import org.springframework.modulith.events.Externalized;
 
 /**
- * Published when a sprint is opened. See {@link IssueCreatedEvent} for why delivery goes over Kafka,
- * why {@code occurredAt} travels with the event rather than being read by the consumer, and what may
- * and may not change about this record now that it is on the wire.
- *
- * <p>Keyed on the sprint rather than the project: the ordering that has to hold is between the
- * events of one sprint, and keying on {@code projectId} would crowd every sprint in a busy project
- * onto one partition for no gain.
+ * Published when a sprint is opened. See {@link IssueCreatedEvent} for why delivery is asynchronous
+ * and why {@code occurredAt} travels with the event rather than being read by the consumer.
  *
  * <p>Carries {@code projectId} for the same reason the issue events do: {@code sprint_activities}
  * now has a column for it (V4__sprint_activities_project_id.sql), so the project-wide activity feed

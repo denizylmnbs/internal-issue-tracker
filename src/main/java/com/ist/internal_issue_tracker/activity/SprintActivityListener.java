@@ -14,12 +14,8 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Turns sprint events read off {@code sprint-events} into rows of {@code sprint_activities} - the
- * sprint counterpart of {@link IssueActivityListener}, and a broker consumer for the same reasons.
- * That class also explains why the handlers run without a transaction and why they are
- * {@code @KafkaHandler}s on a class-level listener rather than three of their own.
- *
- * <p>Its own group, so a sprint event that cannot be written leaves the issue feed alone.
+ * Turns published sprint events into rows of {@code sprint_activities} - the sprint counterpart of
+ * {@link IssueActivityListener}, and asynchronous for the same reasons.
  */
 @Component
 @KafkaListener(topics = "sprint-events", groupId = "activity-sprint-writer")
@@ -68,11 +64,14 @@ class SprintActivityListener {
         event.occurredAt());
   }
 
-  /** See {@code IssueActivityListener#unknown}, including why this is a warning. */
+  // Anything on sprint-events this class has no handler for. Swallowed rather than thrown: an
+  // unrecognised type is an error no retry can fix, so it would stop the partition and
+  // everything behind it. Warned about, because every type published here does have a
+  // handler above - reaching this means an activity row was dropped.
   @KafkaHandler(isDefault = true)
   void unknown(Object payload) {
     log.warn(
-        "Dropping unhandled payload on sprint-events: {}. Nothing was written to sprint_activities.",
+        "Dropped unhandled payload on sprint-events: {}. Nothing written to sprint_activities.",
         payload == null ? "null" : payload.getClass().getName());
   }
 

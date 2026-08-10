@@ -15,10 +15,10 @@ import org.springframework.stereotype.Component;
  * immediately rather than ride out the two-minute TTL - the same reasoning {@code
  * ProjectParticipantCacheEvictionListener} applies to project/team membership.
  *
- * <p>Plain {@code @EventListener}, and the events it consumes are not externalised: this runs inline
- * in the publisher's transaction, the same choice {@code RefreshTokenRevocationListener} makes for
- * these same events - a gap here would leave a demoted or deactivated user's cached grant usable for
- * however long delivery takes.
+ * <p>Plain {@code @EventListener}, and these events stay in the process: this runs inline in the
+ * publisher's transaction, the same choice {@code RefreshTokenRevocationListener} makes for these
+ * same events - an async gap here would leave a demoted or deactivated user's cached grant usable
+ * for however long delivery takes.
  */
 @Component
 @RequiredArgsConstructor

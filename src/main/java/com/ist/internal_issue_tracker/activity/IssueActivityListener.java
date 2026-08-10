@@ -15,33 +15,19 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Turns issue events read off {@code issue-events} into rows of {@code issue_activities}. The only
- * writer this table has.
+ * Turns published issue events into rows of {@code issue_activities}. The only writer this table
+ * has.
  *
- * <p>A broker consumer rather than the plain {@code @EventListener} the cleanup listeners use, and
+ * <p>A Kafka consumer rather than the plain {@code @EventListener} the cleanup listeners use, and
  * the difference is deliberate. Those run inline in the publisher's transaction because a
  * deactivated user must never be readable on a roster for even an instant. Nothing reads an activity
- * row to make a decision, so there is no such window to close, and what comes with going through
- * Kafka is worth having: a fault in here cannot turn a successful issue write into a 500, the
- * backlog survives this process dying, and the day the activity module becomes its own service this
- * class moves with it and the publisher never learns.
+ * row to make a decision, so there is no such window to close, and the two properties that come with
+ * the asynchronous form are worth having: a fault in here cannot turn a successful issue write into
+ * a 500, and the topic still holds the event if this process dies mid-way.
  *
- * <p>It also means this runs after the commit, in another thread, reading a record that may have
- * been written days ago. Nothing here may read the clock or the database for anything the event does
- * not already carry - see {@code IssueActivity#createdAt}.
- *
- * <p>No transaction is opened around a handler. Each {@code save} commits on its own, so a
- * multi-field change lands one row at a time rather than all at once - which is fine here, because
- * delivery is at-least-once and every row is written behind the {@code existsBy…} check below: a
- * handler that fails half way is redelivered, skips what it already wrote, and finishes the rest.
- * The one case that does not converge is a failure that outlives its retries and ends in the dead
- * letter topic, which leaves the rows written before it in place. That is the price of not wrapping
- * this, and it is worth paying: for an audit log, part of an operation recorded is better than none
- * of it, and the dead letter says what was lost either way.
- *
- * <p>Class-level {@code @KafkaListener} with {@code @KafkaHandler} methods rather than three
- * separate listeners, because all three types share one topic and one group: the handler is chosen
- * from the {@code __TypeId__} header the producer writes - see {@code KafkaMessagingConfig}.
+ * <p>It also means this listener runs after the commit, on another thread. Nothing here may read the
+ * clock or the database for anything the event does not already carry - see {@code
+ * IssueActivity#createdAt}.
  */
 @Component
 @KafkaListener(topics = "issue-events", groupId = "activity-issue-writer")
@@ -98,27 +84,18 @@ class IssueActivityListener {
         event.dimensions());
   }
 
-  /**
-   * Swallows anything on the topic this class was not written for, and complains about it.
-   *
-   * <p>It has to swallow: an unrecognised type raised as an error is an error no retry can fix, and
-   * it would stop the partition and everything queued behind it.
-   *
-   * <p>It has to complain, at {@code WARN} and not lower, because on this topic there is no such
-   * thing as a payload we are not interested in - every type published to {@code issue-events} has a
-   * handler above. Reaching here means an event was accepted from a publisher and dropped: a
-   * producer sending something new, a type header that did not survive, a converter not configured
-   * the way it is here. Logged quietly, that is an activity log missing rows and nothing anywhere
-   * saying so.
-   */
+  /** The one place the publisher's vocabulary meets the table's - see {@link IssueActionType}. */
+  // Anything on issue-events this class has no handler for. Swallowed rather than thrown: an
+  // unrecognised type is an error no retry can fix, so it would stop the partition and
+  // everything behind it. Warned about, because every type published here does have a
+  // handler above - reaching this means an activity row was dropped.
   @KafkaHandler(isDefault = true)
   void unknown(Object payload) {
     log.warn(
-        "Dropping unhandled payload on issue-events: {}. Nothing was written to issue_activities.",
+        "Dropped unhandled payload on issue-events: {}. Nothing written to issue_activities.",
         payload == null ? "null" : payload.getClass().getName());
   }
 
-  /** The one place the publisher's vocabulary meets the table's - see {@link IssueActionType}. */
   private static IssueActionType toActionType(IssueField field) {
     return switch (field) {
       case STATUS -> IssueActionType.STATUS_UPDATED;

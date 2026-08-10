@@ -15,20 +15,11 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 /**
- * Turns project events read off {@code project-events} into rows of {@code project_activities} - the
- * project counterpart of {@link IssueActivityListener}, and a broker consumer for the same reasons.
- * That class also explains why the handlers run without a transaction and why they are
- * {@code @KafkaHandler}s on a class-level listener rather than four of their own.
+ * Turns published project events into rows of {@code project_activities} - the project counterpart
+ * of {@link IssueActivityListener}, and asynchronous for the same reasons.
  *
- * <p>It handles {@code ProjectDeletedEvent} and not {@code ProjectDeactivatedEvent}, which is
- * published in the same breath. The two are separate on purpose, and now for a second reason: only
- * the deleted half is on a topic at all. See {@code ProjectDeletedEvent}.
- *
- * <p>{@code ProjectMembershipEvent} is the one event this application delivers both ways. It reaches
- * {@code ProjectParticipantCacheEvictionListener} inline, inside the publishing transaction, because
- * a stale participant must not be readable; it reaches this class over the topic, because a
- * membership row is audit and audit must not be able to fail the request. Externalising an event
- * does not stop it being delivered in process, so both hold at once.
+ * <p>It listens for {@code ProjectDeletedEvent} and not for {@code ProjectDeactivatedEvent}, which
+ * is published in the same breath. The two are separate on purpose; see {@code ProjectDeletedEvent}.
  */
 @Component
 @KafkaListener(topics = "project-events", groupId = "activity-project-writer")
@@ -82,12 +73,14 @@ class ProjectActivityListener {
         event.occurredAt());
   }
 
-  /** See {@code IssueActivityListener#unknown}, including why this is a warning. */
+  // Anything on project-events this class has no handler for. Swallowed rather than thrown: an
+  // unrecognised type is an error no retry can fix, so it would stop the partition and
+  // everything behind it. Warned about, because every type published here does have a
+  // handler above - reaching this means an activity row was dropped.
   @KafkaHandler(isDefault = true)
   void unknown(Object payload) {
     log.warn(
-        "Dropping unhandled payload on project-events: {}. Nothing was written to"
-            + " project_activities.",
+        "Dropped unhandled payload on project-events: {}. Nothing written to project_activities.",
         payload == null ? "null" : payload.getClass().getName());
   }
 

@@ -17,8 +17,8 @@ import org.springframework.modulith.events.Externalized;
  * many points left the sprint on that day, and the DELETED row is the only place that can say. See
  * {@link IssueDimensions}.
  *
- * <p>See {@link IssueCreatedEvent} for why delivery goes over Kafka, why the timestamp travels with
- * the event, and what may and may not change about this record now that it is on the wire.
+ * <p>See {@link IssueCreatedEvent} for why delivery is asynchronous and why the timestamp travels
+ * with the event.
  */
 @Externalized("issue-events::#{#this.issueId().toString()}")
 public record IssueDeletedEvent(

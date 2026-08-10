@@ -20,13 +20,11 @@ import org.springframework.stereotype.Component;
  * team route folds every member's participant status into that same boolean.
  *
  * <p>Plain {@code @EventListener}: this runs inline in the publisher's transaction, the same choice
- * {@code ProjectAssignmentCleanupListener} makes and for the same reason - a gap here would let a
- * removed member's cached {@code true} outlive the removal by however long delivery takes, on top of
- * the two-minute TTL that already bounds it.
- *
- * <p>{@code ProjectMembershipEvent} is externalised to {@code project-events} for the activity log,
- * which changes nothing here: an event goes to the broker <em>and</em> to the listeners in this
- * process. This one keeps its inline delivery and its guarantee.
+ * {@code ProjectAssignmentCleanupListener} makes and for the same reason - an async gap here would
+ * let a removed member's cached {@code true} outlive the removal by however long delivery takes, on
+ * top of the two-minute TTL that already bounds it. Externalising {@code ProjectMembershipEvent} for
+ * the activity log does not change that: an event reaches the broker and the in-process listeners
+ * both.
  */
 @Component
 @RequiredArgsConstructor
