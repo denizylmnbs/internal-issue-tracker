@@ -77,6 +77,8 @@ async function proxy(req: NextRequest, path: string[]): Promise<Response> {
   const headers = new Headers({ "Content-Type": "application/json" });
   const location = upstream.headers.get("Location");
   if (location) headers.set("Location", location);
+  const retryAfter = upstream.headers.get("Retry-After");
+  if (retryAfter) headers.set("Retry-After", retryAfter);
 
   const response = new NextResponse(responseBody, {
     status: upstream.status,

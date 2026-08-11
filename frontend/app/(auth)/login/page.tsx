@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -23,12 +23,20 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [retryAfter, setRetryAfter] = useState(0);
 
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  // Ticks the lockout down to 0 so the button re-enables itself without a reload.
+  useEffect(() => {
+    if (retryAfter <= 0) return;
+    const timer = setInterval(() => setRetryAfter((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [retryAfter]);
 
   const onSubmit = async (values: FormValues) => {
     setServerError(null);
@@ -40,11 +48,16 @@ function LoginForm() {
     const body = await res.json();
 
     if (!body.success) {
-      setServerError(
-        body.error?.code === "INVALID_CREDENTIALS"
-          ? "Incorrect email or password."
-          : (body.error?.message ?? "Sign in failed."),
-      );
+      if (body.error?.code === "RATE_LIMITED") {
+        setRetryAfter(body.error.retryAfterSeconds ?? 60);
+        setServerError("Too many attempts. Please wait a moment and try again.");
+      } else {
+        setServerError(
+          body.error?.code === "INVALID_CREDENTIALS"
+            ? "Incorrect email or password."
+            : (body.error?.message ?? "Sign in failed."),
+        );
+      }
       return;
     }
 
@@ -79,8 +92,12 @@ function LoginForm() {
 
       {serverError && <p className="text-sm text-rust">{serverError}</p>}
 
-      <Button type="submit" className="w-full" disabled={isSubmitting}>
-        {isSubmitting ? "Signing in…" : "Sign in"}
+      <Button type="submit" className="w-full" disabled={isSubmitting || retryAfter > 0}>
+        {retryAfter > 0
+          ? `Try again in ${retryAfter}s`
+          : isSubmitting
+            ? "Signing in…"
+            : "Sign in"}
       </Button>
 
       <p className="text-center text-sm text-slate">

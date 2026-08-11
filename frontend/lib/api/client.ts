@@ -48,7 +48,12 @@ export async function apiFetch<T>(
   const body = (text ? JSON.parse(text) : { success: true }) as ApiResponse<T>;
 
   if (!body.success) {
-    throw new ApiClientError(res.status, body.error);
+    const retryAfter = res.headers.get("Retry-After");
+    throw new ApiClientError(
+      res.status,
+      body.error,
+      retryAfter ? Number(retryAfter) : undefined,
+    );
   }
 
   return body.data;

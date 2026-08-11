@@ -2,6 +2,8 @@ package com.ist.internal_issue_tracker.shared.security;
 
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
+import com.ist.internal_issue_tracker.shared.ratelimit.RateLimitFilter;
+import com.ist.internal_issue_tracker.shared.ratelimit.RateLimiterService;
 import java.util.List;
 import java.util.function.BiPredicate;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,6 +25,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import tools.jackson.databind.ObjectMapper;
 
 @Configuration
 @EnableWebSecurity
@@ -93,7 +96,9 @@ public class SecurityConfig {
       RoleHierarchy roleHierarchy,
       TeamLookup teamLookup,
       ProjectLookup projectLookup,
-      CorsConfigurationSource corsConfigurationSource)
+      CorsConfigurationSource corsConfigurationSource,
+      RateLimiterService rateLimiterService,
+      ObjectMapper objectMapper)
       throws Exception {
     http.csrf(csrf -> csrf.disable())
         // Ahead of the authorization rules on purpose: a CORS preflight carries no Authorization
@@ -234,7 +239,11 @@ public class SecurityConfig {
                     .authenticated())
         .addFilterBefore(
             new JwtAuthenticationFilter(jwtService, authenticatedUserLookup),
-            UsernamePasswordAuthenticationFilter.class);
+            UsernamePasswordAuthenticationFilter.class)
+        // JwtAuthenticationFilter'dan sonra: SecurityContext doluysa user-id bazlı, boşsa yalnızca
+        // IP bazlı limit uygulanır.
+        .addFilterAfter(
+            new RateLimitFilter(rateLimiterService, objectMapper), JwtAuthenticationFilter.class);
 
     return http.build();
   }

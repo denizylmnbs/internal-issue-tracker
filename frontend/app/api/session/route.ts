@@ -29,11 +29,20 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (reason) {
-    const err = reason as { status?: number; code?: string; message?: string };
+    const err = reason as {
+      status?: number;
+      code?: string;
+      message?: string;
+      retryAfterSeconds?: number;
+    };
     return NextResponse.json(
       {
         success: false,
-        error: { code: err.code ?? "INTERNAL_ERROR", message: err.message ?? "Login failed." },
+        error: {
+          code: err.code ?? "INTERNAL_ERROR",
+          message: err.message ?? "Login failed.",
+          retryAfterSeconds: err.retryAfterSeconds,
+        },
       },
       { status: err.status ?? 500 },
     );

@@ -2,6 +2,8 @@ package com.ist.internal_issue_tracker.shared.security;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -9,9 +11,13 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ist.internal_issue_tracker.activity.ActivityController;
+import com.ist.internal_issue_tracker.auth.AuthController;
+import com.ist.internal_issue_tracker.auth.AuthService;
 import com.ist.internal_issue_tracker.activity.ActivityService;
 import com.ist.internal_issue_tracker.activity.metrics.IssueMetricsController;
 import com.ist.internal_issue_tracker.activity.metrics.IssueMetricsService;
@@ -39,6 +45,8 @@ import com.ist.internal_issue_tracker.project.dto.ProjectMemberResponse;
 import com.ist.internal_issue_tracker.project.dto.ProjectTeamResponse;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
+import com.ist.internal_issue_tracker.shared.ratelimit.RateLimitFilter;
+import com.ist.internal_issue_tracker.shared.ratelimit.RateLimiterService;
 import com.ist.internal_issue_tracker.sprint.SprintController;
 import com.ist.internal_issue_tracker.sprint.SprintService;
 import com.ist.internal_issue_tracker.sprint.SprintStatus;
@@ -51,9 +59,11 @@ import com.ist.internal_issue_tracker.team.UserTeamsController;
 import com.ist.internal_issue_tracker.team.dto.TeamMemberResponse;
 import com.ist.internal_issue_tracker.user.UserController;
 import com.ist.internal_issue_tracker.user.UserService;
+import com.ist.internal_issue_tracker.user.dto.UserResponse;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -78,6 +88,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  */
 @WebMvcTest(
     controllers = {
+      AuthController.class,
       UserController.class,
       TeamController.class,
       TeamMemberController.class,
@@ -127,6 +138,7 @@ class SecurityConfigTest {
 
   @Autowired private MockMvc mockMvc;
 
+  @MockitoBean private AuthService authService;
   @MockitoBean private UserService userService;
   @MockitoBean private TeamService teamService;
   @MockitoBean private TeamMemberService teamMemberService;
@@ -147,6 +159,15 @@ class SecurityConfigTest {
   @MockitoBean private TeamLookup teamLookup;
 
   @MockitoBean private ProjectLookup projectLookup;
+
+  /** {@code securityFilterChain} also wires {@link RateLimitFilter} through this port. */
+  @MockitoBean private RateLimiterService rateLimiterService;
+
+  /** Every rule above is unrelated to rate limiting, so it stays out of their way by default. */
+  @BeforeEach
+  void allowEveryBucketByDefault() {
+    when(rateLimiterService.tryConsume(any(), any())).thenReturn(true);
+  }
 
   /** Mirrors {@link JwtAuthenticationFilter}: the principal carries exactly one authority. */
   private static RequestPostProcessor as(Integer userId, Role role) {
@@ -1339,5 +1360,117 @@ class SecurityConfigTest {
     mockMvc
         .perform(get("/api/projects/1/metrics/cycle-time").with(as(99, role)))
         .andExpect(status().isOk());
+  }
+
+  // ---------------------------------------------------------------------
+  // Rate limiting: RateLimitFilter (IP / authenticated user) and the account-level
+  // checks AuthController/UserController run themselves for login and register.
+  // ---------------------------------------------------------------------
+
+  private static final String LOGIN_BODY =
+      "{\"email\":\"jane@example.com\",\"password\":\"password123\"}";
+  private static final String REGISTER_BODY =
+      "{\"name\":\"Jane\",\"surname\":\"Doe\",\"email\":\"jane@example.com\","
+          + "\"password\":\"password123\"}";
+
+  /** MockMvc's default client address, and so the key {@link RateLimitFilter} consumes under. */
+  private static final String DEFAULT_IP_KEY = "ip:127.0.0.1";
+
+  /**
+   * Anonymous only: an office NAT sharing one IP must not be able to exhaust an authenticated
+   * colleague's traffic, so an authenticated request is never checked against the IP bucket at all
+   * (see {@link #request_isNotCheckedAgainstAnIpBucket_whenAuthenticated}).
+   */
+  @Test
+  void request_returns429_whenTheIpBucketIsExhausted() throws Exception {
+    when(rateLimiterService.tryConsume(eq(DEFAULT_IP_KEY), any())).thenReturn(false);
+
+    mockMvc
+        .perform(get("/api/users"))
+        .andExpect(status().is(429))
+        .andExpect(header().string("Retry-After", "60"))
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.error.code").value("RATE_LIMITED"));
+  }
+
+  @Test
+  void request_returns429_whenTheAuthenticatedUsersBucketIsExhausted() throws Exception {
+    when(rateLimiterService.tryConsume(eq("user:1"), any())).thenReturn(false);
+
+    mockMvc.perform(get("/api/users").with(as(1, Role.USER))).andExpect(status().is(429));
+  }
+
+  /** An anonymous request never resolves a principal, so only the IP bucket is ever checked. */
+  @Test
+  void request_isNotCheckedAgainstAUserBucket_whenUnauthenticated() throws Exception {
+    mockMvc.perform(get("/api/users")).andExpect(status().isUnauthorized());
+
+    verify(rateLimiterService, never()).tryConsume(eq("user:1"), any());
+  }
+
+  /**
+   * The other half of the exclusivity rule: once a request carries a principal, the buckets are
+   * never stacked, so a colleague behind the same office IP cannot be locked out by someone else's
+   * traffic.
+   */
+  @Test
+  void request_isNotCheckedAgainstAnIpBucket_whenAuthenticated() throws Exception {
+    mockMvc.perform(get("/api/users").with(as(1, Role.USER))).andExpect(status().isOk());
+
+    verify(rateLimiterService, never()).tryConsume(eq(DEFAULT_IP_KEY), any());
+  }
+
+  @Test
+  void login_isAllowed_whenNeitherBucketIsExhausted() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(LOGIN_BODY))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void login_returns429_andNeverCallsAuthService_whenTheAccountBucketIsExhausted()
+      throws Exception {
+    when(rateLimiterService.tryConsume(eq("account:login:jane@example.com"), any()))
+        .thenReturn(false);
+
+    mockMvc
+        .perform(
+            post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(LOGIN_BODY))
+        .andExpect(status().is(429))
+        .andExpect(jsonPath("$.error.code").value("RATE_LIMITED"));
+
+    verify(authService, never()).login(any());
+  }
+
+  @Test
+  void register_isAllowed_whenNeitherBucketIsExhausted() throws Exception {
+    when(userService.createUser(any()))
+        .thenReturn(
+            new UserResponse(1, "Jane", "Doe", "jane@example.com", Role.USER, true, null));
+
+    mockMvc
+        .perform(
+            post("/api/users/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(REGISTER_BODY))
+        .andExpect(status().isCreated());
+  }
+
+  @Test
+  void register_returns429_andNeverCallsUserService_whenTheAccountBucketIsExhausted()
+      throws Exception {
+    when(rateLimiterService.tryConsume(eq("account:register:jane@example.com"), any()))
+        .thenReturn(false);
+
+    mockMvc
+        .perform(
+            post("/api/users/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(REGISTER_BODY))
+        .andExpect(status().is(429))
+        .andExpect(jsonPath("$.error.code").value("RATE_LIMITED"));
+
+    verify(userService, never()).createUser(any());
   }
 }

@@ -1,5 +1,8 @@
 package com.ist.internal_issue_tracker.user;
 
+import com.ist.internal_issue_tracker.shared.exception.AppException;
+import com.ist.internal_issue_tracker.shared.exception.CommonErrorCode;
+import com.ist.internal_issue_tracker.shared.ratelimit.RateLimiterService;
 import com.ist.internal_issue_tracker.shared.security.AuthenticatedUser;
 import com.ist.internal_issue_tracker.shared.web.ApiResponse;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
@@ -17,10 +20,17 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class UserController {
   private final UserService userService;
+  private final RateLimiterService rateLimiterService;
 
   @PostMapping("/register")
   public ResponseEntity<ApiResponse<UserResponse>> createUser(
       @Valid @RequestBody UserCreateRequest request) {
+
+    // aynı e-postayla tekrar tekrar hesap açma denemesini IP'den bağımsız olarak sınırlar
+    if (!rateLimiterService.tryConsume(
+        "account:register:" + request.email(), RateLimiterService.perAccount())) {
+      throw new AppException(CommonErrorCode.RATE_LIMITED);
+    }
 
     UserResponse userResponse = userService.createUser(request);
 

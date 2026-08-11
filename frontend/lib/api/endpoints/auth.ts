@@ -21,9 +21,12 @@ function postAuth<T>(
       const err = new Error(payload.error.message) as Error & {
         status: number;
         code: string;
+        retryAfterSeconds?: number;
       };
       err.status = res.status;
       err.code = payload.error.code;
+      const retryAfter = res.headers.get("Retry-After");
+      if (retryAfter) err.retryAfterSeconds = Number(retryAfter);
       throw err;
     }
     return payload.data as T;
