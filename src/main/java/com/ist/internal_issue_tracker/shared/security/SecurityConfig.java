@@ -234,6 +234,26 @@ public class SecurityConfig {
                     // that has to be able to see its own flow
                     .requestMatchers(HttpMethod.GET, "/api/projects/{id}/metrics/**")
                     .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    // Project-scoped field definitions (the six per-project kinds - see FieldKind).
+                    // Reading them is as open as reading the project itself; only EDITOR+ may add,
+                    // relabel, reflag, reorder or retire one - see FieldDefinitionController.
+                    .requestMatchers(HttpMethod.GET, "/api/projects/{id}/field-definitions")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/api/projects/{id}/field-definitions")
+                    .hasRole("EDITOR")
+                    .requestMatchers(HttpMethod.PUT, "/api/projects/{id}/field-definitions/**")
+                    .hasRole("EDITOR")
+                    .requestMatchers(HttpMethod.PATCH, "/api/projects/{id}/field-definitions/**")
+                    .hasRole("EDITOR")
+                    .requestMatchers(HttpMethod.DELETE, "/api/projects/{id}/field-definitions/**")
+                    .hasRole("EDITOR")
+                    // The two global kinds (PROJECT_STATUS, TEAM_FIELD) - instance-wide, so writes
+                    // are ADMIN-only rather than EDITOR+. The GET rule has to precede the wildcard
+                    // below it, or the wildcard would shadow it and require ADMIN just to read.
+                    .requestMatchers(HttpMethod.GET, "/api/field-definitions")
+                    .authenticated()
+                    .requestMatchers("/api/field-definitions/**")
+                    .hasRole("ADMIN")
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(

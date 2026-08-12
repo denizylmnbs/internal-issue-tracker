@@ -26,13 +26,12 @@ import com.ist.internal_issue_tracker.comment.CommentService;
 import com.ist.internal_issue_tracker.comment.dto.CommentResponse;
 import com.ist.internal_issue_tracker.epic.EpicController;
 import com.ist.internal_issue_tracker.epic.EpicService;
-import com.ist.internal_issue_tracker.epic.EpicStatus;
 import com.ist.internal_issue_tracker.epic.dto.EpicResponse;
+import com.ist.internal_issue_tracker.fielddef.FieldDefinitionController;
+import com.ist.internal_issue_tracker.fielddef.FieldDefinitionService;
+import com.ist.internal_issue_tracker.fielddef.GlobalFieldDefinitionController;
 import com.ist.internal_issue_tracker.issue.IssueController;
-import com.ist.internal_issue_tracker.issue.IssuePriority;
 import com.ist.internal_issue_tracker.issue.IssueService;
-import com.ist.internal_issue_tracker.issue.IssueStatus;
-import com.ist.internal_issue_tracker.issue.IssueType;
 import com.ist.internal_issue_tracker.issue.dto.IssueResponse;
 import com.ist.internal_issue_tracker.project.ProjectController;
 import com.ist.internal_issue_tracker.project.ProjectMemberController;
@@ -49,7 +48,6 @@ import com.ist.internal_issue_tracker.shared.ratelimit.RateLimitFilter;
 import com.ist.internal_issue_tracker.shared.ratelimit.RateLimiterService;
 import com.ist.internal_issue_tracker.sprint.SprintController;
 import com.ist.internal_issue_tracker.sprint.SprintService;
-import com.ist.internal_issue_tracker.sprint.SprintStatus;
 import com.ist.internal_issue_tracker.sprint.dto.SprintResponse;
 import com.ist.internal_issue_tracker.team.TeamController;
 import com.ist.internal_issue_tracker.team.TeamMemberController;
@@ -101,7 +99,9 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
       IssueController.class,
       CommentController.class,
       ActivityController.class,
-      IssueMetricsController.class
+      IssueMetricsController.class,
+      FieldDefinitionController.class,
+      GlobalFieldDefinitionController.class
     })
 @Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 class SecurityConfigTest {
@@ -157,6 +157,7 @@ class SecurityConfigTest {
   @MockitoBean private CommentService commentService;
   @MockitoBean private ActivityService activityService;
   @MockitoBean private IssueMetricsService issueMetricsService;
+  @MockitoBean private FieldDefinitionService fieldDefinitionService;
   /** {@code securityFilterChain} takes the ports directly, so the slice has to supply them. */
   @MockitoBean private TeamLookup teamLookup;
   @MockitoBean private ProjectLookup projectLookup;
@@ -180,7 +181,7 @@ class SecurityConfigTest {
         "x",
         LocalDate.of(2026, 1, 1),
         LocalDate.of(2026, 1, 15),
-        SprintStatus.TODO,
+        "TODO",
         null,
         null,
         OffsetDateTime.now(),
@@ -193,7 +194,7 @@ class SecurityConfigTest {
         1,
         "Checkout rewrite",
         "x",
-        EpicStatus.TODO,
+        "TODO",
         99,
         OffsetDateTime.now(),
         OffsetDateTime.now());
@@ -205,16 +206,36 @@ class SecurityConfigTest {
         1,
         null,
         null,
-        IssueType.BUG,
+        "BUG",
         "Login fails",
         "x",
-        IssueStatus.BACKLOG,
-        IssuePriority.HIGH,
+        "BACKLOG",
+        "HIGH",
         null,
         null,
         99,
         null,
         null,
+        OffsetDateTime.now(),
+        OffsetDateTime.now());
+  }
+
+  private static com.ist.internal_issue_tracker.fielddef.dto.FieldDefinitionResponse
+      fieldDefinitionResponse() {
+    return new com.ist.internal_issue_tracker.fielddef.dto.FieldDefinitionResponse(
+        50,
+        "ISSUE_STATUS",
+        1,
+        "SHIPPED",
+        "Shipped",
+        null,
+        7,
+        true,
+        false,
+        true,
+        false,
+        false,
+        false,
         OffsetDateTime.now(),
         OffsetDateTime.now());
   }
@@ -1295,6 +1316,104 @@ class SecurityConfigTest {
     mockMvc
         .perform(get("/api/projects/1/issues/30/activities").with(as(40, Role.DEVELOPER)))
         .andExpect(status().isForbidden());
+  }
+
+  // ---------------------------------------------------------------------
+  // Field definitions: project-scoped reads are open to anyone logged in, writes are
+  // EDITOR+; the two global kinds (PROJECT_STATUS, TEAM_FIELD) are ADMIN-only for
+  // everything but reading. See SecurityConfig for why the GET on /api/field-definitions
+  // has to precede the wildcard rule below it.
+  // ---------------------------------------------------------------------
+
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void getProjectFieldDefinitions_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc
+        .perform(get("/api/projects/1/field-definitions").with(as(1, role)))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void getProjectFieldDefinitions_returns401_whenUnauthenticated() throws Exception {
+    mockMvc.perform(get("/api/projects/1/field-definitions")).andExpect(status().isUnauthorized());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"EDITOR", "ADMIN"})
+  void createProjectFieldDefinition_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
+    when(fieldDefinitionService.create(eq(1), any())).thenReturn(fieldDefinitionResponse());
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/field-definitions")
+                .with(as(99, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"kind\":\"ISSUE_STATUS\",\"code\":\"SHIPPED\",\"label\":\"Shipped\","
+                        + "\"isDefault\":false,\"isDone\":true,\"isCancelled\":false,"
+                        + "\"isActiveWork\":false,\"isDefect\":false}"))
+        .andExpect(status().isCreated());
+  }
+
+  /** Working on the project - even leading it - is not enough; this route is EDITOR+ only. */
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void createProjectFieldDefinition_returns403_forEveryRoleBelowEditor(Role role) throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/field-definitions")
+                .with(as(5, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"kind\":\"ISSUE_STATUS\",\"code\":\"SHIPPED\",\"label\":\"Shipped\","
+                        + "\"isDefault\":false,\"isDone\":true,\"isCancelled\":false,"
+                        + "\"isActiveWork\":false,\"isDefect\":false}"))
+        .andExpect(status().isForbidden());
+  }
+
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void getGlobalFieldDefinitions_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc.perform(get("/api/field-definitions").with(as(1, role))).andExpect(status().isOk());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER", "EDITOR"})
+  void createGlobalFieldDefinition_returns403_forEveryRoleBelowAdmin(Role role) throws Exception {
+    mockMvc
+        .perform(
+            post("/api/field-definitions")
+                .with(as(1, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"kind\":\"TEAM_FIELD\",\"code\":\"SECURITY\",\"label\":\"Security\","
+                        + "\"isDefault\":false,\"isDone\":false,\"isCancelled\":false,"
+                        + "\"isActiveWork\":false,\"isDefect\":false}"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void createGlobalFieldDefinition_isAllowed_forAdmin() throws Exception {
+    when(fieldDefinitionService.create(eq(null), any())).thenReturn(fieldDefinitionResponse());
+
+    mockMvc
+        .perform(
+            post("/api/field-definitions")
+                .with(as(1, Role.ADMIN))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"kind\":\"TEAM_FIELD\",\"code\":\"SECURITY\",\"label\":\"Security\","
+                        + "\"isDefault\":false,\"isDone\":false,\"isCancelled\":false,"
+                        + "\"isActiveWork\":false,\"isDefect\":false}"))
+        .andExpect(status().isCreated());
   }
 
   // ---------------------------------------------------------------------
