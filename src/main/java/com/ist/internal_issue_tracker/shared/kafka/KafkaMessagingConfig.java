@@ -20,9 +20,11 @@ class KafkaMessagingConfig {
    * below are load-bearing.
    */
   @Bean
-  ByteArrayJacksonJsonMessageConverter kafkaMessageConverter(ObjectProvider<JsonMapper> jsonMapper) {
+  ByteArrayJacksonJsonMessageConverter kafkaMessageConverter(
+      ObjectProvider<JsonMapper> jsonMapper) {
 
-    var converter = new ByteArrayJacksonJsonMessageConverter(jsonMapper.getIfUnique(JsonMapper::new));
+    var converter =
+        new ByteArrayJacksonJsonMessageConverter(jsonMapper.getIfUnique(JsonMapper::new));
     var typeMapper = new DefaultJacksonJavaTypeMapper();
 
     // TYPE_ID, not the default INFERRED. Each topic carries several event types, so the type has to

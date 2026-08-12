@@ -19,29 +19,14 @@ import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
 
 /**
- * Two distinct consumers share this connection: {@code @Cacheable} call-result caching (any
- * module) and {@code auth}'s refresh-token store. Only the first goes through beans declared here
- * - the second talks to Redis directly for full control over key shape and TTL per token, and gets
- * that from Spring Boot's auto-configured {@code StringRedisTemplate} rather than anything below.
+ * Two distinct consumers share this connection: {@code @Cacheable} call-result caching (any module)
+ * and {@code auth}'s refresh-token store. Only the first goes through beans declared here - the
+ * second talks to Redis directly for full control over key shape and TTL per token, and gets that
+ * from Spring Boot's auto-configured {@code StringRedisTemplate} rather than anything below.
  */
 @Configuration
 @EnableCaching
 public class RedisConfig {
-
-  /**
-   * Polymorphic round-tripping through {@code Object} - what lets one cache/template hold DTOs
-   * from every module and hand each one back as its original class - needs default typing turned
-   * on. {@code GenericJacksonJsonRedisSerializer}'s no-arg form leaves it off precisely because
-   * unrestricted default typing lets a crafted payload name an arbitrary class to instantiate on
-   * deserialize; scoping the validator to this app's own base package keeps the round-trip without
-   * reopening that hole.
-   */
-  private static PolymorphicTypeValidator typeValidator() {
-    return BasicPolymorphicTypeValidator.builder()
-        .allowIfSubType("com.ist.internal_issue_tracker")
-        .allowIfSubType("java.util")
-        .build();
-  }
 
   /**
    * One cache name per {@code IssueMetricsService} method, kept here rather than as a constant on
@@ -68,22 +53,36 @@ public class RedisConfig {
           "metrics-velocity",
           "metrics-burndown",
           "metrics-cumulativeFlow");
-
   /**
    * Authorization-decision caches: {@code isLeaderOfProject}, {@code isParticipantOfProject} (keyed
    * {@code projectId + ':' + userId}), {@code activeTeamIdsOfUser} (keyed by {@code userId}), and
-   * {@code auth-principal} - the {@code (id, role)} pair {@code UserAuthenticatedUserLookup} resolves
-   * for every authenticated request, keyed by {@code userId}. Every write path that can change one of
-   * these evicts the exact key(s) it affects - see {@code ProjectService}, {@code TeamMemberService},
-   * {@code ProjectParticipantCacheEvictionListener}, and, for {@code auth-principal}, {@code
-   * UserService#changeRole}/{@code #deleteUser} via {@code AuthPrincipalCacheEvictionListener} - so
-   * this TTL is a safety net for the paths that do not evict (project deletion, user/team
-   * deactivation cascades), not the primary invalidation mechanism the way it is for metrics. Kept
-   * far shorter than the metrics TTL because a stale {@code true} - or a stale role - here is a stale
-   * grant, not a stale chart.
+   * {@code auth-principal} - the {@code (id, role)} pair {@code UserAuthenticatedUserLookup}
+   * resolves for every authenticated request, keyed by {@code userId}. Every write path that can
+   * change one of these evicts the exact key(s) it affects - see {@code ProjectService}, {@code
+   * TeamMemberService}, {@code ProjectParticipantCacheEvictionListener}, and, for {@code
+   * auth-principal}, {@code UserService#changeRole}/{@code #deleteUser} via {@code
+   * AuthPrincipalCacheEvictionListener} - so this TTL is a safety net for the paths that do not
+   * evict (project deletion, user/team deactivation cascades), not the primary invalidation
+   * mechanism the way it is for metrics. Kept far shorter than the metrics TTL because a stale
+   * {@code true} - or a stale role - here is a stale grant, not a stale chart.
    */
   private static final List<String> AUTH_CACHE_NAMES =
       List.of("project-leader", "project-participant", "user-teams", "auth-principal");
+
+  /**
+   * Polymorphic round-tripping through {@code Object} - what lets one cache/template hold DTOs from
+   * every module and hand each one back as its original class - needs default typing turned on.
+   * {@code GenericJacksonJsonRedisSerializer}'s no-arg form leaves it off precisely because
+   * unrestricted default typing lets a crafted payload name an arbitrary class to instantiate on
+   * deserialize; scoping the validator to this app's own base package keeps the round-trip without
+   * reopening that hole.
+   */
+  private static PolymorphicTypeValidator typeValidator() {
+    return BasicPolymorphicTypeValidator.builder()
+        .allowIfSubType("com.ist.internal_issue_tracker")
+        .allowIfSubType("java.util")
+        .build();
+  }
 
   /**
    * Values are JSON, not JDK serialization: a Java-serialized cache entry breaks the moment the
@@ -99,7 +98,9 @@ public class RedisConfig {
       @Value("${app.cache.auth-ttl:PT2M}") Duration authTtl) {
     RedisSerializationContext.SerializationPair<Object> valueSerialization =
         RedisSerializationContext.SerializationPair.fromSerializer(
-            GenericJacksonJsonRedisSerializer.builder().enableDefaultTyping(typeValidator()).build());
+            GenericJacksonJsonRedisSerializer.builder()
+                .enableDefaultTyping(typeValidator())
+                .build());
 
     RedisCacheConfiguration configuration =
         RedisCacheConfiguration.defaultCacheConfig()

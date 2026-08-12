@@ -47,6 +47,37 @@ public class UserWorkService {
   private final ProjectLookup projectLookup;
   private final SprintLookup sprintLookup;
 
+  /**
+   * Rows whose sprint has since been soft-deleted are dropped, the same way {@code
+   * IssueMetricsService#velocity} treats an activity row with no surviving sprint - an orphaned id
+   * has nothing to report a name or date for.
+   */
+  private static List<SprintProgress> toSprintProgress(
+      List<UserSprintPoints> rows, Map<Integer, SprintSummary> summariesBySprintId, String status) {
+    return rows.stream()
+        .filter(row -> status.equals(summaryStatus(summariesBySprintId, row.getSprintId())))
+        .map(row -> toSprintProgress(row, summariesBySprintId.get(row.getSprintId())))
+        .toList();
+  }
+
+  private static String summaryStatus(Map<Integer, SprintSummary> summaries, Integer sprintId) {
+    SprintSummary summary = summaries.get(sprintId);
+    return summary == null ? null : summary.status();
+  }
+
+  private static SprintProgress toSprintProgress(UserSprintPoints row, SprintSummary summary) {
+    return new SprintProgress(
+        row.getProjectId(),
+        row.getSprintId(),
+        summary.name(),
+        summary.startDate(),
+        summary.endDate(),
+        row.getAssignedPoints(),
+        row.getCompletedPoints(),
+        row.getAssignedIssueCount(),
+        row.getCompletedIssueCount());
+  }
+
   private void requireActiveUser(Integer userId) {
     if (!userLookup.existsActiveUser(userId)) {
       throw ResourceNotFoundException.of("User", userId);
@@ -101,41 +132,12 @@ public class UserWorkService {
     Double recentAveragePoints =
         recentCompleted.isEmpty()
             ? null
-            : recentCompleted.stream().mapToLong(SprintProgress::completedPoints).average()
+            : recentCompleted.stream()
+                .mapToLong(SprintProgress::completedPoints)
+                .average()
                 .orElseThrow();
 
     return new UserSprintProgressResponse(
         current, previous, recentAveragePoints, recentCompleted.size());
-  }
-
-  /**
-   * Rows whose sprint has since been soft-deleted are dropped, the same way {@code
-   * IssueMetricsService#velocity} treats an activity row with no surviving sprint - an orphaned id
-   * has nothing to report a name or date for.
-   */
-  private static List<SprintProgress> toSprintProgress(
-      List<UserSprintPoints> rows, Map<Integer, SprintSummary> summariesBySprintId, String status) {
-    return rows.stream()
-        .filter(row -> status.equals(summaryStatus(summariesBySprintId, row.getSprintId())))
-        .map(row -> toSprintProgress(row, summariesBySprintId.get(row.getSprintId())))
-        .toList();
-  }
-
-  private static String summaryStatus(Map<Integer, SprintSummary> summaries, Integer sprintId) {
-    SprintSummary summary = summaries.get(sprintId);
-    return summary == null ? null : summary.status();
-  }
-
-  private static SprintProgress toSprintProgress(UserSprintPoints row, SprintSummary summary) {
-    return new SprintProgress(
-        row.getProjectId(),
-        row.getSprintId(),
-        summary.name(),
-        summary.startDate(),
-        summary.endDate(),
-        row.getAssignedPoints(),
-        row.getCompletedPoints(),
-        row.getAssignedIssueCount(),
-        row.getCompletedIssueCount());
   }
 }

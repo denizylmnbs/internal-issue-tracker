@@ -35,13 +35,14 @@ public class TeamMemberController {
   @GetMapping("/{id}/members")
   public ResponseEntity<ApiResponse<PagedResponse<TeamMemberResponse>>> getTeamMembers(
       @PathVariable Integer id, Pageable pageable) {
-    return ResponseEntity.ok(ApiResponse.ok(teamMemberService.getTeamMembersByTeamId(id, pageable)));
+    return ResponseEntity.ok(
+        ApiResponse.ok(teamMemberService.getTeamMembersByTeamId(id, pageable)));
   }
 
   /**
    * Every membership in the system, across teams. The literal {@code /members} segment is matched
-   * ahead of {@code TeamController}'s {@code /api/teams/{id}}, because Spring's path patterns rank a
-   * literal above a variable at the same position.
+   * ahead of {@code TeamController}'s {@code /api/teams/{id}}, because Spring's path patterns rank
+   * a literal above a variable at the same position.
    */
   @GetMapping("/members")
   public ResponseEntity<ApiResponse<PagedResponse<TeamMemberResponse>>> getAllTeamMembers(
@@ -51,8 +52,8 @@ public class TeamMemberController {
 
   /**
    * Removing a member is a soft delete, so the membership is addressed by the pair the schema
-   * actually keys an active membership on ({@code unique_active_team_membership}) rather than by its
-   * surrogate id. Keeping the team in the path is also what lets the existing team-leader
+   * actually keys an active membership on ({@code unique_active_team_membership}) rather than by
+   * its surrogate id. Keeping the team in the path is also what lets the existing team-leader
    * authorization rule apply unchanged.
    */
   @DeleteMapping("/{id}/members/{userId}")

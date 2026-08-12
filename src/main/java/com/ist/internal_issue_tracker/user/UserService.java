@@ -1,10 +1,10 @@
 package com.ist.internal_issue_tracker.user;
 
-import com.ist.internal_issue_tracker.shared.exception.AppException;
-import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceException;
 import com.ist.internal_issue_tracker.shared.event.UserCredentialsChangedEvent;
 import com.ist.internal_issue_tracker.shared.event.UserDeactivatedEvent;
 import com.ist.internal_issue_tracker.shared.event.UserRoleChangedEvent;
+import com.ist.internal_issue_tracker.shared.exception.AppException;
+import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceException;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
 import com.ist.internal_issue_tracker.shared.security.AuthenticatedUser;
 import com.ist.internal_issue_tracker.shared.security.Role;
@@ -122,9 +122,9 @@ public class UserService {
 
   /**
    * Soft-deletes the user and tells the rest of the application to retire whatever points at them.
-   * {@code team} and {@code project} listen for the event and clear their own membership rows, which
-   * is what lets their roster queries trust {@code is_active} on the row instead of joining back to
-   * {@code users}.
+   * {@code team} and {@code project} listen for the event and clear their own membership rows,
+   * which is what lets their roster queries trust {@code is_active} on the row instead of joining
+   * back to {@code users}.
    *
    * <p>Transactional because the two have to move together: a user marked inactive while their
    * memberships stayed live would put them on rosters they are no longer part of.
@@ -176,8 +176,8 @@ public class UserService {
   /**
    * {@code @Transactional} so the save and the event move together - {@link
    * AuthPrincipalCacheEvictionListener} and {@code auth}'s refresh-token revocation both react to
-   * {@link UserRoleChangedEvent} synchronously, and neither should fire off the back of a role change
-   * that then fails to commit.
+   * {@link UserRoleChangedEvent} synchronously, and neither should fire off the back of a role
+   * change that then fails to commit.
    */
   @Transactional
   public UserResponse changeRole(Integer id, RoleChangeRequest request, AuthenticatedUser caller) {

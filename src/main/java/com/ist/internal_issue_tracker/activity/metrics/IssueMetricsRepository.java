@@ -31,8 +31,8 @@ import org.springframework.data.repository.query.Param;
  * it, which is precisely the long-running work a cycle time is meant to expose. "Completed in this
  * window" is the standard definition and the honest one.
  *
- * <p>The entity type is {@link IssueActivity} only because Spring Data needs one; nothing here loads
- * an entity.
+ * <p>The entity type is {@link IssueActivity} only because Spring Data needs one; nothing here
+ * loads an entity.
  */
 interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
 
@@ -40,8 +40,8 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
    * From first {@code IN_PROGRESS} to first {@code DONE} - how long work took once it was started.
    *
    * <p>{@code min} on both sides rather than {@code max}: an issue that was reopened and finished
-   * again should report the time it first took, not the span across the whole round trip. The reopen
-   * is a separate fact, and {@link #reopenStats} is where it is told.
+   * again should report the time it first took, not the span across the whole round trip. The
+   * reopen is a separate fact, and {@link #reopenStats} is where it is told.
    */
   @Query(
       value =
@@ -121,11 +121,11 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
       @Param("to") OffsetDateTime to);
 
   /**
-   * Issues completed per bucket, keyed on the first time each reached {@code DONE} so that reopening
-   * and re-finishing an issue does not let it be delivered twice.
+   * Issues completed per bucket, keyed on the first time each reached {@code DONE} so that
+   * reopening and re-finishing an issue does not let it be delivered twice.
    *
-   * <p>{@code :bucket} is bound, never concatenated, and can only hold one of {@link MetricsBucket}'s
-   * three units.
+   * <p>{@code :bucket} is bound, never concatenated, and can only hold one of {@link
+   * MetricsBucket}'s three units.
    */
   @Query(
       value =
@@ -154,12 +154,12 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
    * the boundary contributes only the part inside it.
    *
    * <p>The {@code CREATED} row is read as entering {@code BACKLOG}, which mirrors the default on
-   * {@code Issue#status}. If that default ever changes, this line has to change with it - the two are
-   * tied together by nothing the compiler can see.
+   * {@code Issue#status}. If that default ever changes, this line has to change with it - the two
+   * are tied together by nothing the compiler can see.
    *
-   * <p>An issue still sitting in a status has no next row, so its span runs to the end of the window
-   * rather than being dropped: work that has been stuck for a month is the most important thing this
-   * query has to say.
+   * <p>An issue still sitting in a status has no next row, so its span runs to the end of the
+   * window rather than being dropped: work that has been stuck for a month is the most important
+   * thing this query has to say.
    */
   @Query(
       value =
@@ -202,8 +202,8 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
    *
    * <p>{@code NULLIF} guards the division, so an empty window yields null rather than a divide-by-
    * zero or a fabricated 0.0 - see {@link FlowEfficiencyStats}. The active set is spelled out here
-   * and named in {@link MetricStatus#ACTIVE}; the two are kept in step by
-   * {@code MetricStatusCoverageTest}.
+   * and named in {@link MetricStatus#ACTIVE}; the two are kept in step by {@code
+   * MetricStatusCoverageTest}.
    */
   @Query(
       value =
@@ -241,9 +241,10 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
   /**
    * What share of the work finished in the window came back afterwards.
    *
-   * <p>{@code bool_or} collapses each issue to a yes or no, so a bug that bounced three times counts
-   * once - see {@link ReopenStats}. The {@code HAVING} keeps issues that never reached {@code DONE}
-   * out of the denominator: work still in progress has not had the chance to be reopened.
+   * <p>{@code bool_or} collapses each issue to a yes or no, so a bug that bounced three times
+   * counts once - see {@link ReopenStats}. The {@code HAVING} keeps issues that never reached
+   * {@code DONE} out of the denominator: work still in progress has not had the chance to be
+   * reopened.
    */
   @Query(
       value =
@@ -296,8 +297,8 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
    * What is in flight right now, grouped by status, with how long it has been there.
    *
    * <p>A level rather than a flow, so it takes no window - see {@link WipStatusCount}. {@code asOf}
-   * exists to make it reproducible, not to make it a range: passing last Tuesday asks what the board
-   * looked like last Tuesday.
+   * exists to make it reproducible, not to make it a range: passing last Tuesday asks what the
+   * board looked like last Tuesday.
    */
   @Query(
       value =
@@ -336,8 +337,8 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
       @Param("projectId") Integer projectId, @Param("asOf") OffsetDateTime asOf);
 
   /**
-   * The oldest in-flight issues, named. {@code BACKLOG} is excluded - see {@link AgingIssue} - and so
-   * is anything finished, cancelled or deleted.
+   * The oldest in-flight issues, named. {@code BACKLOG} is excluded - see {@link AgingIssue} - and
+   * so is anything finished, cancelled or deleted.
    */
   @Query(
       value =
@@ -381,10 +382,10 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
   /**
    * Arrivals against departures, per bucket, with a running total.
    *
-   * <p>A {@code FULL OUTER JOIN} rather than an inner one, so a bucket where work only arrived and a
-   * bucket where work only finished both survive. That is why the key is {@code coalesce(c.b, d.b)}
-   * and why it has to be repeated in the window's {@code ORDER BY} - an output alias is not visible
-   * there.
+   * <p>A {@code FULL OUTER JOIN} rather than an inner one, so a bucket where work only arrived and
+   * a bucket where work only finished both survive. That is why the key is {@code coalesce(c.b,
+   * d.b)} and why it has to be repeated in the window's {@code ORDER BY} - an output alias is not
+   * visible there.
    */
   @Query(
       value =
@@ -467,8 +468,8 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
    * Bug share and defect density in one pass - see {@link DefectBucket} for why they are different
    * questions and why both denominators are returned.
    *
-   * <p>Note which side each count comes from: bugs are counted where they were filed, delivery where
-   * it was delivered, and the density divides one by the other across the same bucket.
+   * <p>Note which side each count comes from: bugs are counted where they were filed, delivery
+   * where it was delivered, and the density divides one by the other across the same bucket.
    */
   @Query(
       value =
@@ -524,18 +525,18 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
       @Param("to") OffsetDateTime to);
 
   /**
-   * Mean time to resolve a bug: filed to first {@code DONE}, for issues that were bugs when they were
-   * resolved.
+   * Mean time to resolve a bug: filed to first {@code DONE}, for issues that were bugs when they
+   * were resolved.
    *
-   * <p>Lead time rather than cycle time, deliberately. The clock a defect is judged by starts when it
-   * is reported, not when someone gets round to it - the time it spent waiting in the queue is most
-   * of what MTTR is meant to expose.
+   * <p>Lead time rather than cycle time, deliberately. The clock a defect is judged by starts when
+   * it is reported, not when someone gets round to it - the time it spent waiting in the queue is
+   * most of what MTTR is meant to expose.
    *
    * <p>The type is read from the {@code DONE} row rather than the {@code CREATED} one, so an issue
-   * filed as a task and reclassified as a bug on investigation counts as the bug it turned out to be.
-   * The counterpart in {@link #defectStats} reads it from {@code CREATED}, and the difference is
-   * intentional: that metric asks how many defects a period produced, this one asks how long defects
-   * take to fix.
+   * filed as a task and reclassified as a bug on investigation counts as the bug it turned out to
+   * be. The counterpart in {@link #defectStats} reads it from {@code CREATED}, and the difference
+   * is intentional: that metric asks how many defects a period produced, this one asks how long
+   * defects take to fix.
    */
   @Query(
       value =
@@ -600,12 +601,13 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
   List<SprintVelocity> velocity(@Param("projectId") Integer projectId);
 
   /**
-   * A sprint burndown, one row per day, reconstructed by replaying the log up to the end of each day.
+   * A sprint burndown, one row per day, reconstructed by replaying the log up to the end of each
+   * day.
    *
    * <p>{@code generate_series} supplies the calendar - the log has rows only on days something
-   * happened, and a burndown with gaps in it is unreadable. Each day then re-aggregates the project's
-   * history up to that point, which is why this is the most expensive query here and why it is
-   * bounded to one sprint's dates rather than to a ninety-day default.
+   * happened, and a burndown with gaps in it is unreadable. Each day then re-aggregates the
+   * project's history up to that point, which is why this is the most expensive query here and why
+   * it is bounded to one sprint's dates rather than to a ninety-day default.
    *
    * <p>The cut-off is {@code < day + 1 day} rather than {@code <= day}, because {@code day} is
    * midnight: the point is the state at the <em>end</em> of that day.
@@ -660,7 +662,8 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
    * A cumulative flow diagram: how many issues stood in each status at the end of each day.
    *
    * <p>The same daily replay as {@link #burndown}, without the sprint filter and counting heads
-   * rather than points. Rows are emitted only for statuses that were occupied - see {@link CfdPoint}.
+   * rather than points. Rows are emitted only for statuses that were occupied - see {@link
+   * CfdPoint}.
    */
   @Query(
       value =

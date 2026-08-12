@@ -25,12 +25,15 @@ public class UserAuthenticatedUserLookup implements AuthenticatedUserLookup {
   /**
    * {@code unless} is load-bearing, not an optimization: Spring unwraps the {@code Optional} before
    * caching, so a not-found/inactive user would cache a bare {@code null} - and {@code RedisConfig}
-   * disables null caching, which turns that into a thrown exception instead of a cache miss. It also
-   * doubles as the negative-cache guard: an inactive or deleted user is simply never written here, so
-   * there is no stale {@code true} to worry about invalidating on reactivation.
+   * disables null caching, which turns that into a thrown exception instead of a cache miss. It
+   * also doubles as the negative-cache guard: an inactive or deleted user is simply never written
+   * here, so there is no stale {@code true} to worry about invalidating on reactivation.
    */
   @Override
-  @Cacheable(cacheNames = "auth-principal", key = "#userId", condition = "#userId != null",
+  @Cacheable(
+      cacheNames = "auth-principal",
+      key = "#userId",
+      condition = "#userId != null",
       unless = "#result == null")
   public Optional<AuthenticatedUser> findById(Integer userId) {
     return userRepository

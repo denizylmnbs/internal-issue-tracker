@@ -12,8 +12,8 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 /**
- * A single piece of work on a project - the most connected row in the schema, pointing at a project,
- * optionally a sprint and an epic, a reporter, and up to two assignees.
+ * A single piece of work on a project - the most connected row in the schema, pointing at a
+ * project, optionally a sprint and an epic, a reporter, and up to two assignees.
  *
  * <p>Every one of those is a plain {@code Integer} rather than an association. Four of the six
  * targets live in other modules, so a {@code @ManyToOne} would break {@code ModularityTests}; the

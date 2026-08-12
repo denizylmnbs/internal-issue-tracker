@@ -7,12 +7,12 @@ import java.util.List;
 /**
  * One sprint's burndown, replayed day by day from the activity log - see {@code BurndownPoint}.
  *
- * <p>The sprint's own figures come back alongside the series because the chart is unreadable without
- * them: the ideal line runs from {@code committedPoints} at {@code startDate} to zero at {@code
- * endDate}, and it is drawn client-side from exactly these three fields.
+ * <p>The sprint's own figures come back alongside the series because the chart is unreadable
+ * without them: the ideal line runs from {@code committedPoints} at {@code startDate} to zero at
+ * {@code endDate}, and it is drawn client-side from exactly these three fields.
  *
- * <p>The series stops at the sprint's end date or at today, whichever is earlier, so a running sprint
- * does not trail a flat line into the future.
+ * <p>The series stops at the sprint's end date or at today, whichever is earlier, so a running
+ * sprint does not trail a flat line into the future.
  */
 public record BurndownResponse(
     Integer sprintId,

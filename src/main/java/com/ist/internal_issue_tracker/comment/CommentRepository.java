@@ -8,9 +8,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /**
- * Derived and JPQL, no native SQL. A comment points at an issue and a user but only by id - both are
- * validated through ports, never joined - so every query stays inside one table and sorting keeps
- * working on the list endpoint.
+ * Derived and JPQL, no native SQL. A comment points at an issue and a user but only by id - both
+ * are validated through ports, never joined - so every query stays inside one table and sorting
+ * keeps working on the list endpoint.
  */
 interface CommentRepository extends JpaRepository<Comment, Integer> {
 
@@ -21,9 +21,9 @@ interface CommentRepository extends JpaRepository<Comment, Integer> {
   Optional<Comment> findByIdAndIssueIdAndDeletedAtIsNull(Integer id, Integer issueId);
 
   /**
-   * One issue's thread, deleted comments excluded unconditionally. The {@code userId} filter is what
-   * the schema's index on {@code comments(user_id)} is for - "everything so-and-so said on this
-   * issue" without a second endpoint to ask it.
+   * One issue's thread, deleted comments excluded unconditionally. The {@code userId} filter is
+   * what the schema's index on {@code comments(user_id)} is for - "everything so-and-so said on
+   * this issue" without a second endpoint to ask it.
    */
   @Query(
       """

@@ -9,10 +9,10 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * No mocks and no context: the detector takes two values and returns a list, so these are two values
- * and a list. What is being pinned down is mostly the null handling - every field but the name and
- * the status is nullable, and "was empty, now set" has to come out as a change rather than as
- * nothing.
+ * No mocks and no context: the detector takes two values and returns a list, so these are two
+ * values and a list. What is being pinned down is mostly the null handling - every field but the
+ * name and the status is nullable, and "was empty, now set" has to come out as a change rather than
+ * as nothing.
  */
 class IssueChangeDetectorTest {
 
@@ -43,8 +43,8 @@ class IssueChangeDetectorTest {
   }
 
   /**
-   * The case the whole no-op guard exists for: an update that restates every field with the value it
-   * already had must not reach the activity log.
+   * The case the whole no-op guard exists for: an update that restates every field with the value
+   * it already had must not reach the activity log.
    */
   @Test
   void diff_isEmpty_whenEveryFieldIsRestatedWithItsOwnValue() {

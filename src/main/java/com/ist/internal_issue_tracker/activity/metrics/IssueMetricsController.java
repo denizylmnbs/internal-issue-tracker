@@ -109,9 +109,9 @@ public class IssueMetricsController {
   /**
    * What is on the board right now and what has been stuck longest.
    *
-   * <p>{@code asOf} rather than {@code from}/{@code to}, and it defaults to now - work in progress is
-   * a level, not a flow. Passing a past instant asks what the board looked like then, which is what
-   * makes a screenshot of this reproducible.
+   * <p>{@code asOf} rather than {@code from}/{@code to}, and it defaults to now - work in progress
+   * is a level, not a flow. Passing a past instant asks what the board looked like then, which is
+   * what makes a screenshot of this reproducible.
    */
   @GetMapping("/wip")
   public ResponseEntity<ApiResponse<WipResponse>> getWip(
@@ -121,7 +121,10 @@ public class IssueMetricsController {
     return ResponseEntity.ok(ApiResponse.ok(issueMetricsService.wip(id, asOf)));
   }
 
-  /** Work arriving against work leaving - whether the pile is growing, regardless of how fast it moves. */
+  /**
+   * Work arriving against work leaving - whether the pile is growing, regardless of how fast it
+   * moves.
+   */
   @GetMapping("/net-flow")
   public ResponseEntity<ApiResponse<NetFlowResponse>> getNetFlow(
       @PathVariable Integer id,
@@ -171,8 +174,8 @@ public class IssueMetricsController {
   }
 
   /**
-   * Committed against delivered, per sprint. No window: a sprint is its own, and the series is every
-   * sprint the project has run.
+   * Committed against delivered, per sprint. No window: a sprint is its own, and the series is
+   * every sprint the project has run.
    */
   @GetMapping("/velocity")
   public ResponseEntity<ApiResponse<VelocityResponse>> getVelocity(@PathVariable Integer id) {
@@ -180,8 +183,8 @@ public class IssueMetricsController {
   }
 
   /**
-   * One sprint's burndown. The dates come from the sprint, so this takes no window either - only the
-   * sprint to draw.
+   * One sprint's burndown. The dates come from the sprint, so this takes no window either - only
+   * the sprint to draw.
    */
   @GetMapping("/burndown")
   public ResponseEntity<ApiResponse<BurndownResponse>> getBurndown(
@@ -189,7 +192,10 @@ public class IssueMetricsController {
     return ResponseEntity.ok(ApiResponse.ok(issueMetricsService.burndown(id, sprintId)));
   }
 
-  /** A cumulative flow diagram, bucketed by day because a coarser cut hides the queue it exists to show. */
+  /**
+   * A cumulative flow diagram, bucketed by day because a coarser cut hides the queue it exists to
+   * show.
+   */
   @GetMapping("/cfd")
   public ResponseEntity<ApiResponse<CumulativeFlowResponse>> getCumulativeFlow(
       @PathVariable Integer id,

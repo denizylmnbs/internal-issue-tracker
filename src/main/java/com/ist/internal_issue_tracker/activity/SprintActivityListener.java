@@ -26,6 +26,14 @@ class SprintActivityListener {
 
   private final SprintActivityRepository sprintActivityRepository;
 
+  private static SprintActionType toActionType(SprintField field) {
+    return switch (field) {
+      case STATUS -> SprintActionType.STATUS_UPDATED;
+      case DATES -> SprintActionType.DATES_UPDATED;
+      case DETAILS -> SprintActionType.DETAILS_UPDATED;
+    };
+  }
+
   @KafkaHandler
   void on(SprintCreatedEvent event) {
     record(
@@ -73,14 +81,6 @@ class SprintActivityListener {
     log.warn(
         "Dropped unhandled payload on sprint-events: {}. Nothing written to sprint_activities.",
         payload == null ? "null" : payload.getClass().getName());
-  }
-
-  private static SprintActionType toActionType(SprintField field) {
-    return switch (field) {
-      case STATUS -> SprintActionType.STATUS_UPDATED;
-      case DATES -> SprintActionType.DATES_UPDATED;
-      case DETAILS -> SprintActionType.DETAILS_UPDATED;
-    };
   }
 
   private void record(

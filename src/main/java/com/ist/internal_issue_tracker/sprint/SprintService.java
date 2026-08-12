@@ -43,7 +43,8 @@ public class SprintService {
   private final ApplicationEventPublisher eventPublisher;
 
   /** Publishes only if something moved - see {@code IssueService#publishChanges}. */
-  private void publishChanges(Integer projectId, Integer actorId, SprintSnapshot before, Sprint after) {
+  private void publishChanges(
+      Integer projectId, Integer actorId, SprintSnapshot before, Sprint after) {
     List<SprintFieldChange> changes = sprintChangeDetector.diff(before, after);
 
     if (changes.isEmpty()) {
@@ -168,12 +169,13 @@ public class SprintService {
   /**
    * Any status may follow any other, with one exception the database owns: a project may hold only
    * one {@code IN_PROGRESS} sprint at a time. That is not a transition rule - going back to {@code
-   * TODO} from {@code COMPLETED} is fine - it is a rule about how many sprints may sit in one status
-   * at once, and it is checked here only so callers get a named 409 rather than a raw constraint
-   * violation.
+   * TODO} from {@code COMPLETED} is fine - it is a rule about how many sprints may sit in one
+   * status at once, and it is checked here only so callers get a named 409 rather than a raw
+   * constraint violation.
    *
    * <p>The check is a pre-check, not a guarantee: two requests can pass it at the same time and the
-   * partial index is what actually decides, so the save is wrapped to report the loser the same way.
+   * partial index is what actually decides, so the save is wrapped to report the loser the same
+   * way.
    *
    * <p>This is also where a sprint's commitment is frozen - see {@link #commitIfStarting}. It sits
    * here rather than in its own endpoint because starting the sprint <em>is</em> the commitment;
@@ -190,7 +192,8 @@ public class SprintService {
     SprintSnapshot before = SprintSnapshot.of(sprint);
 
     boolean startingAnother =
-        request.status() == SprintStatus.IN_PROGRESS && sprint.getStatus() != SprintStatus.IN_PROGRESS;
+        request.status() == SprintStatus.IN_PROGRESS
+            && sprint.getStatus() != SprintStatus.IN_PROGRESS;
 
     if (startingAnother
         && sprintRepository.existsByProjectIdAndStatusAndDeletedAtIsNull(
@@ -216,8 +219,8 @@ public class SprintService {
   }
 
   /**
-   * Soft delete: the row stays and {@code deletedAt} is stamped. The status is left exactly where it
-   * was, so the record still says what the sprint was doing when it was dropped.
+   * Soft delete: the row stays and {@code deletedAt} is stamped. The status is left exactly where
+   * it was, so the record still says what the sprint was doing when it was dropped.
    *
    * <p>That is only safe because {@code one_active_sprint_per_project} is partial on {@code
    * deleted_at} as well as on the status. Were it not, a deleted row still reading {@code

@@ -9,8 +9,9 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
 /**
- * A user assigned to a project directly, as opposed to reaching it through {@link ProjectTeam}. Both
- * routes count as membership, so anything answering "who works on this project" has to read both.
+ * A user assigned to a project directly, as opposed to reaching it through {@link ProjectTeam}.
+ * Both routes count as membership, so anything answering "who works on this project" has to read
+ * both.
  *
  * <p>Lives in {@code project} rather than {@code user} for the same reason {@code TeamMember} lives
  * in {@code team}: the membership hangs off the project, and {@code userId} stays a plain id

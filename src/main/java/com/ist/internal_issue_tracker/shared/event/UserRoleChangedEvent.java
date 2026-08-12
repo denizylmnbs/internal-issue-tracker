@@ -11,7 +11,7 @@ package com.ist.internal_issue_tracker.shared.event;
  * other modules (here, {@code auth}) react without depending on {@code user}.
  *
  * <p>Delivered synchronously, inside the publisher's transaction - the same reasoning as {@link
- * UserDeactivatedEvent}: an async gap would leave the old role's cached grant, or its refresh tokens,
- * usable for however long delivery takes.
+ * UserDeactivatedEvent}: an async gap would leave the old role's cached grant, or its refresh
+ * tokens, usable for however long delivery takes.
  */
 public record UserRoleChangedEvent(Integer userId) {}

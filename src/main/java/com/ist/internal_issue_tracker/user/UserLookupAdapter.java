@@ -7,11 +7,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 /**
- * Backs {@link UserLookup} with {@link AuthenticatedUserLookup} rather than the repository directly,
- * so both existence and role checks ride the {@code auth-principal} Redis cache instead of issuing
- * their own {@code users} queries. Going through the injected bean (not a same-package {@code new
- * UserAuthenticatedUserLookup(...)}) matters: {@code @Cacheable} only applies through the Spring
- * proxy.
+ * Backs {@link UserLookup} with {@link AuthenticatedUserLookup} rather than the repository
+ * directly, so both existence and role checks ride the {@code auth-principal} Redis cache instead
+ * of issuing their own {@code users} queries. Going through the injected bean (not a same-package
+ * {@code new UserAuthenticatedUserLookup(...)}) matters: {@code @Cacheable} only applies through
+ * the Spring proxy.
  */
 @Component
 @RequiredArgsConstructor

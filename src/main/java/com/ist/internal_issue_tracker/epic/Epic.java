@@ -15,8 +15,8 @@ import org.hibernate.annotations.UpdateTimestamp;
  * A large body of work on one project, which issues are filed under.
  *
  * <p>Soft delete is a {@code deletedAt} stamp, as in {@code Sprint} and for the same reason: the
- * schema was drawn that way and it records when the epic was dropped rather than merely that it was.
- * A live row is one whose {@code deletedAt} is null.
+ * schema was drawn that way and it records when the epic was dropped rather than merely that it
+ * was. A live row is one whose {@code deletedAt} is null.
  */
 @Entity
 @Getter

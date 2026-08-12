@@ -20,13 +20,13 @@ import org.springframework.stereotype.Component;
  *
  * <p>A Kafka consumer rather than the plain {@code @EventListener} the cleanup listeners use, and
  * the difference is deliberate. Those run inline in the publisher's transaction because a
- * deactivated user must never be readable on a roster for even an instant. Nothing reads an activity
- * row to make a decision, so there is no such window to close, and the two properties that come with
- * the asynchronous form are worth having: a fault in here cannot turn a successful issue write into
- * a 500, and the topic still holds the event if this process dies mid-way.
+ * deactivated user must never be readable on a roster for even an instant. Nothing reads an
+ * activity row to make a decision, so there is no such window to close, and the two properties that
+ * come with the asynchronous form are worth having: a fault in here cannot turn a successful issue
+ * write into a 500, and the topic still holds the event if this process dies mid-way.
  *
- * <p>It also means this listener runs after the commit, on another thread. Nothing here may read the
- * clock or the database for anything the event does not already carry - see {@code
+ * <p>It also means this listener runs after the commit, on another thread. Nothing here may read
+ * the clock or the database for anything the event does not already carry - see {@code
  * IssueActivity#createdAt}.
  */
 @Component
@@ -37,6 +37,18 @@ class IssueActivityListener {
   private static final Logger log = LoggerFactory.getLogger(IssueActivityListener.class);
 
   private final IssueActivityRepository issueActivityRepository;
+
+  private static IssueActionType toActionType(IssueField field) {
+    return switch (field) {
+      case STATUS -> IssueActionType.STATUS_UPDATED;
+      case PRIORITY -> IssueActionType.PRIORITY_UPDATED;
+      case ASSIGNEE_USER -> IssueActionType.ASSIGNEE_USER_UPDATED;
+      case ASSIGNEE_TEAM -> IssueActionType.ASSIGNEE_TEAM_UPDATED;
+      case SPRINT -> IssueActionType.SPRINT_UPDATED;
+      case STORY_POINT -> IssueActionType.STORY_POINT_UPDATED;
+      case DETAILS -> IssueActionType.DETAILS_UPDATED;
+    };
+  }
 
   @KafkaHandler
   void on(IssueCreatedEvent event) {
@@ -94,18 +106,6 @@ class IssueActivityListener {
     log.warn(
         "Dropped unhandled payload on issue-events: {}. Nothing written to issue_activities.",
         payload == null ? "null" : payload.getClass().getName());
-  }
-
-  private static IssueActionType toActionType(IssueField field) {
-    return switch (field) {
-      case STATUS -> IssueActionType.STATUS_UPDATED;
-      case PRIORITY -> IssueActionType.PRIORITY_UPDATED;
-      case ASSIGNEE_USER -> IssueActionType.ASSIGNEE_USER_UPDATED;
-      case ASSIGNEE_TEAM -> IssueActionType.ASSIGNEE_TEAM_UPDATED;
-      case SPRINT -> IssueActionType.SPRINT_UPDATED;
-      case STORY_POINT -> IssueActionType.STORY_POINT_UPDATED;
-      case DETAILS -> IssueActionType.DETAILS_UPDATED;
-    };
   }
 
   private void record(

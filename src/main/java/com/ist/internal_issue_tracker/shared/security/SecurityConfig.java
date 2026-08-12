@@ -72,8 +72,7 @@ public class SecurityConfig {
       @Value("${app.cors.allowed-origins}") List<String> allowedOrigins) {
     CorsConfiguration configuration = new CorsConfiguration();
     configuration.setAllowedOrigins(allowedOrigins);
-    configuration.setAllowedMethods(
-        List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+    configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
     configuration.setAllowedHeaders(
         List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT));
     configuration.setExposedHeaders(List.of(HttpHeaders.LOCATION));
@@ -280,9 +279,9 @@ public class SecurityConfig {
   }
 
   /**
-   * The rule the issue routes run on: an editor, the project's leader, or anyone actually working on
-   * the project. Sprints and epics are planning artifacts and stay with the first two, but refusing
-   * a developer the right to file or move their own work would make the tracker unusable.
+   * The rule the issue routes run on: an editor, the project's leader, or anyone actually working
+   * on the project. Sprints and epics are planning artifacts and stay with the first two, but
+   * refusing a developer the right to file or move their own work would make the tracker unusable.
    *
    * <p>{@link #editorOrLeader} already takes the leadership question as a predicate, so widening it
    * is a matter of handing it a wider question rather than writing a second manager. Leadership is

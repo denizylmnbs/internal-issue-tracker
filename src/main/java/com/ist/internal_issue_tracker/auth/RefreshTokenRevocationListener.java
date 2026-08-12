@@ -17,8 +17,8 @@ import org.springframework.stereotype.Component;
  *
  * <p>Plain {@code @EventListener}, and these events stay in the process: this is the same
  * synchronous-cleanup choice {@code TeamMembershipCleanupListener} makes for {@code
- * UserDeactivatedEvent} - an async gap here would leave a compromised, just-changed, or just-demoted
- * credential's refresh tokens usable for however long delivery takes.
+ * UserDeactivatedEvent} - an async gap here would leave a compromised, just-changed, or
+ * just-demoted credential's refresh tokens usable for however long delivery takes.
  */
 @Component
 @RequiredArgsConstructor

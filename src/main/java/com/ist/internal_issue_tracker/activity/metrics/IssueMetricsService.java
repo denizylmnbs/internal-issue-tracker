@@ -30,12 +30,12 @@ import org.springframework.stereotype.Service;
 /**
  * The agile metrics, all of them derived from {@code issue_activities} and none of them stored.
  *
- * <p>Computing on read rather than maintaining a rollup is the right trade at this size: the queries
- * are indexed on {@code (project_id, action_type, created_at)} and a project's history is thousands
- * of rows, not millions. It also means a metric can be redefined by changing one query rather than
- * by rebuilding a table. When burndown and a cumulative flow diagram arrive they will not be able to
- * work this way - replaying the whole history on every draw is what a daily snapshot table exists to
- * avoid - but those are a different piece of work.
+ * <p>Computing on read rather than maintaining a rollup is the right trade at this size: the
+ * queries are indexed on {@code (project_id, action_type, created_at)} and a project's history is
+ * thousands of rows, not millions. It also means a metric can be redefined by changing one query
+ * rather than by rebuilding a table. When burndown and a cumulative flow diagram arrive they will
+ * not be able to work this way - replaying the whole history on every draw is what a daily snapshot
+ * table exists to avoid - but those are a different piece of work.
  */
 @Service
 @RequiredArgsConstructor
@@ -46,10 +46,37 @@ public class IssueMetricsService {
    * a team's numbers reflect how it works now rather than how it worked last year.
    */
   private static final int DEFAULT_WINDOW_DAYS = 90;
-
+  /**
+   * How many issues the aging list may name. Long enough to cover a stalled board, short enough
+   * that the answer stays a list to act on rather than a second copy of the backlog.
+   */
+  private static final int AGING_LIMIT = 20;
   private final IssueMetricsRepository issueMetricsRepository;
   private final ProjectLookup projectLookup;
   private final SprintLookup sprintLookup;
+
+  /**
+   * Null when there was no commitment to measure against, and null when the commitment was zero -
+   * dividing by it would be undefined, and reporting a sprint that committed to nothing as a
+   * spectacular over-delivery is worse than saying nothing.
+   */
+  private static Double sayDoRatio(Integer committedPoints, long completedPoints) {
+    if (committedPoints == null || committedPoints == 0) {
+      return null;
+    }
+
+    return (double) completedPoints / committedPoints;
+  }
+
+  private static DurationStatsResponse toResponse(MetricWindow window, DurationStats stats) {
+    return new DurationStatsResponse(
+        window,
+        stats.getIssueCount(),
+        stats.getAvgSeconds(),
+        stats.getP50Seconds(),
+        stats.getP85Seconds(),
+        stats.getP95Seconds());
+  }
 
   /**
    * Resolves the window and checks the project in one place, because every metric needs both and
@@ -144,12 +171,6 @@ public class IssueMetricsService {
   }
 
   /**
-   * How many issues the aging list may name. Long enough to cover a stalled board, short enough that
-   * the answer stays a list to act on rather than a second copy of the backlog.
-   */
-  private static final int AGING_LIMIT = 20;
-
-  /**
    * Work in progress as it stands, plus the oldest of it by name.
    *
    * <p>Takes {@code asOf} instead of a window - see {@code WipStatusCount}. Two queries rather than
@@ -198,7 +219,9 @@ public class IssueMetricsService {
     MetricWindow window = window(projectId, from, to);
 
     List<NetFlowResponse.Point> points =
-        issueMetricsRepository.netFlow(projectId, bucket.unit(), window.from(), window.to()).stream()
+        issueMetricsRepository
+            .netFlow(projectId, bucket.unit(), window.from(), window.to())
+            .stream()
             .map(
                 row ->
                     new NetFlowResponse.Point(
@@ -265,11 +288,11 @@ public class IssueMetricsService {
   }
 
   @Cacheable(cacheNames = "metrics-bugMttr")
-  public DurationStatsResponse bugMttr(
-      Integer projectId, OffsetDateTime from, OffsetDateTime to) {
+  public DurationStatsResponse bugMttr(Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
 
-    return toResponse(window, issueMetricsRepository.bugMttr(projectId, window.from(), window.to()));
+    return toResponse(
+        window, issueMetricsRepository.bugMttr(projectId, window.from(), window.to()));
   }
 
   /**
@@ -316,24 +339,12 @@ public class IssueMetricsService {
   }
 
   /**
-   * Null when there was no commitment to measure against, and null when the commitment was zero -
-   * dividing by it would be undefined, and reporting a sprint that committed to nothing as a
-   * spectacular over-delivery is worse than saying nothing.
-   */
-  private static Double sayDoRatio(Integer committedPoints, long completedPoints) {
-    if (committedPoints == null || committedPoints == 0) {
-      return null;
-    }
-
-    return (double) completedPoints / committedPoints;
-  }
-
-  /**
-   * One sprint's burndown. The window comes from the sprint rather than from the caller - a burndown
-   * over an arbitrary range is not a burndown - and stops at today so a running sprint does not
-   * trail a flat line into the future.
+   * One sprint's burndown. The window comes from the sprint rather than from the caller - a
+   * burndown over an arbitrary range is not a burndown - and stops at today so a running sprint
+   * does not trail a flat line into the future.
    *
-   * <p>A sprint with no end date runs to today, which is the same thing the client would draw anyway.
+   * <p>A sprint with no end date runs to today, which is the same thing the client would draw
+   * anyway.
    */
   @Cacheable(cacheNames = "metrics-burndown")
   public BurndownResponse burndown(Integer projectId, Integer sprintId) {
@@ -350,9 +361,7 @@ public class IssueMetricsService {
     OffsetDateTime from = sprint.startDate().atStartOfDay().atOffset(ZoneOffset.UTC);
     OffsetDateTime today = OffsetDateTime.now(ZoneOffset.UTC);
     OffsetDateTime end =
-        sprint.endDate() != null
-            ? sprint.endDate().atStartOfDay().atOffset(ZoneOffset.UTC)
-            : today;
+        sprint.endDate() != null ? sprint.endDate().atStartOfDay().atOffset(ZoneOffset.UTC) : today;
     OffsetDateTime to = end.isBefore(today) ? end : today;
 
     List<BurndownResponse.Point> points =
@@ -395,15 +404,5 @@ public class IssueMetricsService {
             .toList();
 
     return new CumulativeFlowResponse(window, points);
-  }
-
-  private static DurationStatsResponse toResponse(MetricWindow window, DurationStats stats) {
-    return new DurationStatsResponse(
-        window,
-        stats.getIssueCount(),
-        stats.getAvgSeconds(),
-        stats.getP50Seconds(),
-        stats.getP85Seconds(),
-        stats.getP95Seconds());
   }
 }

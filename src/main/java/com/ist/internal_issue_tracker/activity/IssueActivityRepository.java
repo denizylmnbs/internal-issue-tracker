@@ -6,8 +6,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 /**
- * Append and read back, nothing else - there is no update or delete path, because a history that can
- * be edited is not one.
+ * Append and read back, nothing else - there is no update or delete path, because a history that
+ * can be edited is not one.
  */
 interface IssueActivityRepository extends JpaRepository<IssueActivity, Integer> {
 

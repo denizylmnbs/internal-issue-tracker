@@ -88,9 +88,9 @@ public class UserController {
 
   @PatchMapping("/{id}/role")
   public ResponseEntity<ApiResponse<UserResponse>> changeRole(
-          @AuthenticationPrincipal AuthenticatedUser caller,
-          @PathVariable Integer id, @Valid @RequestBody RoleChangeRequest request
-  ) {
+      @AuthenticationPrincipal AuthenticatedUser caller,
+      @PathVariable Integer id,
+      @Valid @RequestBody RoleChangeRequest request) {
     UserResponse userResponse = userService.changeRole(id, request, caller);
 
     return ResponseEntity.ok(ApiResponse.ok(userResponse));

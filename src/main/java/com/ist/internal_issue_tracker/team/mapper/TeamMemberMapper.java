@@ -18,9 +18,9 @@ public class TeamMemberMapper {
 
   /**
    * {@code updatedAt} is nullable (no default, unlike {@code createdAt}) for any row that has never
-   * gone through Hibernate's {@code @UpdateTimestamp} path - e.g. one inserted by hand. Falling back
-   * to {@code createdAt} there is not a guess: for a membership never touched since it was created,
-   * "joined" and "created" are the same moment.
+   * gone through Hibernate's {@code @UpdateTimestamp} path - e.g. one inserted by hand. Falling
+   * back to {@code createdAt} there is not a guess: for a membership never touched since it was
+   * created, "joined" and "created" are the same moment.
    */
   public TeamMemberResponse toResponse(TeamMember teamMember) {
     return new TeamMemberResponse(

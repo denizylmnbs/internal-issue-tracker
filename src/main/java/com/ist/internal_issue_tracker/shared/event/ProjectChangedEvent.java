@@ -6,8 +6,8 @@ import org.springframework.modulith.events.Externalized;
 
 /**
  * Published when a live project is edited. Carries a list for the reason {@link IssueChangedEvent}
- * does, is never published with an empty one, and stamps every row it produces with one
- * {@code occurredAt}.
+ * does, is never published with an empty one, and stamps every row it produces with one {@code
+ * occurredAt}.
  */
 @Externalized("project-events::#{#this.projectId().toString()}")
 public record ProjectChangedEvent(

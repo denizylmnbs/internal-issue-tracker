@@ -6,9 +6,9 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
 
 /**
- * Topics are declared here rather than created on demand - the broker runs with
- * {@code KAFKA_AUTO_CREATE_TOPICS_ENABLE=false}, so a misspelled name fails loudly instead of
- * quietly producing into a new empty topic.
+ * Topics are declared here rather than created on demand - the broker runs with {@code
+ * KAFKA_AUTO_CREATE_TOPICS_ENABLE=false}, so a misspelled name fails loudly instead of quietly
+ * producing into a new empty topic.
  *
  * <p>Three partitions each, keyed on the aggregate id. Partitions can be added later but never
  * removed, and adding them re-maps every key.

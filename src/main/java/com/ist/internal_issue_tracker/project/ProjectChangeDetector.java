@@ -14,30 +14,10 @@ import org.springframework.stereotype.Component;
 @Component
 class ProjectChangeDetector {
 
-  List<ProjectFieldChange> diff(ProjectSnapshot before, Project after) {
-    List<ProjectFieldChange> changes = new ArrayList<>();
-
-    addDetails(changes, before, after);
-
-    if (!Objects.equals(before.leaderId(), after.getLeaderId())) {
-      changes.add(
-          new ProjectFieldChange(
-              ProjectField.LEADER, number(before.leaderId()), number(after.getLeaderId())));
-    }
-
-    if (before.status() != after.getStatus()) {
-      changes.add(
-          new ProjectFieldChange(
-              ProjectField.STATUS, name(before.status()), name(after.getStatus())));
-    }
-
-    return changes;
-  }
-
   /**
-   * Name, description and both dates share one action type, because {@code project_activities} gives
-   * them one - it has no dates action of its own, unlike {@code sprint_activities}. Only a name
-   * change is rendered into the value columns, for the reason given on {@code
+   * Name, description and both dates share one action type, because {@code project_activities}
+   * gives them one - it has no dates action of its own, unlike {@code sprint_activities}. Only a
+   * name change is rendered into the value columns, for the reason given on {@code
    * IssueChangeDetector#addDetails}.
    */
   private static void addDetails(
@@ -67,5 +47,25 @@ class ProjectChangeDetector {
 
   private static String number(Integer value) {
     return value == null ? null : String.valueOf(value);
+  }
+
+  List<ProjectFieldChange> diff(ProjectSnapshot before, Project after) {
+    List<ProjectFieldChange> changes = new ArrayList<>();
+
+    addDetails(changes, before, after);
+
+    if (!Objects.equals(before.leaderId(), after.getLeaderId())) {
+      changes.add(
+          new ProjectFieldChange(
+              ProjectField.LEADER, number(before.leaderId()), number(after.getLeaderId())));
+    }
+
+    if (before.status() != after.getStatus()) {
+      changes.add(
+          new ProjectFieldChange(
+              ProjectField.STATUS, name(before.status()), name(after.getStatus())));
+    }
+
+    return changes;
   }
 }

@@ -49,10 +49,10 @@ public class ProjectService {
   private final CacheManager cacheManager;
 
   /**
-   * {@code isLeaderOfProject} is cached under this name, keyed by {@code projectId + ':' + userId} -
-   * see {@code ProjectLookupAdapter}. A leader change touches at most two keys (who it was, who it
-   * is now), both already in hand at the call site, so this evicts exactly them rather than waiting
-   * on the two-minute TTL.
+   * {@code isLeaderOfProject} is cached under this name, keyed by {@code projectId + ':' + userId}
+   * - see {@code ProjectLookupAdapter}. A leader change touches at most two keys (who it was, who
+   * it is now), both already in hand at the call site, so this evicts exactly them rather than
+   * waiting on the two-minute TTL.
    */
   private void evictLeaderCache(Integer projectId, Integer userId) {
     if (userId == null) {
@@ -154,8 +154,7 @@ public class ProjectService {
   }
 
   @Transactional
-  public ProjectResponse updateProject(
-      Integer id, Integer actorId, ProjectUpdateRequest request) {
+  public ProjectResponse updateProject(Integer id, Integer actorId, ProjectUpdateRequest request) {
 
     // fetch existing project
     Project project = requireActiveProject(id);
@@ -186,8 +185,7 @@ public class ProjectService {
   }
 
   @Transactional
-  public ProjectResponse changeLeader(
-      Integer id, Integer actorId, ChangeLeaderRequest request) {
+  public ProjectResponse changeLeader(Integer id, Integer actorId, ChangeLeaderRequest request) {
     // authorization (editor-only) is enforced in SecurityConfig
     Project project = requireActiveProject(id);
 
@@ -232,8 +230,7 @@ public class ProjectService {
    * CANCELLED}. If that ever needs narrowing, this is the one place it has to happen.
    */
   @Transactional
-  public ProjectResponse changeStatus(
-      Integer id, Integer actorId, ChangeStatusRequest request) {
+  public ProjectResponse changeStatus(Integer id, Integer actorId, ChangeStatusRequest request) {
     Project project = requireActiveProject(id);
 
     ProjectSnapshot before = ProjectSnapshot.of(project);

@@ -13,12 +13,12 @@ import org.junit.jupiter.api.Test;
  *
  * <p>The metric queries match on status names as string literals, because statuses reach {@code
  * activity} as text in {@code issue_activities.new_value} and this module may not depend on {@code
- * issue} to learn them. {@link MetricStatus} writes those names down; nothing enforces that it still
- * agrees with {@code IssueStatus}.
+ * issue} to learn them. {@link MetricStatus} writes those names down; nothing enforces that it
+ * still agrees with {@code IssueStatus}.
  *
  * <p>Adding a status to {@code IssueStatus} without adding it here would not fail to compile and
- * would not fail any other test. It would simply fall outside every set in {@code MetricStatus}, and
- * flow efficiency would carry on returning a plausible number that had stopped meaning what it
+ * would not fail any other test. It would simply fall outside every set in {@code MetricStatus},
+ * and flow efficiency would carry on returning a plausible number that had stopped meaning what it
  * claims. This test is the only thing standing between that change and a silently wrong metric.
  *
  * <p>It can import both enums only because it is a test - {@code ModularityTests} inspects main

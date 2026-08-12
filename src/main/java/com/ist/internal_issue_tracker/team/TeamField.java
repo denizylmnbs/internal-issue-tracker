@@ -5,7 +5,8 @@ package com.ist.internal_issue_tracker.team;
  * the {@code teams.field} CHECK constraint in the schema - adding a value here requires a Flyway
  * migration that widens that constraint.
  */
-public enum TeamField {
+public enum
+TeamField {
   BACKEND,
   FRONTEND,
   ANDROID,

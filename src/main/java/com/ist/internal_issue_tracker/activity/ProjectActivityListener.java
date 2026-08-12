@@ -19,7 +19,8 @@ import org.springframework.stereotype.Component;
  * of {@link IssueActivityListener}, and asynchronous for the same reasons.
  *
  * <p>It listens for {@code ProjectDeletedEvent} and not for {@code ProjectDeactivatedEvent}, which
- * is published in the same breath. The two are separate on purpose; see {@code ProjectDeletedEvent}.
+ * is published in the same breath. The two are separate on purpose; see {@code
+ * ProjectDeletedEvent}.
  */
 @Component
 @KafkaListener(topics = "project-events", groupId = "activity-project-writer")
@@ -30,10 +31,36 @@ class ProjectActivityListener {
 
   private final ProjectActivityRepository projectActivityRepository;
 
+  private static ProjectActionType toActionType(ProjectField field) {
+    return switch (field) {
+      case LEADER -> ProjectActionType.LEADER_UPDATED;
+      case DETAILS -> ProjectActionType.DETAILS_UPDATED;
+      case STATUS -> ProjectActionType.STATUS_UPDATED;
+    };
+  }
+
+  private static ProjectActionType toActionType(ProjectMembershipEvent event) {
+    return switch (event.subject()) {
+      case USER ->
+          event.change() == ProjectMembershipEvent.Change.ADDED
+              ? ProjectActionType.USER_ADDED
+              : ProjectActionType.USER_REMOVED;
+      case TEAM ->
+          event.change() == ProjectMembershipEvent.Change.ADDED
+              ? ProjectActionType.TEAM_ADDED
+              : ProjectActionType.TEAM_REMOVED;
+    };
+  }
+
   @KafkaHandler
   void on(ProjectCreatedEvent event) {
     record(
-        event.projectId(), event.actorId(), ProjectActionType.CREATED, null, null, event.occurredAt());
+        event.projectId(),
+        event.actorId(),
+        ProjectActionType.CREATED,
+        null,
+        null,
+        event.occurredAt());
   }
 
   @KafkaHandler
@@ -52,12 +79,17 @@ class ProjectActivityListener {
   @KafkaHandler
   void on(ProjectDeletedEvent event) {
     record(
-        event.projectId(), event.actorId(), ProjectActionType.DELETED, null, null, event.occurredAt());
+        event.projectId(),
+        event.actorId(),
+        ProjectActionType.DELETED,
+        null,
+        null,
+        event.occurredAt());
   }
 
   /**
-   * The subject goes into {@code newValue} when joining and {@code oldValue} when leaving, so the two
-   * columns keep saying "what it was" and "what it is" - see {@link ProjectActivity}.
+   * The subject goes into {@code newValue} when joining and {@code oldValue} when leaving, so the
+   * two columns keep saying "what it was" and "what it is" - see {@link ProjectActivity}.
    */
   @KafkaHandler
   void on(ProjectMembershipEvent event) {
@@ -82,27 +114,6 @@ class ProjectActivityListener {
     log.warn(
         "Dropped unhandled payload on project-events: {}. Nothing written to project_activities.",
         payload == null ? "null" : payload.getClass().getName());
-  }
-
-  private static ProjectActionType toActionType(ProjectField field) {
-    return switch (field) {
-      case LEADER -> ProjectActionType.LEADER_UPDATED;
-      case DETAILS -> ProjectActionType.DETAILS_UPDATED;
-      case STATUS -> ProjectActionType.STATUS_UPDATED;
-    };
-  }
-
-  private static ProjectActionType toActionType(ProjectMembershipEvent event) {
-    return switch (event.subject()) {
-      case USER ->
-          event.change() == ProjectMembershipEvent.Change.ADDED
-              ? ProjectActionType.USER_ADDED
-              : ProjectActionType.USER_REMOVED;
-      case TEAM ->
-          event.change() == ProjectMembershipEvent.Change.ADDED
-              ? ProjectActionType.TEAM_ADDED
-              : ProjectActionType.TEAM_REMOVED;
-    };
   }
 
   private void record(

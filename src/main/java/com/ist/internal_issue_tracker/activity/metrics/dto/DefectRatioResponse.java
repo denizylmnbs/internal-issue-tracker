@@ -8,8 +8,7 @@ import java.util.List;
  * Bug share and defect density per bucket - see {@code DefectBucket} for why both denominators are
  * here and why neither alone is enough.
  */
-public record DefectRatioResponse(
-    MetricWindow window, MetricsBucket bucket, List<Point> points) {
+public record DefectRatioResponse(MetricWindow window, MetricsBucket bucket, List<Point> points) {
 
   public record Point(
       OffsetDateTime bucketStart,

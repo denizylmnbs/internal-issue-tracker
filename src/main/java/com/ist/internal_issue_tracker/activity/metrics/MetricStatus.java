@@ -33,9 +33,9 @@ public enum MetricStatus {
   public static final Set<MetricStatus> ACTIVE = Set.of(IN_PROGRESS, IN_REVIEW);
 
   /**
-   * What counts as delivered. {@code CANCELLED} is deliberately excluded: work that was dropped left
-   * the flow but was never handed over, and counting it as throughput would let a team improve its
-   * numbers by cancelling.
+   * What counts as delivered. {@code CANCELLED} is deliberately excluded: work that was dropped
+   * left the flow but was never handed over, and counting it as throughput would let a team improve
+   * its numbers by cancelling.
    */
   public static final Set<MetricStatus> COMPLETED = Set.of(DONE);
 }

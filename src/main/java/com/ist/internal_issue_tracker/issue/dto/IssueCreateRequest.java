@@ -18,7 +18,8 @@ import jakarta.validation.constraints.Size;
  * ordinary. Leaving it out takes the entity's {@code MEDIUM} default.
  *
  * <p>Assignees may be set here even though they also have their own endpoint. Filing work already
- * pointed at someone is common enough to be worth the second path, and both run the same validation.
+ * pointed at someone is common enough to be worth the second path, and both run the same
+ * validation.
  */
 public record IssueCreateRequest(
     @NotBlank(message = "Name cannot be blank") @Size(min = 2, max = 255) String name,

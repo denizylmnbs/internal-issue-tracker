@@ -11,8 +11,8 @@ public class IssueMapper {
 
   /**
    * The project comes from the path and the reporter from the authenticated caller. The status is
-   * left alone so the entity's {@code BACKLOG} default stands; the priority is only overwritten when
-   * one was actually given, which is what makes omitting it fall back to {@code MEDIUM}.
+   * left alone so the entity's {@code BACKLOG} default stands; the priority is only overwritten
+   * when one was actually given, which is what makes omitting it fall back to {@code MEDIUM}.
    */
   public Issue toEntity(Integer projectId, Integer reporterId, IssueCreateRequest request) {
     Issue issue = new Issue();
@@ -38,8 +38,8 @@ public class IssueMapper {
 
   /**
    * A replacement, so every field it owns is written even when null - omitting {@code sprintId}
-   * takes the issue out of its sprint rather than leaving it where it was. Status, assignees and the
-   * reporter are not this method's to touch.
+   * takes the issue out of its sprint rather than leaving it where it was. Status, assignees and
+   * the reporter are not this method's to touch.
    */
   public void updateEntity(Issue issue, IssueUpdateRequest request) {
     issue.setName(request.name());

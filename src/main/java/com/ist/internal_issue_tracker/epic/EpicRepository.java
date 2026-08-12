@@ -8,9 +8,10 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /**
- * Derived and JPQL throughout, no native SQL: an epic's world is one table, and the project it hangs
- * off is validated through {@code ProjectLookup} before any of these run. Nothing crosses a module
- * boundary, so sorting keeps working on the list endpoint - unlike the membership repositories.
+ * Derived and JPQL throughout, no native SQL: an epic's world is one table, and the project it
+ * hangs off is validated through {@code ProjectLookup} before any of these run. Nothing crosses a
+ * module boundary, so sorting keeps working on the list endpoint - unlike the membership
+ * repositories.
  */
 interface EpicRepository extends JpaRepository<Epic, Integer> {
 
@@ -22,9 +23,9 @@ interface EpicRepository extends JpaRepository<Epic, Integer> {
   Optional<Epic> findByIdAndProjectIdAndDeletedAtIsNull(Integer id, Integer projectId);
 
   /**
-   * Scoped to the project and blind to deleted rows, matching
-   * {@code unique_active_epic_name_per_project}: two projects may each have a "Checkout rewrite",
-   * and deleting one hands its name back.
+   * Scoped to the project and blind to deleted rows, matching {@code
+   * unique_active_epic_name_per_project}: two projects may each have a "Checkout rewrite", and
+   * deleting one hands its name back.
    */
   boolean existsByProjectIdAndNameAndDeletedAtIsNull(Integer projectId, String name);
 
@@ -33,9 +34,9 @@ interface EpicRepository extends JpaRepository<Epic, Integer> {
       Integer projectId, String name, Integer id);
 
   /**
-   * One project's epics, deleted ones excluded unconditionally - see
-   * {@code TeamRepository#findAllByFilters} for why that is not a caller-supplied filter, and for
-   * why {@code :name} needs the {@code CAST} that {@code :status} and {@code :reporterId} do not.
+   * One project's epics, deleted ones excluded unconditionally - see {@code
+   * TeamRepository#findAllByFilters} for why that is not a caller-supplied filter, and for why
+   * {@code :name} needs the {@code CAST} that {@code :status} and {@code :reporterId} do not.
    *
    * <p>{@code :reporterId} is what the schema's index on {@code epics(reporter_id)} is for; it
    * answers "the epics so-and-so opened" without a second endpoint existing to ask it.

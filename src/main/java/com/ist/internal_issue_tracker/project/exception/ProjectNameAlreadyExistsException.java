@@ -6,6 +6,7 @@ import com.ist.internal_issue_tracker.shared.exception.DuplicateResourceExceptio
 public class ProjectNameAlreadyExistsException extends DuplicateResourceException {
 
   public ProjectNameAlreadyExistsException(String name) {
-    super(ProjectErrorCode.PROJECT_NAME_ALREADY_EXISTS, "This project name already exists: " + name);
+    super(
+        ProjectErrorCode.PROJECT_NAME_ALREADY_EXISTS, "This project name already exists: " + name);
   }
 }

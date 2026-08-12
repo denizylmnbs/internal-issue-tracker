@@ -115,8 +115,7 @@ public class EpicService {
    * carries nothing like the sprint table's "one in progress per project" index. If this ever needs
    * narrowing, this is the one place it has to happen.
    */
-  public EpicResponse changeStatus(
-      Integer projectId, Integer epicId, ChangeStatusRequest request) {
+  public EpicResponse changeStatus(Integer projectId, Integer epicId, ChangeStatusRequest request) {
     requireActiveProject(projectId);
 
     Epic epic = requireLiveEpic(projectId, epicId);
@@ -127,8 +126,8 @@ public class EpicService {
   }
 
   /**
-   * Soft delete: the row stays and {@code deletedAt} is stamped. The status is left where it was, so
-   * the record still says what the epic was doing when it was dropped.
+   * Soft delete: the row stays and {@code deletedAt} is stamped. The status is left where it was,
+   * so the record still says what the epic was doing when it was dropped.
    */
   public void deleteEpic(Integer projectId, Integer epicId) {
     requireActiveProject(projectId);

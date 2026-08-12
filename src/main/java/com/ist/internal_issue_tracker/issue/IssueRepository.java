@@ -10,23 +10,23 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /**
- * Derived and JPQL throughout, no native SQL. An issue points at four other modules but only ever by
- * id - those references are validated through ports, never joined - so every query here stays inside
- * one table and sorting keeps working on the list endpoint.
+ * Derived and JPQL throughout, no native SQL. An issue points at four other modules but only ever
+ * by id - those references are validated through ports, never joined - so every query here stays
+ * inside one table and sorting keeps working on the list endpoint.
  */
 interface IssueRepository extends JpaRepository<Issue, Integer> {
 
   /**
    * Both keys, always. Looking an issue up by id alone would let the leader of project A pass their
-   * own project in the path and an issue of project B alongside it: the authorization rule only ever
-   * sees the project, so the mismatch has to be caught here or not at all.
+   * own project in the path and an issue of project B alongside it: the authorization rule only
+   * ever sees the project, so the mismatch has to be caught here or not at all.
    */
   Optional<Issue> findByIdAndProjectIdAndDeletedAtIsNull(Integer id, Integer projectId);
 
   /**
-   * What one sprint currently holds, in points. {@code coalesce} on both levels: the inner one turns
-   * an unestimated issue into a zero rather than letting it drop out of the sum, and the outer one
-   * turns a sprint with no issues at all into a zero rather than a null.
+   * What one sprint currently holds, in points. {@code coalesce} on both levels: the inner one
+   * turns an unestimated issue into a zero rather than letting it drop out of the sum, and the
+   * outer one turns a sprint with no issues at all into a zero rather than a null.
    *
    * <p>Read through {@code IssueLookup} by {@code sprint}, which is the only caller.
    */
@@ -45,9 +45,9 @@ interface IssueRepository extends JpaRepository<Issue, Integer> {
    * to pair this with - {@code issues} carries no unique index of any kind, so two issues on a
    * project may share a name and the filter below is a search rather than a lookup.
    *
-   * <p>{@code :name} needs the {@code CAST} for the reason spelled out on
-   * {@code TeamRepository#findAllByFilters}; the enums and ids are compared against typed columns
-   * and need none.
+   * <p>{@code :name} needs the {@code CAST} for the reason spelled out on {@code
+   * TeamRepository#findAllByFilters}; the enums and ids are compared against typed columns and need
+   * none.
    */
   @Query(
       """
@@ -100,10 +100,10 @@ interface IssueRepository extends JpaRepository<Issue, Integer> {
       Pageable pageable);
 
   /**
-   * One person's story points, summed per project-and-sprint pair, read from {@code issues}' current
-   * state - see {@code UserSprintPoints} for why that is a deliberately different reading from the
-   * project-wide velocity query. {@code CANCELLED} issues are excluded entirely, on both sides of the
-   * sum: dropped work was never a commitment either finished or missed.
+   * One person's story points, summed per project-and-sprint pair, read from {@code issues}'
+   * current state - see {@code UserSprintPoints} for why that is a deliberately different reading
+   * from the project-wide velocity query. {@code CANCELLED} issues are excluded entirely, on both
+   * sides of the sum: dropped work was never a commitment either finished or missed.
    *
    * <p>Unpaged and un-projectId'd like {@link #findByAssigneeAndStatuses}, for the same reason -
    * {@code UserWorkService} needs every sprint this person touched, anywhere, to build current,

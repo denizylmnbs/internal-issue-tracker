@@ -9,8 +9,9 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 /**
- * One thing that happened to one project. Append-only and shaped like {@link IssueActivity} - see it
- * for why the ids are plain integers and why {@code createdAt} is not a {@code @CreationTimestamp}.
+ * One thing that happened to one project. Append-only and shaped like {@link IssueActivity} - see
+ * it for why the ids are plain integers and why {@code createdAt} is not a
+ * {@code @CreationTimestamp}.
  *
  * <p>On a membership row, {@code newValue} carries the id of the person or team added and {@code
  * oldValue} the id of the one removed, so the value columns keep meaning "what it was" and "what it

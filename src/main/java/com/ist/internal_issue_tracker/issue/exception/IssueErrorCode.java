@@ -4,9 +4,9 @@ import com.ist.internal_issue_tracker.shared.exception.ErrorCode;
 import org.springframework.http.HttpStatus;
 
 /**
- * The four reference codes are {@code 422} rather than {@code 404}, following
- * {@code ProjectErrorCode.LEADER_NOT_FOUND}: the request is well formed and the issue it addresses
- * may well exist - it is the thing being pointed at that cannot be used. A {@code 404} would say the
+ * The four reference codes are {@code 422} rather than {@code 404}, following {@code
+ * ProjectErrorCode.LEADER_NOT_FOUND}: the request is well formed and the issue it addresses may
+ * well exist - it is the thing being pointed at that cannot be used. A {@code 404} would say the
  * issue itself was missing, which is a different problem with a different fix.
  */
 public enum IssueErrorCode implements ErrorCode {

@@ -7,10 +7,10 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Stream;
+import org.hibernate.query.sqm.UnknownPathException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
-import org.hibernate.query.sqm.UnknownPathException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.dao.OptimisticLockingFailureException;
@@ -107,6 +107,32 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     return UUID.randomUUID().toString().substring(0, 8);
   }
 
+  /**
+   * The properties named by {@code ?sort=}, with the direction stripped: {@code sort=bogus,desc}
+   * reports {@code bogus}, because {@code desc} is not what the caller got wrong.
+   */
+  private static String callerSuppliedSort(WebRequest request) {
+    String[] values = request.getParameterValues("sort");
+    if (values == null || values.length == 0) {
+      return null;
+    }
+    return Stream.of(values)
+        .map(v -> v.replaceAll("(?i),\\s*(asc|desc|ignorecase)\\b", ""))
+        .collect(java.util.stream.Collectors.joining(", "));
+  }
+
+  private static boolean hasCause(Throwable ex, Class<? extends Throwable> type) {
+    for (Throwable t = ex; t != null; t = t.getCause()) {
+      if (type.isInstance(t)) {
+        return true;
+      }
+      if (t.getCause() == t) {
+        break;
+      }
+    }
+    return false;
+  }
+
   @Override
   protected ResponseEntity<Object> createResponseEntity(
       Object body, HttpHeaders headers, HttpStatusCode statusCode, WebRequest request) {
@@ -127,6 +153,10 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     String message = pd.getDetail() != null ? pd.getDetail() : code.defaultMessage();
     return ApiError.of(code.code(), message, path(request));
   }
+
+  // ---------------------------------------------------------------------
+  // Exceptions the base class does not know about.
+  // ---------------------------------------------------------------------
 
   private ApiError fromStatus(HttpStatusCode statusCode, WebRequest request) {
     ErrorCode code = mapStatusToCommonCode(statusCode);
@@ -169,10 +199,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     return handleExceptionInternal(
         ex, ApiResponse.error(error), headers, HttpStatus.BAD_REQUEST, request);
   }
-
-  // ---------------------------------------------------------------------
-  // Exceptions the base class does not know about.
-  // ---------------------------------------------------------------------
 
   @Override
   protected ResponseEntity<Object> handleHandlerMethodValidationException(
@@ -245,13 +271,13 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
    * this application actually lands. Spring Data does not vet sort properties for an explicit query
    * - it appends them to the JPQL and lets Hibernate parse the result - so the failure surfaces as
    * an {@code UnknownPathException} wrapped in a translated data-access exception rather than as
-   * {@link PropertyReferenceException}. Without this it reached {@link #handleUnexpected} and turned
-   * a caller's typo into a 500 that logs like a server fault.
+   * {@link PropertyReferenceException}. Without this it reached {@link #handleUnexpected} and
+   * turned a caller's typo into a 500 that logs like a server fault.
    *
-   * <p>The guard matters: the same exception is what a genuinely broken {@code @Query} of ours would
-   * throw, and answering 400 to that would blame the caller for our bug. So it is only treated as a
-   * client error when the request actually carried a {@code sort} parameter - the only way the
-   * caller can influence which paths a query names.
+   * <p>The guard matters: the same exception is what a genuinely broken {@code @Query} of ours
+   * would throw, and answering 400 to that would blame the caller for our bug. So it is only
+   * treated as a client error when the request actually carried a {@code sort} parameter - the only
+   * way the caller can influence which paths a query names.
    */
   @ExceptionHandler(InvalidDataAccessApiUsageException.class)
   ResponseEntity<ApiResponse<Void>> handleInvalidDataAccessApiUsage(
@@ -272,32 +298,6 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
             "'" + property + "' is not a sortable property",
             path(request));
     return ResponseEntity.badRequest().body(ApiResponse.error(error));
-  }
-
-  /**
-   * The properties named by {@code ?sort=}, with the direction stripped: {@code sort=bogus,desc}
-   * reports {@code bogus}, because {@code desc} is not what the caller got wrong.
-   */
-  private static String callerSuppliedSort(WebRequest request) {
-    String[] values = request.getParameterValues("sort");
-    if (values == null || values.length == 0) {
-      return null;
-    }
-    return Stream.of(values)
-        .map(v -> v.replaceAll("(?i),\\s*(asc|desc|ignorecase)\\b", ""))
-        .collect(java.util.stream.Collectors.joining(", "));
-  }
-
-  private static boolean hasCause(Throwable ex, Class<? extends Throwable> type) {
-    for (Throwable t = ex; t != null; t = t.getCause()) {
-      if (type.isInstance(t)) {
-        return true;
-      }
-      if (t.getCause() == t) {
-        break;
-      }
-    }
-    return false;
   }
 
   @ExceptionHandler(AppException.class)

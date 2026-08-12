@@ -7,8 +7,8 @@ import java.time.OffsetDateTime;
  * case, one level down. Exists so a module outside {@code team} (namely {@code project}'s
  * participant cache) can react to a roster change without reading {@code team_users} itself.
  *
- * <p>No {@code actorId}: unlike {@code project}, {@code team} does not thread the caller through its
- * membership endpoints today, and this event has no audit use that would need one - only cache
+ * <p>No {@code actorId}: unlike {@code project}, {@code team} does not thread the caller through
+ * its membership endpoints today, and this event has no audit use that would need one - only cache
  * invalidation, which cares who the change is about, not who made it.
  */
 public record TeamMembershipEvent(

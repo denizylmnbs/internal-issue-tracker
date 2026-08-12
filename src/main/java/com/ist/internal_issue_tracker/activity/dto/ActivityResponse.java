@@ -19,11 +19,11 @@ import java.time.OffsetDateTime;
  * <p>{@code scope} and {@code subjectId} say which of the three tables a row came from and what it
  * hangs off (a project id, an issue id, or a sprint id). They are redundant on the three
  * single-subject endpoints — every row on {@code GET .../issues/{issueId}/activities} is obviously
- * {@code ISSUE}/{@code issueId} — but required on the project-wide feed
- * ({@code GET /api/projects/{id}/activities}), which unions all three tables: without them a client
- * cannot tell a project's own {@code STATUS_UPDATED} row from an issue's, or route a click on one
- * row to the right page. {@code id} alone cannot disambiguate either, since it is only unique within
- * one table.
+ * {@code ISSUE}/{@code issueId} — but required on the project-wide feed ({@code GET
+ * /api/projects/{id}/activities}), which unions all three tables: without them a client cannot tell
+ * a project's own {@code STATUS_UPDATED} row from an issue's, or route a click on one row to the
+ * right page. {@code id} alone cannot disambiguate either, since it is only unique within one
+ * table.
  */
 public record ActivityResponse(
     Integer id,

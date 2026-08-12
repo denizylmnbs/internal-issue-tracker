@@ -12,8 +12,8 @@ interface ProjectActivityRepository extends JpaRepository<ProjectActivity, Integ
 
   /**
    * Guards the replayed event. Unlike the issue and sprint versions this also keys on the values:
-   * two people can be added to a project in the same operation, producing rows that agree on project,
-   * action and instant and differ only in who was added.
+   * two people can be added to a project in the same operation, producing rows that agree on
+   * project, action and instant and differ only in who was added.
    */
   boolean existsByProjectIdAndActionTypeAndCreatedAtAndOldValueAndNewValue(
       Integer projectId,
@@ -68,5 +68,6 @@ interface ProjectActivityRepository extends JpaRepository<ProjectActivity, Integ
           ) feed
           """,
       nativeQuery = true)
-  Page<ActivityFeedRow> findFeedByProjectId(@Param("projectId") Integer projectId, Pageable pageable);
+  Page<ActivityFeedRow> findFeedByProjectId(
+      @Param("projectId") Integer projectId, Pageable pageable);
 }

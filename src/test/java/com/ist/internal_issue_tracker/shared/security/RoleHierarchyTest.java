@@ -27,6 +27,11 @@ class RoleHierarchyTest {
 
   private final RoleHierarchy roleHierarchy = new SecurityConfig().roleHierarchy();
 
+  private static Stream<Arguments> everyOrderedRolePair() {
+    return Arrays.stream(Role.values())
+        .flatMap(actor -> Arrays.stream(Role.values()).map(target -> Arguments.of(actor, target)));
+  }
+
   private List<String> reachableFrom(Role role) {
     return roleHierarchy
         .getReachableGrantedAuthorities(List.of(new SimpleGrantedAuthority(role.authority())))
@@ -92,17 +97,11 @@ class RoleHierarchyTest {
     assertThat(actor.outranks(target)).isEqualTo(hierarchySaysStrictlyAbove);
   }
 
-  private static Stream<Arguments> everyOrderedRolePair() {
-    return Arrays.stream(Role.values())
-        .flatMap(
-            actor -> Arrays.stream(Role.values()).map(target -> Arguments.of(actor, target)));
-  }
-
   /**
-   * Decides a {@code hasRole(...)} rule exactly the way {@code authorizeHttpRequests} does:
-   * {@code AuthorizeHttpRequestsConfigurer} builds a {@link DefaultAuthorizationManagerFactory} and
-   * hands it the {@code RoleHierarchy} bean. The caller carries only its own authority, as the JWT
-   * filter grants it.
+   * Decides a {@code hasRole(...)} rule exactly the way {@code authorizeHttpRequests} does: {@code
+   * AuthorizeHttpRequestsConfigurer} builds a {@link DefaultAuthorizationManagerFactory} and hands
+   * it the {@code RoleHierarchy} bean. The caller carries only its own authority, as the JWT filter
+   * grants it.
    */
   private boolean grants(String requiredRole, Role callerRole) {
     DefaultAuthorizationManagerFactory<Object> factory = new DefaultAuthorizationManagerFactory<>();
@@ -111,7 +110,8 @@ class RoleHierarchyTest {
     Authentication caller =
         new UsernamePasswordAuthenticationToken(
             "caller", null, List.of(new SimpleGrantedAuthority(callerRole.authority())));
-    AuthorizationResult result = factory.hasRole(requiredRole).authorize(() -> caller, new Object());
+    AuthorizationResult result =
+        factory.hasRole(requiredRole).authorize(() -> caller, new Object());
 
     return result != null && result.isGranted();
   }

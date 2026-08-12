@@ -12,10 +12,10 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /**
- * No native SQL. Both reads used to join {@code teams} - another module's table, spelled out by hand
- * - only to drop assignments of a team that had been deleted. Those rows are now retired when the
- * team is, by {@link ProjectAssignmentCleanupListener}, so {@code is_active} on the assignment row
- * answers the question on its own.
+ * No native SQL. Both reads used to join {@code teams} - another module's table, spelled out by
+ * hand - only to drop assignments of a team that had been deleted. Those rows are now retired when
+ * the team is, by {@link ProjectAssignmentCleanupListener}, so {@code is_active} on the assignment
+ * row answers the question on its own.
  */
 interface ProjectTeamRepository extends JpaRepository<ProjectTeam, Integer> {
 
@@ -39,8 +39,7 @@ interface ProjectTeamRepository extends JpaRepository<ProjectTeam, Integer> {
    * an eviction out over when a {@code TeamMembershipEvent} names that team - a user joining or
    * leaving it can change their participant status on every one of these at once.
    */
-  @Query(
-      "select pt.projectId from ProjectTeam pt where pt.teamId = :teamId and pt.isActive = true")
+  @Query("select pt.projectId from ProjectTeam pt where pt.teamId = :teamId and pt.isActive = true")
   Set<Integer> findActiveProjectIdsByTeamId(@Param("teamId") Integer teamId);
 
   /** Backed by {@code unique_active_project_team} - see {@code ProjectMemberRepository}. */

@@ -24,8 +24,8 @@ import org.springframework.web.bind.annotation.*;
  * rather than {@code projectId} for the reason given on {@code SprintController}.
  *
  * <p>These are the first routes open to project participants rather than only editors and leaders,
- * which is what {@code SecurityConfig}'s {@code editorLeaderOrParticipant} is for. Deleting an issue
- * stays with editors and leaders.
+ * which is what {@code SecurityConfig}'s {@code editorLeaderOrParticipant} is for. Deleting an
+ * issue stays with editors and leaders.
  *
  * <p>Every write here passes the caller down as well as the request - see {@link IssueService} for
  * what that identity is for and why it is taken from the principal rather than the body.
@@ -118,9 +118,9 @@ public class IssueController {
 
   /**
    * The three that follow are {@link IssueUpdateRequest} taken apart along the lines a board and a
-   * backlog actually move things: a sprint at a time, an epic at a time, a classification at a time.
-   * The full replacement stays for the edit form, which is the one caller that really does hold
-   * every field.
+   * backlog actually move things: a sprint at a time, an epic at a time, a classification at a
+   * time. The full replacement stays for the edit form, which is the one caller that really does
+   * hold every field.
    */
   @PatchMapping("/{issueId}/sprint")
   public ResponseEntity<ApiResponse<IssueResponse>> changeSprint(

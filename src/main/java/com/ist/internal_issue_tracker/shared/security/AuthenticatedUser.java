@@ -11,8 +11,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
  *
  * <p>{@link JsonCreator}/{@link JsonProperty} on the constructor are what let {@code
  * UserAuthenticatedUserLookup}'s {@code @Cacheable} round-trip this through Redis: a {@code final}
- * class with no default constructor is otherwise opaque to {@code GenericJacksonJsonRedisSerializer}
- * on the read side.
+ * class with no default constructor is otherwise opaque to {@code
+ * GenericJacksonJsonRedisSerializer} on the read side.
  */
 public final class AuthenticatedUser {
 

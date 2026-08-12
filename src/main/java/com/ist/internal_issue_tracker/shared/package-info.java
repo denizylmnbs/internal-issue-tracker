@@ -4,7 +4,8 @@
  * <p>It holds the three things a business module cannot own without dragging its neighbours in: the
  * {@code port} interfaces a module implements so others can ask it questions without naming its
  * types, the {@code event} records a module publishes so others can react to its deletes, and the
- * cross-cutting {@code web}, {@code security} and {@code exception} plumbing every controller needs.
+ * cross-cutting {@code web}, {@code security} and {@code exception} plumbing every controller
+ * needs.
  *
  * <p>{@code OPEN} rather than the default: its sub-packages are meant to be imported directly, so
  * treating them as internals would mean declaring a named interface for each one to say the same

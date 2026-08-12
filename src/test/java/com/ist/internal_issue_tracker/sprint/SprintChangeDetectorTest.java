@@ -7,7 +7,10 @@ import com.ist.internal_issue_tracker.shared.event.SprintFieldChange;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 
-/** Mostly about the date pair, which is the one thing this detector does that the issue one does not. */
+/**
+ * Mostly about the date pair, which is the one thing this detector does that the issue one does
+ * not.
+ */
 class SprintChangeDetectorTest {
 
   private final SprintChangeDetector detector = new SprintChangeDetector();
@@ -42,7 +45,9 @@ class SprintChangeDetectorTest {
         .containsExactly(new SprintFieldChange(SprintField.STATUS, "TODO", "IN_PROGRESS"));
   }
 
-  /** Moving either date is one DATES change carrying both, because the schema gives them one action. */
+  /**
+   * Moving either date is one DATES change carrying both, because the schema gives them one action.
+   */
   @Test
   void diff_reportsDatesOnce_whenOnlyTheEndDateMoved() {
     Sprint sprint = sprint();
@@ -52,7 +57,8 @@ class SprintChangeDetectorTest {
 
     assertThat(detector.diff(before, sprint))
         .containsExactly(
-            new SprintFieldChange(SprintField.DATES, "2026-01-01..2026-01-15", "2026-01-01..2026-01-22"));
+            new SprintFieldChange(
+                SprintField.DATES, "2026-01-01..2026-01-15", "2026-01-01..2026-01-22"));
   }
 
   /** A sprint with no agreed end renders as an open range rather than as the string "null". */

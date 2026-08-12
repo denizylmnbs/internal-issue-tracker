@@ -30,8 +30,8 @@ public class Comment {
   private Integer id;
 
   /**
-   * Plain user id rather than a {@code @ManyToOne User} - an association would cross into the {@code
-   * user} module and break {@code ModularityTests}.
+   * Plain user id rather than a {@code @ManyToOne User} - an association would cross into the
+   * {@code user} module and break {@code ModularityTests}.
    *
    * <p>{@code updatable = false} because authorship is a historical fact: no endpoint changes it,
    * and marking the column that way means no future one can do so by accident. The whole ownership
