@@ -1,6 +1,5 @@
 package com.ist.internal_issue_tracker.team.dto;
 
-import com.ist.internal_issue_tracker.team.TeamField;
 import java.time.OffsetDateTime;
 
 /**
@@ -15,5 +14,5 @@ public record UserTeamMembershipResponse(
     Integer membershipId,
     Integer teamId,
     String teamName,
-    TeamField teamField,
+    String teamField,
     OffsetDateTime joinedAt) {}

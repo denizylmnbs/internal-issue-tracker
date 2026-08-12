@@ -6,7 +6,9 @@ import org.springframework.http.HttpStatus;
 public enum TeamErrorCode implements ErrorCode {
   TEAM_NAME_ALREADY_EXISTS(HttpStatus.CONFLICT, "This team name already exists."),
   LEADER_NOT_FOUND(
-      HttpStatus.UNPROCESSABLE_ENTITY, "The given leader does not exist or is not active.");
+      HttpStatus.UNPROCESSABLE_ENTITY, "The given leader does not exist or is not active."),
+  TEAM_FIELD_NOT_DEFINED(
+      HttpStatus.UNPROCESSABLE_ENTITY, "This field is not one of the defined team fields.");
 
   private final HttpStatus httpStatus;
   private final String message;

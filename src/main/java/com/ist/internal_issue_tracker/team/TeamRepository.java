@@ -50,7 +50,7 @@ interface TeamRepository extends JpaRepository<Team, Integer> {
               """)
   Page<Team> findAllByFilters(
       @Param("name") String name,
-      @Param("field") TeamField field,
+      @Param("field") String field,
       @Param("leaderId") Integer leaderId,
       Pageable pageable);
 }

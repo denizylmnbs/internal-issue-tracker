@@ -43,7 +43,7 @@ public class TeamController {
   @GetMapping
   public ResponseEntity<ApiResponse<PagedResponse<TeamResponse>>> getAllTeams(
       @RequestParam(required = false) String name,
-      @RequestParam(required = false) TeamField field,
+      @RequestParam(required = false) String field,
       @RequestParam(required = false) Integer leaderId,
       Pageable pageable) {
     PagedResponse<TeamResponse> teamResponse =

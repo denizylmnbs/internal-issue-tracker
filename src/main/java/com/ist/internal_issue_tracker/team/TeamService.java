@@ -1,7 +1,10 @@
 package com.ist.internal_issue_tracker.team;
 
 import com.ist.internal_issue_tracker.shared.event.TeamDeactivatedEvent;
+import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.exception.ResourceNotFoundException;
+import com.ist.internal_issue_tracker.shared.port.FieldDefinitionLookup;
+import com.ist.internal_issue_tracker.shared.port.FieldKind;
 import com.ist.internal_issue_tracker.shared.port.UserLookup;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import com.ist.internal_issue_tracker.team.dto.ChangeLeaderRequest;
@@ -9,6 +12,7 @@ import com.ist.internal_issue_tracker.team.dto.TeamCreateRequest;
 import com.ist.internal_issue_tracker.team.dto.TeamResponse;
 import com.ist.internal_issue_tracker.team.dto.TeamUpdateRequest;
 import com.ist.internal_issue_tracker.team.exception.LeaderNotFoundException;
+import com.ist.internal_issue_tracker.team.exception.TeamErrorCode;
 import com.ist.internal_issue_tracker.team.exception.TeamNameAlreadyExistsException;
 import com.ist.internal_issue_tracker.team.mapper.TeamMapper;
 import lombok.RequiredArgsConstructor;
@@ -26,7 +30,15 @@ public class TeamService {
   private final TeamRepository teamRepository;
   private final TeamMapper teamMapper;
   private final UserLookup userLookup;
+  private final FieldDefinitionLookup fieldDefinitionLookup;
   private final ApplicationEventPublisher eventPublisher;
+
+  /** {@code field} is optional, so only a non-null value is checked against the vocabulary. */
+  private void requireValidFieldIfPresent(String field) {
+    if (field != null && !fieldDefinitionLookup.isValidCode(null, FieldKind.TEAM_FIELD, field)) {
+      throw new AppException(TeamErrorCode.TEAM_FIELD_NOT_DEFINED);
+    }
+  }
 
   /**
    * The database only guarantees that {@code leader_id} points at an existing row; the "must still
@@ -58,6 +70,7 @@ public class TeamService {
 
     // the leader must be a real, active user
     requireActiveUser(request.leaderId());
+    requireValidFieldIfPresent(request.field());
 
     // map to entity
     Team team = teamMapper.toEntity(request);
@@ -81,7 +94,7 @@ public class TeamService {
   }
 
   public PagedResponse<TeamResponse> getAllTeams(
-      String name, TeamField field, Integer leaderId, Pageable pageable) {
+      String name, String field, Integer leaderId, Pageable pageable) {
     Page<Team> teams = teamRepository.findAllByFilters(name, field, leaderId, pageable);
     Page<TeamResponse> responsePage = teams.map(team -> teamMapper.toResponse(team));
 
@@ -97,6 +110,7 @@ public class TeamService {
     if (teamRepository.existsByNameAndIdNot(request.name(), id)) {
       throw new TeamNameAlreadyExistsException(request.name());
     }
+    requireValidFieldIfPresent(request.field());
 
     // apply changes to the managed entity
     teamMapper.updateEntity(team, request);
