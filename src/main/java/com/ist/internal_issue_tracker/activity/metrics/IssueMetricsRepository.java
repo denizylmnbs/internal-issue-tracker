@@ -3,6 +3,7 @@ package com.ist.internal_issue_tracker.activity.metrics;
 import com.ist.internal_issue_tracker.activity.IssueActivity;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Set;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,7 +12,19 @@ import org.springframework.data.repository.query.Param;
  * Every query here is native, and none of them could be anything else: {@code percentile_cont ...
  * WITHIN GROUP}, aggregate {@code FILTER}, {@code lead() OVER} and {@code date_trunc} have no JPQL
  * equivalent. They all read {@code issue_activities}, which this module owns, so nothing here
- * reaches across a module boundary.
+ * reaches across a module boundary - including into {@code field_definitions}, which {@code
+ * fielddef} owns; see the note below on why the code sets below are parameters, not literals.
+ *
+ * <p><b>Status/type literals are bound parameters, not SQL text.</b> These queries used to match
+ * {@code 'DONE'}, {@code 'BACKLOG'}, {@code 'BUG'} and the rest as string literals, on the strength
+ * of {@code IssueStatus}/{@code IssueType} being fixed enums. Now that those vocabularies are
+ * per-project {@code field_definitions} rows, "which codes mean done" is data this module cannot
+ * look up itself (it may not depend on {@code fielddef}) and cannot hardcode (a project may rename
+ * or add to its own set). {@code IssueMetricsService} resolves the relevant code sets through
+ * {@code FieldDefinitionLookup} before calling in here, and every query below takes them as {@code
+ * IN (:paramName)} parameters instead. A parameter bound to an empty collection is invalid SQL, so
+ * the service substitutes a one-element sentinel set that matches nothing real - see {@code
+ * IssueMetricsService#orSentinel}.
  *
  * <p><b>Three things these queries are careful about.</b>
  *
@@ -37,7 +50,7 @@ import org.springframework.data.repository.query.Param;
 interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
 
   /**
-   * From first {@code IN_PROGRESS} to first {@code DONE} - how long work took once it was started.
+   * From first active-work status to first done status - how long work took once it was started.
    *
    * <p>{@code min} on both sides rather than {@code max}: an issue that was reopened and finished
    * again should report the time it first took, not the span across the whole round trip. The
@@ -48,8 +61,8 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
           """
           WITH bounds AS (
             SELECT a.issue_id,
-                   min(a.created_at) FILTER (WHERE a.new_value = 'IN_PROGRESS') AS started_at,
-                   min(a.created_at) FILTER (WHERE a.new_value = 'DONE')        AS done_at
+                   min(a.created_at) FILTER (WHERE a.new_value IN (:activeCodes)) AS started_at,
+                   min(a.created_at) FILTER (WHERE a.new_value IN (:doneCodes))   AS done_at
               FROM issue_activities a
              WHERE a.project_id = :projectId
                AND a.action_type = 'STATUS_UPDATED'
@@ -73,12 +86,14 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
       nativeQuery = true)
   DurationStats cycleTime(
       @Param("projectId") Integer projectId,
+      @Param("activeCodes") Set<String> activeCodes,
+      @Param("doneCodes") Set<String> doneCodes,
       @Param("from") OffsetDateTime from,
       @Param("to") OffsetDateTime to);
 
   /**
-   * From {@code CREATED} to first {@code DONE} - how long work took from being asked for, which is
-   * the number the people waiting on it actually feel.
+   * From {@code CREATED} to first done - how long work took from being asked for, which is the
+   * number the people waiting on it actually feel.
    *
    * <p>It is the metric the {@code CREATED} backfill in {@code V2} exists for: without those rows
    * every issue that predates the activity log would be missing its start and would drop out here
@@ -97,7 +112,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
               FROM issue_activities a
              WHERE a.project_id = :projectId
                AND a.action_type = 'STATUS_UPDATED'
-               AND a.new_value = 'DONE'
+               AND a.new_value IN (:doneCodes)
              GROUP BY a.issue_id
           ), spans AS (
             SELECT CAST(EXTRACT(EPOCH FROM (d.done_at - c.created_at)) AS double precision) AS secs
@@ -117,11 +132,12 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
       nativeQuery = true)
   DurationStats leadTime(
       @Param("projectId") Integer projectId,
+      @Param("doneCodes") Set<String> doneCodes,
       @Param("from") OffsetDateTime from,
       @Param("to") OffsetDateTime to);
 
   /**
-   * Issues completed per bucket, keyed on the first time each reached {@code DONE} so that
+   * Issues completed per bucket, keyed on the first time each reached a done status so that
    * reopening and re-finishing an issue does not let it be delivered twice.
    *
    * <p>{@code :bucket} is bound, never concatenated, and can only hold one of {@link
@@ -136,7 +152,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
                     FROM issue_activities a
                    WHERE a.project_id = :projectId
                      AND a.action_type = 'STATUS_UPDATED'
-                     AND a.new_value = 'DONE'
+                     AND a.new_value IN (:doneCodes)
                    GROUP BY a.issue_id) d
            WHERE d.done_at >= :from AND d.done_at < :to
            GROUP BY 1
@@ -145,6 +161,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
       nativeQuery = true)
   List<ThroughputBucket> throughput(
       @Param("projectId") Integer projectId,
+      @Param("doneCodes") Set<String> doneCodes,
       @Param("bucket") String bucket,
       @Param("from") OffsetDateTime from,
       @Param("to") OffsetDateTime to);
@@ -153,9 +170,9 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
    * How long issues sat in each status, clipped to the window at both ends so a span that straddles
    * the boundary contributes only the part inside it.
    *
-   * <p>The {@code CREATED} row is read as entering {@code BACKLOG}, which mirrors the default on
-   * {@code Issue#status}. If that default ever changes, this line has to change with it - the two
-   * are tied together by nothing the compiler can see.
+   * <p>The {@code CREATED} row is read as entering {@code :defaultStatus} - this project's {@code
+   * ISSUE_STATUS} default code, which mirrors what {@code IssueService} actually assigns on create
+   * now that there is no fixed {@code BACKLOG} to hardcode.
    *
    * <p>An issue still sitting in a status has no next row, so its span runs to the end of the
    * window rather than being dropped: work that has been stuck for a month is the most important
@@ -166,7 +183,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
           """
           WITH timeline AS (
             SELECT a.issue_id,
-                   CASE WHEN a.action_type = 'CREATED' THEN 'BACKLOG' ELSE a.new_value END AS status,
+                   CASE WHEN a.action_type = 'CREATED' THEN CAST(:defaultStatus AS text) ELSE a.new_value END AS status,
                    a.created_at AS entered_at,
                    lead(a.created_at) OVER (PARTITION BY a.issue_id ORDER BY a.created_at, a.id) AS left_at
               FROM issue_activities a
@@ -193,6 +210,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
       nativeQuery = true)
   List<StatusDuration> timeInStatus(
       @Param("projectId") Integer projectId,
+      @Param("defaultStatus") String defaultStatus,
       @Param("from") OffsetDateTime from,
       @Param("to") OffsetDateTime to);
 
@@ -201,16 +219,16 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
    * over time in all of them.
    *
    * <p>{@code NULLIF} guards the division, so an empty window yields null rather than a divide-by-
-   * zero or a fabricated 0.0 - see {@link FlowEfficiencyStats}. The active set is spelled out here
-   * and named in {@link MetricStatus#ACTIVE}; the two are kept in step by {@code
-   * MetricStatusCoverageTest}.
+   * zero or a fabricated 0.0 - see {@link FlowEfficiencyStats}. {@code :activeCodes} is this
+   * project's {@code ISSUE_STATUS} codes flagged {@code isActiveWork} - see {@code
+   * FieldDefinitionLookup#codesWithSemantic}.
    */
   @Query(
       value =
           """
           WITH timeline AS (
             SELECT a.issue_id,
-                   CASE WHEN a.action_type = 'CREATED' THEN 'BACKLOG' ELSE a.new_value END AS status,
+                   CASE WHEN a.action_type = 'CREATED' THEN CAST(:defaultStatus AS text) ELSE a.new_value END AS status,
                    a.created_at AS entered_at,
                    lead(a.created_at) OVER (PARTITION BY a.issue_id ORDER BY a.created_at, a.id) AS left_at
               FROM issue_activities a
@@ -225,9 +243,9 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
              WHERE entered_at < :to
                AND COALESCE(left_at, :to) > :from
           )
-          SELECT CAST(sum(secs) FILTER (WHERE status IN ('IN_PROGRESS', 'IN_REVIEW'))
+          SELECT CAST(sum(secs) FILTER (WHERE status IN (:activeCodes))
                         / NULLIF(sum(secs), 0) AS double precision)                     AS flow_efficiency,
-                 CAST(sum(secs) FILTER (WHERE status IN ('IN_PROGRESS', 'IN_REVIEW'))
+                 CAST(sum(secs) FILTER (WHERE status IN (:activeCodes))
                         AS double precision)                                            AS active_seconds,
                  CAST(sum(secs) AS double precision)                                    AS total_seconds
             FROM spans
@@ -235,6 +253,8 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
       nativeQuery = true)
   FlowEfficiencyStats flowEfficiency(
       @Param("projectId") Integer projectId,
+      @Param("defaultStatus") String defaultStatus,
+      @Param("activeCodes") Set<String> activeCodes,
       @Param("from") OffsetDateTime from,
       @Param("to") OffsetDateTime to);
 
@@ -242,8 +262,8 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
    * What share of the work finished in the window came back afterwards.
    *
    * <p>{@code bool_or} collapses each issue to a yes or no, so a bug that bounced three times
-   * counts once - see {@link ReopenStats}. The {@code HAVING} keeps issues that never reached
-   * {@code DONE} out of the denominator: work still in progress has not had the chance to be
+   * counts once - see {@link ReopenStats}. The {@code HAVING} keeps issues that never reached a
+   * done status out of the denominator: work still in progress has not had the chance to be
    * reopened.
    */
   @Query(
@@ -254,18 +274,19 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
                  CAST(count(*) FILTER (WHERE reopened) AS double precision)
                    / NULLIF(count(*), 0)                                      AS reopen_rate
             FROM (SELECT a.issue_id,
-                         bool_or(a.old_value = 'DONE' AND a.new_value <> 'DONE') AS reopened
+                         bool_or(a.old_value IN (:doneCodes) AND a.new_value NOT IN (:doneCodes)) AS reopened
                     FROM issue_activities a
                    WHERE a.project_id = :projectId
                      AND a.action_type = 'STATUS_UPDATED'
                      AND a.created_at >= :from
                      AND a.created_at <  :to
                    GROUP BY a.issue_id
-                  HAVING bool_or(a.new_value = 'DONE')) x
+                  HAVING bool_or(a.new_value IN (:doneCodes))) x
           """,
       nativeQuery = true)
   ReopenStats reopenStats(
       @Param("projectId") Integer projectId,
+      @Param("doneCodes") Set<String> doneCodes,
       @Param("from") OffsetDateTime from,
       @Param("to") OffsetDateTime to);
 
@@ -282,7 +303,8 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
   //
   // "STATUS COMES FROM TWO ACTION TYPES." An issue's status is the new_value of
   // its last STATUS_UPDATED, unless it has never had one, in which case it is
-  // BACKLOG - the default on `Issue#status`. Rows of any other action type carry
+  // :defaultStatus - the project's ISSUE_STATUS default, which is what
+  // IssueService actually assigns on create. Rows of any other action type carry
   // an unrelated new_value and must be filtered out before the latest is taken,
   // or an issue whose priority changed most recently would report its status as
   // CRITICAL.
@@ -298,14 +320,14 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
    *
    * <p>A level rather than a flow, so it takes no window - see {@link WipStatusCount}. {@code asOf}
    * exists to make it reproducible, not to make it a range: passing last Tuesday asks what the
-   * board looked like last Tuesday.
+   * board looked like last Tuesday. {@code :closedCodes} is this project's done-or-cancelled codes.
    */
   @Query(
       value =
           """
           WITH latest AS (
             SELECT a.issue_id,
-                   (array_agg(CASE WHEN a.action_type = 'CREATED' THEN 'BACKLOG' ELSE a.new_value END
+                   (array_agg(CASE WHEN a.action_type = 'CREATED' THEN CAST(:defaultStatus AS text) ELSE a.new_value END
                               ORDER BY a.created_at DESC, a.id DESC)
                       FILTER (WHERE a.action_type IN ('CREATED', 'STATUS_UPDATED')))[1] AS status,
                    max(a.created_at) FILTER (WHERE a.action_type IN ('CREATED', 'STATUS_UPDATED'))
@@ -328,24 +350,28 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
             FROM latest
            WHERE NOT deleted
              AND status IS NOT NULL
-             AND status NOT IN ('DONE', 'CANCELLED')
+             AND status NOT IN (:closedCodes)
            GROUP BY status
            ORDER BY status
           """,
       nativeQuery = true)
   List<WipStatusCount> wipByStatus(
-      @Param("projectId") Integer projectId, @Param("asOf") OffsetDateTime asOf);
+      @Param("projectId") Integer projectId,
+      @Param("defaultStatus") String defaultStatus,
+      @Param("closedCodes") Set<String> closedCodes,
+      @Param("asOf") OffsetDateTime asOf);
 
   /**
-   * The oldest in-flight issues, named. {@code BACKLOG} is excluded - see {@link AgingIssue} - and
-   * so is anything finished, cancelled or deleted.
+   * The oldest in-flight issues, named. {@code :excludedCodes} is this project's default status
+   * plus its done-or-cancelled codes - see {@link AgingIssue} - so unplanned and finished work both
+   * stay out of an "oldest in-flight" list.
    */
   @Query(
       value =
           """
           WITH latest AS (
             SELECT a.issue_id,
-                   (array_agg(CASE WHEN a.action_type = 'CREATED' THEN 'BACKLOG' ELSE a.new_value END
+                   (array_agg(CASE WHEN a.action_type = 'CREATED' THEN CAST(:defaultStatus AS text) ELSE a.new_value END
                               ORDER BY a.created_at DESC, a.id DESC)
                       FILTER (WHERE a.action_type IN ('CREATED', 'STATUS_UPDATED')))[1] AS status,
                    max(a.created_at) FILTER (WHERE a.action_type IN ('CREATED', 'STATUS_UPDATED'))
@@ -369,13 +395,15 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
             FROM latest
            WHERE NOT deleted
              AND status IS NOT NULL
-             AND status NOT IN ('BACKLOG', 'DONE', 'CANCELLED')
+             AND status NOT IN (:excludedCodes)
            ORDER BY entered_at
            LIMIT :limit
           """,
       nativeQuery = true)
   List<AgingIssue> agingWip(
       @Param("projectId") Integer projectId,
+      @Param("defaultStatus") String defaultStatus,
+      @Param("excludedCodes") Set<String> excludedCodes,
       @Param("asOf") OffsetDateTime asOf,
       @Param("limit") int limit);
 
@@ -404,7 +432,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
                       FROM issue_activities a
                      WHERE a.project_id = :projectId
                        AND a.action_type = 'STATUS_UPDATED'
-                       AND a.new_value = 'DONE'
+                       AND a.new_value IN (:doneCodes)
                      GROUP BY a.issue_id) d
              WHERE d.done_at >= :from AND d.done_at < :to
              GROUP BY 1
@@ -423,6 +451,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
       nativeQuery = true)
   List<NetFlowBucket> netFlow(
       @Param("projectId") Integer projectId,
+      @Param("doneCodes") Set<String> doneCodes,
       @Param("bucket") String bucket,
       @Param("from") OffsetDateTime from,
       @Param("to") OffsetDateTime to);
@@ -431,7 +460,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
    * Throughput cut by type or by priority, whichever {@code :dimension} names.
    *
    * <p>The branch is on a bound value inside a {@code CASE}, never on an interpolated column name -
-   * see {@link MetricsDimension}. {@code DISTINCT ON} takes each issue's first {@code DONE} along
+   * see {@link MetricsDimension}. {@code DISTINCT ON} takes each issue's first done status along
    * with the dimensions frozen on that row.
    */
   @Query(
@@ -443,7 +472,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
               FROM issue_activities a
              WHERE a.project_id = :projectId
                AND a.action_type = 'STATUS_UPDATED'
-               AND a.new_value = 'DONE'
+               AND a.new_value IN (:doneCodes)
              ORDER BY a.issue_id, a.created_at, a.id
           )
           SELECT date_trunc(CAST(:bucket AS text), done_at)                        AS bucket_start,
@@ -459,6 +488,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
       nativeQuery = true)
   List<BreakdownBucket> throughputBreakdown(
       @Param("projectId") Integer projectId,
+      @Param("doneCodes") Set<String> doneCodes,
       @Param("dimension") String dimension,
       @Param("bucket") String bucket,
       @Param("from") OffsetDateTime from,
@@ -469,7 +499,9 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
    * questions and why both denominators are returned.
    *
    * <p>Note which side each count comes from: bugs are counted where they were filed, delivery
-   * where it was delivered, and the density divides one by the other across the same bucket.
+   * where it was delivered, and the density divides one by the other across the same bucket. {@code
+   * :defectCodes} is this project's {@code ISSUE_TYPE} codes flagged {@code isDefect} - {@code
+   * 'BUG'} by default, but a project may add to or rename that set.
    */
   @Query(
       value =
@@ -477,7 +509,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
           WITH created AS (
             SELECT date_trunc(CAST(:bucket AS text), a.created_at) AS b,
                    count(*)                                        AS total,
-                   count(*) FILTER (WHERE a.issue_type = 'BUG')    AS bugs
+                   count(*) FILTER (WHERE a.issue_type IN (:defectCodes))    AS bugs
               FROM issue_activities a
              WHERE a.project_id = :projectId
                AND a.action_type = 'CREATED'
@@ -490,12 +522,12 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
               FROM issue_activities a
              WHERE a.project_id = :projectId
                AND a.action_type = 'STATUS_UPDATED'
-               AND a.new_value = 'DONE'
+               AND a.new_value IN (:doneCodes)
              ORDER BY a.issue_id, a.created_at, a.id
           ), completed AS (
             SELECT date_trunc(CAST(:bucket AS text), done_at)  AS b,
                    count(*)                                    AS total,
-                   count(*) FILTER (WHERE issue_type = 'BUG')  AS bugs,
+                   count(*) FILTER (WHERE issue_type IN (:defectCodes))  AS bugs,
                    sum(coalesce(story_point, 0))               AS points
               FROM done
              WHERE done_at >= :from AND done_at < :to
@@ -520,22 +552,24 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
       nativeQuery = true)
   List<DefectBucket> defectStats(
       @Param("projectId") Integer projectId,
+      @Param("doneCodes") Set<String> doneCodes,
+      @Param("defectCodes") Set<String> defectCodes,
       @Param("bucket") String bucket,
       @Param("from") OffsetDateTime from,
       @Param("to") OffsetDateTime to);
 
   /**
-   * Mean time to resolve a bug: filed to first {@code DONE}, for issues that were bugs when they
+   * Mean time to resolve a bug: filed to first done, for issues that were a defect type when they
    * were resolved.
    *
    * <p>Lead time rather than cycle time, deliberately. The clock a defect is judged by starts when
    * it is reported, not when someone gets round to it - the time it spent waiting in the queue is
    * most of what MTTR is meant to expose.
    *
-   * <p>The type is read from the {@code DONE} row rather than the {@code CREATED} one, so an issue
-   * filed as a task and reclassified as a bug on investigation counts as the bug it turned out to
-   * be. The counterpart in {@link #defectStats} reads it from {@code CREATED}, and the difference
-   * is intentional: that metric asks how many defects a period produced, this one asks how long
+   * <p>The type is read from the done row rather than the {@code CREATED} one, so an issue filed as
+   * a task and reclassified as a bug on investigation counts as the bug it turned out to be. The
+   * counterpart in {@link #defectStats} reads it from {@code CREATED}, and the difference is
+   * intentional: that metric asks how many defects a period produced, this one asks how long
    * defects take to fix.
    */
   @Query(
@@ -551,13 +585,13 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
               FROM issue_activities a
              WHERE a.project_id = :projectId
                AND a.action_type = 'STATUS_UPDATED'
-               AND a.new_value = 'DONE'
+               AND a.new_value IN (:doneCodes)
              ORDER BY a.issue_id, a.created_at, a.id
           ), spans AS (
             SELECT CAST(EXTRACT(EPOCH FROM (d.done_at - c.created_at)) AS double precision) AS secs
               FROM created c
               JOIN done d ON d.issue_id = c.issue_id
-             WHERE d.issue_type = 'BUG'
+             WHERE d.issue_type IN (:defectCodes)
                AND d.done_at > c.created_at
                AND d.done_at >= :from
                AND d.done_at <  :to
@@ -572,6 +606,8 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
       nativeQuery = true)
   DurationStats bugMttr(
       @Param("projectId") Integer projectId,
+      @Param("doneCodes") Set<String> doneCodes,
+      @Param("defectCodes") Set<String> defectCodes,
       @Param("from") OffsetDateTime from,
       @Param("to") OffsetDateTime to);
 
@@ -592,13 +628,14 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
                     FROM issue_activities a
                    WHERE a.project_id = :projectId
                      AND a.action_type = 'STATUS_UPDATED'
-                     AND a.new_value = 'DONE'
+                     AND a.new_value IN (:doneCodes)
                    ORDER BY a.issue_id, a.created_at, a.id) d
            WHERE d.sprint_id IS NOT NULL
            GROUP BY d.sprint_id
           """,
       nativeQuery = true)
-  List<SprintVelocity> velocity(@Param("projectId") Integer projectId);
+  List<SprintVelocity> velocity(
+      @Param("projectId") Integer projectId, @Param("doneCodes") Set<String> doneCodes);
 
   /**
    * A sprint burndown, one row per day, reconstructed by replaying the log up to the end of each
@@ -626,7 +663,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
                 SELECT a.issue_id,
                        (array_agg(a.sprint_id   ORDER BY a.created_at DESC, a.id DESC))[1] AS sprint_id,
                        (array_agg(a.story_point ORDER BY a.created_at DESC, a.id DESC))[1] AS story_point,
-                       (array_agg(CASE WHEN a.action_type = 'CREATED' THEN 'BACKLOG' ELSE a.new_value END
+                       (array_agg(CASE WHEN a.action_type = 'CREATED' THEN CAST(:defaultStatus AS text) ELSE a.new_value END
                                   ORDER BY a.created_at DESC, a.id DESC)
                           FILTER (WHERE a.action_type IN ('CREATED', 'STATUS_UPDATED')))[1] AS status,
                        bool_or(a.action_type = 'DELETED')                                   AS deleted
@@ -638,16 +675,16 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
           )
           SELECT day                                                                AS bucket_start,
                  CAST(coalesce(sum(coalesce(story_point, 0))
-                        FILTER (WHERE status <> 'DONE'), 0) AS bigint)              AS remaining_points,
-                 count(*) FILTER (WHERE status <> 'DONE')                           AS remaining_issue_count,
+                        FILTER (WHERE status NOT IN (:doneCodes)), 0) AS bigint)     AS remaining_points,
+                 count(*) FILTER (WHERE status NOT IN (:doneCodes))                  AS remaining_issue_count,
                  CAST(coalesce(sum(coalesce(story_point, 0))
-                        FILTER (WHERE status = 'DONE'), 0) AS bigint)               AS completed_points,
+                        FILTER (WHERE status IN (:doneCodes)), 0) AS bigint)         AS completed_points,
                  CAST(coalesce(sum(coalesce(story_point, 0)), 0) AS bigint)         AS scope_points
             FROM snap
            WHERE sprint_id = :sprintId
              AND NOT deleted
              AND status IS NOT NULL
-             AND status <> 'CANCELLED'
+             AND status NOT IN (:cancelledCodes)
            GROUP BY day
            ORDER BY day
           """,
@@ -655,6 +692,9 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
   List<BurndownPoint> burndown(
       @Param("projectId") Integer projectId,
       @Param("sprintId") Integer sprintId,
+      @Param("defaultStatus") String defaultStatus,
+      @Param("doneCodes") Set<String> doneCodes,
+      @Param("cancelledCodes") Set<String> cancelledCodes,
       @Param("from") OffsetDateTime from,
       @Param("to") OffsetDateTime to);
 
@@ -677,7 +717,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
               FROM days d
               CROSS JOIN LATERAL (
                 SELECT a.issue_id,
-                       (array_agg(CASE WHEN a.action_type = 'CREATED' THEN 'BACKLOG' ELSE a.new_value END
+                       (array_agg(CASE WHEN a.action_type = 'CREATED' THEN CAST(:defaultStatus AS text) ELSE a.new_value END
                                   ORDER BY a.created_at DESC, a.id DESC)
                           FILTER (WHERE a.action_type IN ('CREATED', 'STATUS_UPDATED')))[1] AS status,
                        bool_or(a.action_type = 'DELETED')                                   AS deleted
@@ -699,6 +739,7 @@ interface IssueMetricsRepository extends JpaRepository<IssueActivity, Integer> {
       nativeQuery = true)
   List<CfdPoint> cumulativeFlow(
       @Param("projectId") Integer projectId,
+      @Param("defaultStatus") String defaultStatus,
       @Param("from") OffsetDateTime from,
       @Param("to") OffsetDateTime to);
 }
