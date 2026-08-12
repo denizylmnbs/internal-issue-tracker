@@ -5,6 +5,9 @@ import com.ist.internal_issue_tracker.shared.event.SprintCreatedEvent;
 import com.ist.internal_issue_tracker.shared.event.SprintDeletedEvent;
 import com.ist.internal_issue_tracker.shared.event.SprintFieldChange;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
+import com.ist.internal_issue_tracker.shared.port.FieldDefinitionLookup;
+import com.ist.internal_issue_tracker.shared.port.FieldKind;
+import com.ist.internal_issue_tracker.shared.port.FieldSemantic;
 import com.ist.internal_issue_tracker.shared.port.IssueLookup;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
@@ -40,7 +43,22 @@ public class SprintService {
   private final SprintChangeDetector sprintChangeDetector;
   private final ProjectLookup projectLookup;
   private final IssueLookup issueLookup;
+  private final FieldDefinitionLookup fieldDefinitionLookup;
   private final ApplicationEventPublisher eventPublisher;
+
+  /** Throws unless {@code status} is one of this project's active {@code SPRINT_STATUS} codes. */
+  private void requireValidStatus(Integer projectId, String status) {
+    if (!fieldDefinitionLookup.isValidCode(projectId, FieldKind.SPRINT_STATUS, status)) {
+      throw new AppException(SprintErrorCode.SPRINT_STATUS_NOT_DEFINED);
+    }
+  }
+
+  /** Whether {@code status} carries this project's {@code SPRINT_STATUS} "running" semantic. */
+  private boolean isRunningStatus(Integer projectId, String status) {
+    return fieldDefinitionLookup
+        .codesWithSemantic(projectId, FieldKind.SPRINT_STATUS, FieldSemantic.ACTIVE_WORK)
+        .contains(status);
+  }
 
   /** Publishes only if something moved - see {@code IssueService#publishChanges}. */
   private void publishChanges(
@@ -68,8 +86,8 @@ public class SprintService {
    * could recover it. The activity log knows every point that ever moved in or out of the sprint,
    * but it cannot know which of those movements the team meant as its plan.
    */
-  private void commitIfStarting(Integer projectId, Sprint sprint, SprintStatus next) {
-    if (next != SprintStatus.IN_PROGRESS || sprint.getCommittedAt() != null) {
+  private void commitIfStarting(Integer projectId, Sprint sprint, boolean startingRun) {
+    if (!startingRun || sprint.getCommittedAt() != null) {
       return;
     }
 
@@ -103,8 +121,8 @@ public class SprintService {
       throw new SprintNameAlreadyExistsException(request.name());
     }
 
-    // status is left at the entity's TODO default
-    Sprint sprint = sprintMapper.toEntity(projectId, request);
+    String defaultStatus = fieldDefinitionLookup.defaultCode(projectId, FieldKind.SPRINT_STATUS);
+    Sprint sprint = sprintMapper.toEntity(projectId, request, defaultStatus);
 
     Sprint savedSprint;
     try {
@@ -127,7 +145,7 @@ public class SprintService {
   }
 
   public PagedResponse<SprintResponse> getSprintsByProjectId(
-      Integer projectId, String name, SprintStatus status, Pageable pageable) {
+      Integer projectId, String name, String status, Pageable pageable) {
     requireActiveProject(projectId);
 
     // derived query, so the caller's sort is honoured as-is
@@ -189,21 +207,22 @@ public class SprintService {
 
     Sprint sprint = requireLiveSprint(projectId, sprintId);
 
+    requireValidStatus(projectId, request.status());
+
     SprintSnapshot before = SprintSnapshot.of(sprint);
 
-    boolean startingAnother =
-        request.status() == SprintStatus.IN_PROGRESS
-            && sprint.getStatus() != SprintStatus.IN_PROGRESS;
+    boolean nextIsRunning = isRunningStatus(projectId, request.status());
+    boolean startingAnother = nextIsRunning && !sprint.getIsRunning();
 
     if (startingAnother
-        && sprintRepository.existsByProjectIdAndStatusAndDeletedAtIsNull(
-            projectId, SprintStatus.IN_PROGRESS)) {
+        && sprintRepository.existsByProjectIdAndIsRunningTrueAndDeletedAtIsNull(projectId)) {
       throw new AppException(SprintErrorCode.SPRINT_ALREADY_IN_PROGRESS);
     }
 
-    commitIfStarting(projectId, sprint, request.status());
+    commitIfStarting(projectId, sprint, startingAnother);
 
     sprint.setStatus(request.status());
+    sprint.setIsRunning(nextIsRunning);
 
     Sprint savedSprint;
     try {

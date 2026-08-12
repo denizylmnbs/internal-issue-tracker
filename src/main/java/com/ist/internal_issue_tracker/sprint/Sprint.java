@@ -59,10 +59,24 @@ public class Sprint {
   /** Optional - a sprint may be opened before anyone commits to when it ends. */
   private LocalDate endDate;
 
+  /**
+   * A code from this project's {@code SPRINT_STATUS} field definitions, not a fixed enum - see
+   * {@code FieldDefinition}. {@code SprintService} resolves the default on create and validates
+   * every write through {@code FieldDefinitionLookup}.
+   */
+  @NotBlank
+  @Column(nullable = false, length = 30)
+  private String status;
+
+  /**
+   * Whether this sprint currently carries a {@code SPRINT_STATUS} code marked {@code
+   * isActiveWork} - what {@code one_active_sprint_per_project} now indexes on, replacing the old
+   * literal {@code status = 'IN_PROGRESS'} check. {@code SprintService} keeps this in lockstep with
+   * {@link #status} on every status change; nothing else may set it.
+   */
   @NotNull
-  @Enumerated(EnumType.STRING)
-  @Column(nullable = false, length = 20)
-  private SprintStatus status = SprintStatus.TODO;
+  @Column(nullable = false)
+  private Boolean isRunning = false;
 
   /**
    * The story points in the sprint at the moment it started, and the moment it started.

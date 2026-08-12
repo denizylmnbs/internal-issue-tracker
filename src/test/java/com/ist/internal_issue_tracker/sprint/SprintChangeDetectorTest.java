@@ -23,7 +23,7 @@ class SprintChangeDetectorTest {
     sprint.setDescription("First");
     sprint.setStartDate(LocalDate.of(2026, 1, 1));
     sprint.setEndDate(LocalDate.of(2026, 1, 15));
-    sprint.setStatus(SprintStatus.TODO);
+    sprint.setStatus("TODO");
     return sprint;
   }
 
@@ -39,7 +39,7 @@ class SprintChangeDetectorTest {
     Sprint sprint = sprint();
     SprintSnapshot before = SprintSnapshot.of(sprint);
 
-    sprint.setStatus(SprintStatus.IN_PROGRESS);
+    sprint.setStatus("IN_PROGRESS");
 
     assertThat(detector.diff(before, sprint))
         .containsExactly(new SprintFieldChange(SprintField.STATUS, "TODO", "IN_PROGRESS"));
@@ -92,7 +92,7 @@ class SprintChangeDetectorTest {
 
     sprint.setName("Sprint 1 - extended");
     sprint.setEndDate(LocalDate.of(2026, 1, 29));
-    sprint.setStatus(SprintStatus.COMPLETED);
+    sprint.setStatus("COMPLETED");
 
     assertThat(detector.diff(before, sprint))
         .containsExactly(

@@ -22,10 +22,6 @@ class SprintChangeDetector {
     return (start == null ? "" : start.toString()) + ".." + (end == null ? "" : end.toString());
   }
 
-  private static String name(Enum<?> value) {
-    return value == null ? null : value.name();
-  }
-
   List<SprintFieldChange> diff(SprintSnapshot before, Sprint after) {
     List<SprintFieldChange> changes = new ArrayList<>();
 
@@ -49,10 +45,9 @@ class SprintChangeDetector {
               range(after.getStartDate(), after.getEndDate())));
     }
 
-    if (before.status() != after.getStatus()) {
+    if (!Objects.equals(before.status(), after.getStatus())) {
       changes.add(
-          new SprintFieldChange(
-              SprintField.STATUS, name(before.status()), name(after.getStatus())));
+          new SprintFieldChange(SprintField.STATUS, before.status(), after.getStatus()));
     }
 
     return changes;

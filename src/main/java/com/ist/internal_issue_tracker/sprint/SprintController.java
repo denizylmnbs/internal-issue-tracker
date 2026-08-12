@@ -45,7 +45,7 @@ public class SprintController {
   public ResponseEntity<ApiResponse<PagedResponse<SprintResponse>>> getSprints(
       @PathVariable Integer id,
       @RequestParam(required = false) String name,
-      @RequestParam(required = false) SprintStatus status,
+      @RequestParam(required = false) String status,
       Pageable pageable) {
     PagedResponse<SprintResponse> sprintResponse =
         sprintService.getSprintsByProjectId(id, name, status, pageable);

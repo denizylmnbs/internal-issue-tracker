@@ -34,7 +34,7 @@ public class SprintLookupAdapter implements SprintLookup {
                 new SprintSummary(
                     sprint.getId(),
                     sprint.getName(),
-                    sprint.getStatus().name(),
+                    sprint.getStatus(),
                     sprint.getStartDate(),
                     sprint.getEndDate(),
                     sprint.getCommittedPoints(),

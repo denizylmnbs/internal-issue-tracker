@@ -7,7 +7,7 @@ import java.time.LocalDate;
  * a copy is the only way the old values survive the update.
  */
 record SprintSnapshot(
-    String name, String description, LocalDate startDate, LocalDate endDate, SprintStatus status) {
+    String name, String description, LocalDate startDate, LocalDate endDate, String status) {
 
   static SprintSnapshot of(Sprint sprint) {
     return new SprintSnapshot(

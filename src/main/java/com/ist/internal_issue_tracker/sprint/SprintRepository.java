@@ -44,12 +44,12 @@ interface SprintRepository extends JpaRepository<Sprint, Integer> {
 
   /**
    * Pre-check for {@code one_active_sprint_per_project}, whose {@code WHERE} clause this mirrors
-   * term for term: that index covers {@code (project_id)} where the status is {@code IN_PROGRESS}
+   * term for term: that index covers {@code (project_id)} where {@code is_running} is true
    * <em>and</em> {@code deleted_at} is null. Dropping the {@code DeletedAtIsNull} here would make
    * this method stricter than the constraint it stands in for, refusing a sprint the database would
    * have accepted.
    */
-  boolean existsByProjectIdAndStatusAndDeletedAtIsNull(Integer projectId, SprintStatus status);
+  boolean existsByProjectIdAndIsRunningTrueAndDeletedAtIsNull(Integer projectId);
 
   /**
    * One project's sprints, deleted ones excluded unconditionally - see {@code
@@ -68,6 +68,6 @@ interface SprintRepository extends JpaRepository<Sprint, Integer> {
   Page<Sprint> findAllByFilters(
       @Param("projectId") Integer projectId,
       @Param("name") String name,
-      @Param("status") SprintStatus status,
+      @Param("status") String status,
       Pageable pageable);
 }

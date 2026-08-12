@@ -10,10 +10,11 @@ import org.springframework.stereotype.Component;
 public class SprintMapper {
 
   /**
-   * The project comes from the path, not the body. The status is left alone so the entity's own
-   * {@code TODO} default stands.
+   * The project comes from the path, not the body. {@code defaultStatus} is this project's {@code
+   * SPRINT_STATUS} default code, resolved by {@code SprintService} - the entity no longer has a
+   * hardcoded default now that the vocabulary is per-project data.
    */
-  public Sprint toEntity(Integer projectId, SprintCreateRequest request) {
+  public Sprint toEntity(Integer projectId, SprintCreateRequest request, String defaultStatus) {
     Sprint sprint = new Sprint();
 
     sprint.setProjectId(projectId);
@@ -21,6 +22,7 @@ public class SprintMapper {
     sprint.setDescription(request.description());
     sprint.setStartDate(request.startDate());
     sprint.setEndDate(request.endDate());
+    sprint.setStatus(defaultStatus);
 
     return sprint;
   }
