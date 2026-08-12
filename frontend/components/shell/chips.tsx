@@ -1,144 +1,106 @@
 import { cn } from "@/lib/utils";
-import {
-  ISSUE_STATUS_LABEL,
-  ISSUE_PRIORITY_LABEL,
-  ISSUE_TYPE_LABEL,
-  ISSUE_RESOLVING_UNIT_LABEL,
-  PROJECT_STATUS_LABEL,
-  SPRINT_STATUS_LABEL,
-  EPIC_STATUS_LABEL,
-  ROLE_LABEL,
-} from "@/lib/api/enums";
-import type {
-  IssueStatus,
-  IssuePriority,
-  IssueType,
-  IssueResolvingUnit,
-  ProjectStatus,
-  SprintStatus,
-  EpicStatus,
-  Role,
-} from "@/lib/api/enums";
+import { ROLE_LABEL } from "@/lib/api/enums";
+import type { Role } from "@/lib/api/enums";
+import { useProjectContext } from "@/lib/project/ProjectContext";
+import { useGlobalFieldDefinitions } from "@/lib/fielddef/GlobalFieldDefinitionsProvider";
+import { resolveColor } from "@/lib/fielddef/colors";
+import type { FieldKind } from "@/lib/api/types";
 
 /**
- * Colour is reserved for work state — see app/globals.css. Every chip here
- * is a small text label with a dot or border in a semantic hue, never a
- * filled decorative badge. The one exception is UnitChip: each resolving
- * unit (backend/frontend/iOS/Android) gets a fixed, filled team colour so
- * it reads at a glance across the board and issue views.
+ * Colour used to be a fixed `Record<Enum, tailwindClass>` per kind — exhaustive
+ * over a closed set of codes, which is exactly what a user-defined status set
+ * (docs/API.md §2) breaks the moment someone adds one. Every chip below
+ * resolves its label and color from the live field definition instead, via
+ * `ProjectContext` (the six per-project kinds) or `GlobalFieldDefinitions`
+ * (PROJECT_STATUS, TEAM_FIELD) — never both in the same component, since the
+ * two live in different providers and a component may not always be under
+ * both. A code with no matching definition (soft-deleted, or the project's
+ * list hasn't loaded yet) still renders — the raw code as its own label, a
+ * palette color keyed on that code — rather than crashing or going blank.
  */
 
-function Chip({
-  label,
-  className,
-}: {
-  label: string;
-  className?: string;
-}) {
+/** For the six per-project kinds — must be rendered under a ProjectProvider. */
+function useProjectFieldChip(kind: FieldKind, code: string) {
+  const { resolveField } = useProjectContext();
+  const def = resolveField(kind, code);
+  return { label: def?.label ?? code, color: resolveColor(def, code) };
+}
+
+/** For the two global kinds — PROJECT_STATUS, TEAM_FIELD. */
+function useGlobalFieldChip(kind: FieldKind, code: string) {
+  const { resolveGlobal } = useGlobalFieldDefinitions();
+  const def = resolveGlobal(kind, code);
+  return { label: def?.label ?? code, color: resolveColor(def, code) };
+}
+
+function DotChip({ label, color }: { label: string; color: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded border border-rule px-1.5 py-0.5 text-xs font-medium leading-none">
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
+      {label}
+    </span>
+  );
+}
+
+function BorderChip({ label, color }: { label: string; color: string }) {
   return (
     <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded border border-rule px-1.5 py-0.5 text-xs font-medium leading-none",
-        className,
-      )}
+      className="inline-flex items-center rounded border border-rule px-1.5 py-0.5 text-xs font-medium leading-none"
+      style={{ color }}
     >
       {label}
     </span>
   );
 }
 
-const ISSUE_STATUS_DOT: Record<IssueStatus, string> = {
-  BACKLOG: "bg-slate",
-  TODO: "bg-slate",
-  IN_PROGRESS: "bg-signal",
-  IN_REVIEW: "bg-amber",
-  DONE: "bg-moss",
-  ON_HOLD: "bg-amber",
-  CANCELLED: "bg-rust",
-};
+export function IssueStatusChip({ status }: { status: string }) {
+  const { label, color } = useProjectFieldChip("ISSUE_STATUS", status);
+  return <DotChip label={label} color={color} />;
+}
 
-export function IssueStatusChip({ status }: { status: IssueStatus }) {
+export function PriorityChip({ priority }: { priority: string }) {
+  const { label, color } = useProjectFieldChip("ISSUE_PRIORITY", priority);
   return (
-    <span className="inline-flex items-center gap-1.5 rounded border border-rule px-1.5 py-0.5 text-xs font-medium leading-none">
-      <span className={cn("h-1.5 w-1.5 rounded-full", ISSUE_STATUS_DOT[status])} />
-      {ISSUE_STATUS_LABEL[status]}
+    <span className="text-xs font-medium" style={{ color }}>
+      {label}
     </span>
   );
 }
 
-const PRIORITY_COLOR: Record<IssuePriority, string> = {
-  LOW: "text-slate",
-  MEDIUM: "text-ink",
-  HIGH: "text-amber",
-  CRITICAL: "text-rust",
-};
-
-export function PriorityChip({ priority }: { priority: IssuePriority }) {
+export function TypeChip({ type }: { type: string }) {
+  const { label, color } = useProjectFieldChip("ISSUE_TYPE", type);
   return (
-    <span className={cn("text-xs font-medium", PRIORITY_COLOR[priority])}>
-      {ISSUE_PRIORITY_LABEL[priority]}
+    <span className="text-xs font-medium uppercase tracking-wide" style={{ color }}>
+      {label}
     </span>
   );
 }
 
-const TYPE_COLOR: Record<IssueType, string> = {
-  BUG: "text-rust",
-  FEATURE: "text-signal",
-  STORY: "text-moss",
-  TASK: "text-slate",
-  ENHANCEMENT: "text-signal",
-  REFACTOR: "text-slate",
-};
-
-export function TypeChip({ type }: { type: IssueType }) {
-  return (
-    <span className={cn("text-xs font-medium uppercase tracking-wide", TYPE_COLOR[type])}>
-      {ISSUE_TYPE_LABEL[type]}
-    </span>
-  );
-}
-
-const UNIT_COLOR: Record<IssueResolvingUnit, string> = {
-  BACKEND: "bg-signal text-signal-foreground",
-  FRONTEND: "bg-moss text-moss-foreground",
-  IOS: "bg-slate text-slate-foreground",
-  ANDROID: "bg-amber text-amber-foreground",
-};
-
-export function UnitChip({ unit }: { unit: IssueResolvingUnit }) {
+export function UnitChip({ unit }: { unit: string }) {
+  const { label, color } = useProjectFieldChip("ISSUE_UNIT", unit);
   return (
     <span
-      className={cn(
-        "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold leading-none shadow-sm",
-        UNIT_COLOR[unit],
-      )}
+      className="inline-flex items-center rounded-md px-2 py-0.5 text-xs font-semibold leading-none text-white shadow-sm"
+      style={{ backgroundColor: color }}
     >
-      {ISSUE_RESOLVING_UNIT_LABEL[unit]}
+      {label}
     </span>
   );
 }
 
-export function ProjectStatusChip({ status }: { status: ProjectStatus }) {
-  return <Chip label={PROJECT_STATUS_LABEL[status]} />;
+export function ProjectStatusChip({ status }: { status: string }) {
+  const { label, color } = useGlobalFieldChip("PROJECT_STATUS", status);
+  return <BorderChip label={label} color={color} />;
 }
 
-export function SprintStatusChip({ status }: { status: SprintStatus }) {
-  const dot: Record<SprintStatus, string> = {
-    TODO: "bg-slate",
-    IN_PROGRESS: "bg-signal",
-    TESTING: "bg-amber",
-    COMPLETED: "bg-moss",
-  };
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded border border-rule px-1.5 py-0.5 text-xs font-medium leading-none">
-      <span className={cn("h-1.5 w-1.5 rounded-full", dot[status])} />
-      {SPRINT_STATUS_LABEL[status]}
-    </span>
-  );
+export function SprintStatusChip({ status }: { status: string }) {
+  const { label, color } = useProjectFieldChip("SPRINT_STATUS", status);
+  return <DotChip label={label} color={color} />;
 }
 
-export function EpicStatusChip({ status }: { status: EpicStatus }) {
-  return <Chip label={EPIC_STATUS_LABEL[status]} />;
+export function EpicStatusChip({ status }: { status: string }) {
+  const { label, color } = useProjectFieldChip("EPIC_STATUS", status);
+  return <BorderChip label={label} color={color} />;
 }
 
 export function RoleChip({ role }: { role: Role }) {

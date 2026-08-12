@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { useVelocity } from "./useMetrics";
 import { useIssuesList } from "./useIssues";
 import { sprintForecast, type SprintForecast } from "@/lib/sprint/forecast";
+import { useProjectContext } from "@/lib/project/ProjectContext";
 import type { SprintResponse } from "@/lib/api/types";
 
 /**
@@ -26,16 +27,30 @@ export function useSprintForecast(projectId: number, sprint: SprintResponse | un
     size: 200,
     sort: "priority,desc",
   });
+  const { fieldDefinitionsByKind } = useProjectContext();
 
   const forecast = useMemo<SprintForecast | undefined>(() => {
     if (!sprint || !velocity.data || !issues.data) return undefined;
+
+    const closedIssueStatuses = new Set(
+      (fieldDefinitionsByKind.get("ISSUE_STATUS") ?? [])
+        .filter((d) => d.isDone || d.isCancelled)
+        .map((d) => d.code),
+    );
+    const doneSprintStatuses = new Set(
+      (fieldDefinitionsByKind.get("SPRINT_STATUS") ?? [])
+        .filter((d) => d.isDone)
+        .map((d) => d.code),
+    );
 
     return sprintForecast({
       sprint,
       issues: issues.data.content,
       history: velocity.data.sprints,
+      closedIssueStatuses,
+      doneSprintStatuses,
     });
-  }, [sprint, velocity.data, issues.data]);
+  }, [sprint, velocity.data, issues.data, fieldDefinitionsByKind]);
 
   return { forecast, isLoading: velocity.isLoading || issues.isLoading };
 }

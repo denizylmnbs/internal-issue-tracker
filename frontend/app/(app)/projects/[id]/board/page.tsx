@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { useProjectContext } from "@/lib/project/ProjectContext";
@@ -9,7 +9,7 @@ import { canWriteIssue } from "@/lib/auth/can";
 import { useSprintsList } from "@/lib/hooks/useSprints";
 import { useIssuesList, useChangeIssueStatus } from "@/lib/hooks/useIssues";
 import { BoardColumn } from "@/components/board/BoardColumn";
-import { SprintForecastBanner, isForecastable } from "@/components/sprint/SprintForecast";
+import { SprintForecastBanner, useIsForecastable } from "@/components/sprint/SprintForecast";
 import { EmptyState } from "@/components/shell/EmptyState";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -19,12 +19,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { BOARD_STATUSES } from "@/lib/api/enums";
-import type { IssueStatus } from "@/lib/api/enums";
 import Link from "next/link";
 
 function BoardPageContent() {
-  const { projectId, project } = useProjectContext();
+  const { projectId, project, fieldDefinitionsByKind } = useProjectContext();
+  const isForecastable = useIsForecastable();
   const { user } = useSession();
   const searchParams = useSearchParams();
   const requestedSprintId = searchParams.get("sprintId");
@@ -36,6 +35,23 @@ function BoardPageContent() {
     requestedSprintId ? Number(requestedSprintId) : undefined,
   );
 
+  // The columns a board renders, left to right: this project's active
+  // ISSUE_STATUS rows, minus the default (backlog-ish) and cancelled ones -
+  // docs/API.md §2. Used to be a hardcoded TODO/IN_PROGRESS/IN_REVIEW/DONE
+  // subset; any status a project defines with neither flag now shows up here.
+  const columns = (fieldDefinitionsByKind.get("ISSUE_STATUS") ?? []).filter(
+    (d) => !d.isDefault && !d.isCancelled,
+  );
+  // "IN_PROGRESS" was a hardcoded literal — SPRINT_STATUS codes flagged
+  // isActiveWork are this project's "currently running" set now.
+  const sprintStatusDefs = useMemo(
+    () => fieldDefinitionsByKind.get("SPRINT_STATUS") ?? [],
+    [fieldDefinitionsByKind],
+  );
+  const runningStatuses = new Set(
+    sprintStatusDefs.filter((d) => d.isActiveWork).map((d) => d.code),
+  );
+
   useEffect(() => {
     if (sprintId != null || !sprints?.content.length) return;
     if (requestedSprintId) {
@@ -45,9 +61,11 @@ function BoardPageContent() {
         return;
       }
     }
-    const running = sprints.content.find((s) => s.status === "IN_PROGRESS");
+    const running = sprints.content.find((s) =>
+      sprintStatusDefs.some((d) => d.isActiveWork && d.code === s.status),
+    );
     setSprintId(running?.id ?? sprints.content[0].id);
-  }, [sprints, sprintId, requestedSprintId]);
+  }, [sprints, sprintId, requestedSprintId, sprintStatusDefs]);
 
   const { data: issues, isLoading: loadingIssues } = useIssuesList(projectId, {
     sprintId,
@@ -80,7 +98,7 @@ function BoardPageContent() {
     const { active, over } = event;
     if (!over) return;
     const issueId = Number(active.id);
-    const newStatus = over.id as IssueStatus;
+    const newStatus = over.id as string;
     const current = issues?.content.find((i) => i.id === issueId);
     if (!current || current.status === newStatus) return;
     // Editor / project leader / the issue's own assignee only — a
@@ -105,7 +123,7 @@ function BoardPageContent() {
           <SelectContent>
             {sprints?.content.map((s) => (
               <SelectItem key={s.id} value={String(s.id)}>
-                {s.name} {s.status === "IN_PROGRESS" && "· running"}
+                {s.name} {runningStatuses.has(s.status) && "· running"}
               </SelectItem>
             ))}
           </SelectContent>
@@ -120,19 +138,19 @@ function BoardPageContent() {
 
       {loadingIssues || !sprintId ? (
         <div className="flex gap-3">
-          {BOARD_STATUSES.map((s) => (
-            <Skeleton key={s} className="h-96 w-72" />
+          {columns.map((s) => (
+            <Skeleton key={s.code} className="h-96 w-72" />
           ))}
         </div>
       ) : (
         <DndContext onDragEnd={onDragEnd}>
           <div className="flex flex-1 gap-4 overflow-x-auto pb-2">
-            {BOARD_STATUSES.map((status) => (
+            {columns.map((status) => (
               <BoardColumn
-                key={status}
+                key={status.code}
                 status={status}
                 projectId={projectId}
-                issues={(issues?.content ?? []).filter((i) => i.status === status)}
+                issues={(issues?.content ?? []).filter((i) => i.status === status.code)}
                 canWriteIssue={(issue) => canWriteIssue(user, project?.leaderId, issue)}
                 currentUserId={user?.id}
               />

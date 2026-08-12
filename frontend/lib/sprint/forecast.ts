@@ -1,5 +1,4 @@
 import { differenceInCalendarDays, parseISO } from "date-fns";
-import type { IssueStatus, SprintStatus } from "@/lib/api/enums";
 
 /**
  * Will this sprint land? Answered from two numbers the project already
@@ -19,9 +18,6 @@ const MIN_SAMPLES = 2;
 
 /** Comfortably inside the forecast capacity. */
 const ON_TRACK_RATIO = 0.8;
-
-/** Work that is no longer in play, so it is not "remaining". */
-const CLOSED_STATUSES: IssueStatus[] = ["DONE", "CANCELLED"];
 
 export type ForecastVerdict = "DONE" | "ON_TRACK" | "TIGHT" | "BEHIND";
 
@@ -56,12 +52,12 @@ export type ForecastSprint = {
 };
 
 export type ForecastIssue = {
-  status: IssueStatus;
+  status: string;
   storyPoint: number | null;
 };
 
 export type ForecastHistoryEntry = {
-  status: SprintStatus;
+  status: string;
   endDate: string;
   completedPoints: number | null;
 };
@@ -70,10 +66,17 @@ export type ForecastHistoryEntry = {
  * The average is taken over finished sprints only. A sprint still running has
  * no final delivery figure, and counting its partial total would drag the
  * average down by exactly the amount the team has not had time to finish yet.
+ *
+ * `doneSprintStatuses` is the calling project's set of SPRINT_STATUS codes
+ * flagged `isDone` (docs/API.md §2) — "COMPLETED" was a hardcoded literal
+ * before sprint statuses became project-defined data.
  */
-function recentVelocities(history: ForecastHistoryEntry[]): number[] {
+function recentVelocities(
+  history: ForecastHistoryEntry[],
+  doneSprintStatuses: ReadonlySet<string>,
+): number[] {
   return history
-    .filter((s) => s.status === "COMPLETED" && s.completedPoints != null)
+    .filter((s) => doneSprintStatuses.has(s.status) && s.completedPoints != null)
     .sort((a, b) => b.endDate.localeCompare(a.endDate))
     .slice(0, VELOCITY_SAMPLE_SIZE)
     .map((s) => s.completedPoints as number);
@@ -101,17 +104,24 @@ export function sprintForecast({
   sprint,
   issues,
   history,
+  closedIssueStatuses,
+  doneSprintStatuses,
   now = new Date(),
 }: {
   sprint: ForecastSprint;
   issues: ForecastIssue[];
   history: ForecastHistoryEntry[];
+  /** This project's ISSUE_STATUS codes flagged `isDone` or `isCancelled` — work
+   * carrying one of these is no longer "remaining". */
+  closedIssueStatuses: ReadonlySet<string>;
+  /** This project's SPRINT_STATUS codes flagged `isDone`. */
+  doneSprintStatuses: ReadonlySet<string>;
   now?: Date;
 }): SprintForecast {
-  const velocities = recentVelocities(history);
+  const velocities = recentVelocities(history, doneSprintStatuses);
   const sampleSize = velocities.length;
 
-  const open = issues.filter((i) => !CLOSED_STATUSES.includes(i.status));
+  const open = issues.filter((i) => !closedIssueStatuses.has(i.status));
   const remainingPoints = open.reduce((sum, i) => sum + (i.storyPoint ?? 0), 0);
   const unestimatedIssues = open.filter((i) => i.storyPoint == null).length;
 

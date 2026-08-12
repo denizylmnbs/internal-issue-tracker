@@ -8,17 +8,6 @@ import { useBulkIssueEdit } from "@/lib/hooks/useIssues";
 import { useUserDirectory } from "@/lib/users/directory";
 import { listTeams } from "@/lib/api/endpoints/teams";
 import * as issues from "@/lib/api/endpoints/issues";
-import {
-  ISSUE_PRIORITIES,
-  ISSUE_PRIORITY_LABEL,
-  ISSUE_STATUSES,
-  ISSUE_STATUS_LABEL,
-  ISSUE_TYPES,
-  ISSUE_TYPE_LABEL,
-  type IssuePriority,
-  type IssueStatus,
-  type IssueType,
-} from "@/lib/api/enums";
 import type { IssueResponse } from "@/lib/api/types";
 
 /** The Fibonacci-ish ladder every estimation session actually uses. */
@@ -65,8 +54,11 @@ export function IssueMenuItems({
   onDelete: (targets: IssueResponse[]) => void;
 }) {
   const { Label, Item, Separator, Sub, SubTrigger, SubContent } = parts;
-  const { canManage } = useProjectContext();
+  const { canManage, fieldDefinitionsByKind } = useProjectContext();
   const bulk = useBulkIssueEdit(projectId);
+  const statuses = fieldDefinitionsByKind.get("ISSUE_STATUS") ?? [];
+  const priorities = fieldDefinitionsByKind.get("ISSUE_PRIORITY") ?? [];
+  const types = fieldDefinitionsByKind.get("ISSUE_TYPE") ?? [];
 
   const { data: sprints } = useSprintsList(projectId, { size: 100, sort: "startDate,desc" });
   const { data: epics } = useEpicsList(projectId, { size: 100 });
@@ -88,7 +80,7 @@ export function IssueMenuItems({
 
   /** The other two fields come from each issue's own current values — a bulk
    * priority change must not level everybody's estimate to one number. */
-  const reclassify = (patch: Partial<{ type: IssueType; priority: IssuePriority; storyPoint: number | null }>) =>
+  const reclassify = (patch: Partial<{ type: string; priority: string; storyPoint: number | null }>) =>
     (issueId: number) => {
       const issue = targets.find((i) => i.id === issueId)!;
       return issues.changeIssueClassification(projectId, issueId, {
@@ -228,17 +220,17 @@ export function IssueMenuItems({
       <Sub>
         <SubTrigger>Status</SubTrigger>
         <SubContent>
-          {ISSUE_STATUSES.map((s: IssueStatus) => (
+          {statuses.map((s) => (
             <Item
-              key={s}
+              key={s.code}
               onSelect={() =>
                 run(
-                  (id) => issues.changeIssueStatus(projectId, id, { status: s }),
-                  (n) => `${n === 1 ? "Issue" : `${n} issues`} moved to ${ISSUE_STATUS_LABEL[s]}.`,
+                  (id) => issues.changeIssueStatus(projectId, id, { status: s.code }),
+                  (n) => `${n === 1 ? "Issue" : `${n} issues`} moved to ${s.label}.`,
                 )
               }
             >
-              {ISSUE_STATUS_LABEL[s]}
+              {s.label}
             </Item>
           ))}
         </SubContent>
@@ -247,17 +239,17 @@ export function IssueMenuItems({
       <Sub>
         <SubTrigger>Priority</SubTrigger>
         <SubContent>
-          {ISSUE_PRIORITIES.map((p: IssuePriority) => (
+          {priorities.map((p) => (
             <Item
-              key={p}
+              key={p.code}
               onSelect={() =>
                 run(
-                  reclassify({ priority: p }),
-                  (n) => `${n === 1 ? "Issue" : `${n} issues`} set to ${ISSUE_PRIORITY_LABEL[p]}.`,
+                  reclassify({ priority: p.code }),
+                  (n) => `${n === 1 ? "Issue" : `${n} issues`} set to ${p.label}.`,
                 )
               }
             >
-              {ISSUE_PRIORITY_LABEL[p]}
+              {p.label}
             </Item>
           ))}
         </SubContent>
@@ -266,17 +258,17 @@ export function IssueMenuItems({
       <Sub>
         <SubTrigger>Type</SubTrigger>
         <SubContent>
-          {ISSUE_TYPES.map((t: IssueType) => (
+          {types.map((t) => (
             <Item
-              key={t}
+              key={t.code}
               onSelect={() =>
                 run(
-                  reclassify({ type: t }),
-                  (n) => `${n === 1 ? "Issue" : `${n} issues`} set to ${ISSUE_TYPE_LABEL[t]}.`,
+                  reclassify({ type: t.code }),
+                  (n) => `${n === 1 ? "Issue" : `${n} issues`} set to ${t.label}.`,
                 )
               }
             >
-              {ISSUE_TYPE_LABEL[t]}
+              {t.label}
             </Item>
           ))}
         </SubContent>

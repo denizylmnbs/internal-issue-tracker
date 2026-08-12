@@ -8,7 +8,7 @@ import { useSprintsList, useDeleteSprint } from "@/lib/hooks/useSprints";
 import { SprintStatusSelect } from "@/components/pickers/SprintStatusSelect";
 import { SprintFormDialog } from "@/components/pickers/SprintFormDialog";
 import { EmptyState } from "@/components/shell/EmptyState";
-import { SprintForecastBadge, isForecastable } from "@/components/sprint/SprintForecast";
+import { SprintForecastBadge, useIsForecastable } from "@/components/sprint/SprintForecast";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateOnly } from "@/lib/format";
@@ -27,6 +27,7 @@ import type { SprintResponse } from "@/lib/api/types";
 
 export default function SprintsPage() {
   const { projectId, canManage } = useProjectContext();
+  const isForecastable = useIsForecastable();
   const { data, isLoading } = useSprintsList(projectId, { sort: "startDate,desc" });
   const deleteSprint = useDeleteSprint(projectId);
   const [formOpen, setFormOpen] = useState(false);

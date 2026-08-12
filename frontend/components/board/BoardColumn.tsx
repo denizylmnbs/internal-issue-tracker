@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import { IssueStatusChip } from "@/components/shell/chips";
 import { IssueCard } from "./IssueCard";
 import type { IssueResponse } from "@/lib/api/types";
-import type { IssueStatus } from "@/lib/api/enums";
+import type { FieldDefinitionResponse } from "@/lib/api/types";
 
 export function BoardColumn({
   status,
@@ -12,7 +12,9 @@ export function BoardColumn({
   canWriteIssue,
   currentUserId,
 }: {
-  status: IssueStatus;
+  /** The ISSUE_STATUS field definition this column renders — its `code` is
+   * both the droppable id and what a dropped card's status is set to. */
+  status: FieldDefinitionResponse;
   issues: IssueResponse[];
   projectId: number;
   /** Editor / project leader / the issue's own assignee — see lib/auth/can.ts. */
@@ -20,13 +22,13 @@ export function BoardColumn({
   /** Highlights cards assigned to the signed-in user. */
   currentUserId?: number;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: status });
+  const { setNodeRef, isOver } = useDroppable({ id: status.code });
   const points = issues.reduce((sum, i) => sum + (i.storyPoint ?? 0), 0);
 
   return (
     <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded border border-rule">
       <div className="flex items-center justify-between border-b border-rule bg-secondary px-2 py-1.5">
-        <IssueStatusChip status={status} />
+        <IssueStatusChip status={status.code} />
         <span className="font-data text-xs text-slate">
           {issues.length} · {points}pt
         </span>

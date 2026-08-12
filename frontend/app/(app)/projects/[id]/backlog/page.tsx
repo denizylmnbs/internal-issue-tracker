@@ -27,8 +27,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ISSUE_STATUSES, ISSUE_STATUS_LABEL } from "@/lib/api/enums";
-import type { IssueStatus } from "@/lib/api/enums";
 import type { IssueResponse } from "@/lib/api/types";
 import { deleteIssue } from "@/lib/api/endpoints/issues";
 import { IssueFormDialog } from "@/components/pickers/IssueFormDialog";
@@ -36,9 +34,10 @@ import { IssueActionsMenu, IssueContextMenu } from "@/components/backlog/IssueAc
 
 export default function BacklogPage() {
   const router = useRouter();
-  const { projectId, canWork } = useProjectContext();
+  const { projectId, canWork, fieldDefinitionsByKind, defaultCodeFor } = useProjectContext();
+  const statuses = fieldDefinitionsByKind.get("ISSUE_STATUS") ?? [];
   const [name, setName] = useState("");
-  const [status, setStatus] = useState<IssueStatus>("BACKLOG");
+  const [status, setStatus] = useState<string | undefined>(defaultCodeFor("ISSUE_STATUS"));
   const [createOpen, setCreateOpen] = useState(false);
   const [selected, setSelected] = useState<Set<RowKey>>(new Set());
   const [editing, setEditing] = useState<IssueResponse | undefined>();
@@ -109,7 +108,7 @@ export default function BacklogPage() {
         <Select
           value={status}
           onValueChange={(v) => {
-            setStatus(v as IssueStatus);
+            setStatus(v);
             resetSelection();
           }}
         >
@@ -117,9 +116,9 @@ export default function BacklogPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {ISSUE_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {ISSUE_STATUS_LABEL[s]}
+            {statuses.map((s) => (
+              <SelectItem key={s.code} value={s.code}>
+                {s.label}
               </SelectItem>
             ))}
           </SelectContent>

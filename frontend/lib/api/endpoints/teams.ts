@@ -8,7 +8,6 @@ import type {
   TeamResponse,
   UpdateTeamRequest,
 } from "../types";
-import type { TeamField } from "../enums";
 
 export const createTeam = (body: CreateTeamRequest) =>
   apiData<TeamResponse>("/api/teams", json(body, "POST"));
@@ -17,7 +16,7 @@ export const getTeam = (id: number) => apiData<TeamResponse>(`/api/teams/${id}`)
 
 export type ListTeamsQuery = {
   name?: string;
-  field?: TeamField;
+  field?: string;
   leaderId?: number;
   page?: number;
   size?: number;

@@ -13,7 +13,6 @@ import type {
   ProjectTeamResponse,
   UpdateProjectRequest,
 } from "../types";
-import type { ProjectStatus } from "../enums";
 
 export const createProject = (body: CreateProjectRequest) =>
   apiData<ProjectResponse>("/api/projects", json(body, "POST"));
@@ -23,7 +22,7 @@ export const getProject = (id: number) =>
 
 export type ListProjectsQuery = {
   name?: string;
-  status?: ProjectStatus;
+  status?: string;
   leaderId?: number;
   startDateAfter?: string;
   endDateBefore?: string;

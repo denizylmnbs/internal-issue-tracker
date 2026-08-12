@@ -31,7 +31,7 @@ import { DefectRatioChart } from "@/components/charts/DefectRatioChart";
 import { WipPanel } from "@/components/charts/WipPanel";
 import { VelocityChart } from "@/components/charts/VelocityChart";
 import { BurndownChart } from "@/components/charts/BurndownChart";
-import { SprintForecastBanner, isForecastable } from "@/components/sprint/SprintForecast";
+import { SprintForecastBanner, useIsForecastable } from "@/components/sprint/SprintForecast";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -69,7 +69,8 @@ function parseDateInput(value: string): string | null {
 const EARLIEST_WINDOW_DATE = "2000-01-01";
 
 export default function InsightsPage() {
-  const { projectId, project } = useProjectContext();
+  const { projectId, project, fieldDefinitionsByKind } = useProjectContext();
+  const isForecastable = useIsForecastable();
   const [window, setWindow] = useState(defaultWindow());
   const [bucket, setBucket] = useState<MetricsBucket>("WEEK");
   const [dimension, setDimension] = useState<MetricsDimension>("TYPE");
@@ -90,7 +91,12 @@ export default function InsightsPage() {
   const defectRatio = useDefectRatio(projectId, window, bucket);
   const wip = useWip(projectId);
   const velocity = useVelocity(projectId);
-  const effectiveSprintId = sprintId ?? sprints?.content.find((s) => s.status === "IN_PROGRESS")?.id;
+  // "IN_PROGRESS" was a hardcoded literal — SPRINT_STATUS codes flagged
+  // isActiveWork are this project's "currently running" set now (docs/API.md §2).
+  const runningStatuses = new Set(
+    (fieldDefinitionsByKind.get("SPRINT_STATUS") ?? []).filter((d) => d.isActiveWork).map((d) => d.code),
+  );
+  const effectiveSprintId = sprintId ?? sprints?.content.find((s) => runningStatuses.has(s.status))?.id;
   const burndown = useBurndown(projectId, effectiveSprintId);
 
   // the forecast rides on the same sprint the burndown is drawn for

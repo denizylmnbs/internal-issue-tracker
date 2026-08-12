@@ -24,8 +24,7 @@ import {
 } from "@/components/ui/select";
 import { UserPicker } from "./UserPicker";
 import { useCreateTeam } from "@/lib/hooks/useTeams";
-import { TEAM_FIELDS } from "@/lib/api/enums";
-import type { TeamField } from "@/lib/api/enums";
+import { useGlobalFieldDefinitions } from "@/lib/fielddef/GlobalFieldDefinitionsProvider";
 
 const schema = z.object({
   name: z.string().min(2, "At least 2 characters").max(255),
@@ -43,6 +42,8 @@ export function CreateTeamDialog({
 }) {
   const router = useRouter();
   const createTeam = useCreateTeam();
+  const { listGlobal } = useGlobalFieldDefinitions();
+  const fields = listGlobal("TEAM_FIELD");
 
   const { register, handleSubmit, control, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -54,7 +55,7 @@ export function CreateTeamDialog({
     createTeam.mutate(
       {
         name: values.name,
-        field: values.field as TeamField | undefined,
+        field: values.field,
         leaderId: values.leaderId,
       },
       {
@@ -93,9 +94,9 @@ export function CreateTeamDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="NONE">None</SelectItem>
-                      {TEAM_FIELDS.map((f) => (
-                        <SelectItem key={f} value={f}>
-                          {f}
+                      {fields.map((f) => (
+                        <SelectItem key={f.code} value={f.code}>
+                          {f.label}
                         </SelectItem>
                       ))}
                     </SelectContent>

@@ -45,8 +45,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { PROJECT_STATUSES, PROJECT_STATUS_LABEL } from "@/lib/api/enums";
-import type { ProjectStatus } from "@/lib/api/enums";
+import { useGlobalFieldDefinitions } from "@/lib/fielddef/GlobalFieldDefinitionsProvider";
+import { FieldDefinitionsSection } from "@/components/settings/FieldDefinitionsSection";
 import { formatDateOnly } from "@/lib/format";
 import { useTeamName } from "@/lib/hooks/useTeamName";
 
@@ -56,6 +56,8 @@ export default function ProjectSettingsPage() {
   const router = useRouter();
   const { user } = useSession();
   const { projectId, project, canManage } = useProjectContext();
+  const { listGlobal, resolveGlobal } = useGlobalFieldDefinitions();
+  const projectStatuses = listGlobal("PROJECT_STATUS");
 
   const {
     data: members,
@@ -124,19 +126,19 @@ export default function ProjectSettingsPage() {
             {canManage ? (
               <Select
                 value={project.status}
-                onValueChange={(v) => changeStatus.mutate({ status: v as ProjectStatus })}
+                onValueChange={(v) => changeStatus.mutate({ status: v })}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PROJECT_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{PROJECT_STATUS_LABEL[s]}</SelectItem>
+                  {projectStatuses.map((s) => (
+                    <SelectItem key={s.code} value={s.code}>{s.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             ) : (
-              <p className="text-sm">{PROJECT_STATUS_LABEL[project.status]}</p>
+              <p className="text-sm">{resolveGlobal("PROJECT_STATUS", project.status)?.label ?? project.status}</p>
             )}
           </div>
 
@@ -291,6 +293,19 @@ export default function ProjectSettingsPage() {
             </>
           )}
         </div>
+      </div>
+
+      <div className="border-t border-rule pt-6">
+        <h2 className="mb-3 font-heading text-sm font-semibold">Field definitions</h2>
+        <p className="mb-3 text-sm text-slate">
+          The statuses, types, priorities and resolving units this project offers. Changes here
+          apply only to this project.
+        </p>
+        <FieldDefinitionsSection
+          projectId={projectId}
+          kinds={["ISSUE_STATUS", "SPRINT_STATUS", "EPIC_STATUS", "ISSUE_TYPE", "ISSUE_PRIORITY", "ISSUE_UNIT"]}
+          canManage={!!canManage}
+        />
       </div>
 
       {isEditor && (

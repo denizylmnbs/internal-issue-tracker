@@ -22,8 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useUpdateTeam } from "@/lib/hooks/useTeams";
-import { TEAM_FIELDS } from "@/lib/api/enums";
-import type { TeamField } from "@/lib/api/enums";
+import { useGlobalFieldDefinitions } from "@/lib/fielddef/GlobalFieldDefinitionsProvider";
 import type { TeamResponse } from "@/lib/api/types";
 
 // The leader is deliberately absent — changing it is its own operation
@@ -44,6 +43,8 @@ export function TeamFormDialog({
   team: TeamResponse;
 }) {
   const updateTeam = useUpdateTeam(team.id);
+  const { listGlobal } = useGlobalFieldDefinitions();
+  const fields = listGlobal("TEAM_FIELD");
 
   const { register, handleSubmit, control, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -52,7 +53,7 @@ export function TeamFormDialog({
 
   const onSubmit = (values: FormValues) => {
     updateTeam.mutate(
-      { name: values.name, field: values.field as TeamField | undefined },
+      { name: values.name, field: values.field },
       { onSuccess: () => { toast.success("Team updated."); onOpenChange(false); } },
     );
   };
@@ -82,8 +83,8 @@ export function TeamFormDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="NONE">None</SelectItem>
-                      {TEAM_FIELDS.map((f) => (
-                        <SelectItem key={f} value={f}>{f}</SelectItem>
+                      {fields.map((f) => (
+                        <SelectItem key={f.code} value={f.code}>{f.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

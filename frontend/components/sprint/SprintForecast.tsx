@@ -1,8 +1,10 @@
 "use client";
 
+import { useCallback } from "react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSprintForecast } from "@/lib/hooks/useSprintForecast";
+import { useProjectContext } from "@/lib/project/ProjectContext";
 import type { ForecastGap, SprintForecast as Forecast } from "@/lib/sprint/forecast";
 import type { SprintResponse } from "@/lib/api/types";
 
@@ -152,7 +154,22 @@ export function SprintForecastBadge({
 }
 
 /** Sprints that have already been closed out get no forecast — there is
- * nothing left to predict, and velocity is the honest measure by then. */
-export function isForecastable(sprint: SprintResponse): boolean {
-  return sprint.status !== "COMPLETED";
+ * nothing left to predict, and velocity is the honest measure by then.
+ * `"COMPLETED"` was a hardcoded literal before sprint statuses became
+ * project-defined data; a sprint is "closed out" now if its status carries
+ * this project's SPRINT_STATUS `isDone` flag. Must be called within a
+ * ProjectProvider. */
+export function useIsForecastable() {
+  const { fieldDefinitionsByKind } = useProjectContext();
+
+  return useCallback(
+    (sprint: SprintResponse) => {
+      const doneCodes = fieldDefinitionsByKind
+        .get("SPRINT_STATUS")
+        ?.filter((d) => d.isDone)
+        .map((d) => d.code);
+      return !doneCodes?.includes(sprint.status);
+    },
+    [fieldDefinitionsByKind],
+  );
 }

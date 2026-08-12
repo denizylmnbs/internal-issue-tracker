@@ -16,13 +16,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { PROJECT_STATUSES, PROJECT_STATUS_LABEL } from "@/lib/api/enums";
-import type { ProjectStatus } from "@/lib/api/enums";
 import type { ProjectResponse } from "@/lib/api/types";
 import { formatDateOnly } from "@/lib/format";
 import { CreateProjectDialog } from "@/components/pickers/CreateProjectDialog";
 import { useSession } from "@/lib/auth/session";
 import { isEditorOrAbove } from "@/lib/auth/can";
+import { useGlobalFieldDefinitions } from "@/lib/fielddef/GlobalFieldDefinitionsProvider";
 
 const columns: Column<ProjectResponse>[] = [
   { key: "name", header: "Name", render: (p) => <span className="font-medium">{p.name}</span> },
@@ -43,8 +42,10 @@ const columns: Column<ProjectResponse>[] = [
 export default function ProjectsPage() {
   const router = useRouter();
   const { user } = useSession();
+  const { listGlobal } = useGlobalFieldDefinitions();
+  const statuses = listGlobal("PROJECT_STATUS");
   const [name, setName] = useState("");
-  const [status, setStatus] = useState<ProjectStatus | "ALL">("ALL");
+  const [status, setStatus] = useState<string>("ALL");
   const [createOpen, setCreateOpen] = useState(false);
 
   const { data, isLoading } = useProjectsList({
@@ -73,15 +74,15 @@ export default function ProjectsPage() {
           onChange={(e) => setName(e.target.value)}
           className="max-w-64"
         />
-        <Select value={status} onValueChange={(v) => setStatus(v as ProjectStatus | "ALL")}>
+        <Select value={status} onValueChange={setStatus}>
           <SelectTrigger className="w-40">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All statuses</SelectItem>
-            {PROJECT_STATUSES.map((s) => (
-              <SelectItem key={s} value={s}>
-                {PROJECT_STATUS_LABEL[s]}
+            {statuses.map((s) => (
+              <SelectItem key={s.code} value={s.code}>
+                {s.label}
               </SelectItem>
             ))}
           </SelectContent>
