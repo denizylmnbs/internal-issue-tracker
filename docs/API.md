@@ -1,7 +1,7 @@
 # Internal Issue Tracker — API Reference
 
 Complete reference for every HTTP endpoint the backend exposes, written to be the single source a
-frontend is built against. **81 endpoints across 16 controllers.**
+frontend is built against. **89 endpoints across 18 controllers.**
 
 Generated from the source. When the code and this document disagree, the code in
 `src/main/java/com/ist/internal_issue_tracker/**/*Controller.java` wins — but please fix the document.
@@ -20,7 +20,7 @@ Generated from the source. When the code and this document disagree, the code in
   - [4.1 Auth](#41-auth) · [4.2 Users](#42-users) · [4.3 Teams](#43-teams) · [4.4 Team members](#44-team-members)
   - [4.5 Projects](#45-projects) · [4.6 Project members](#46-project-members) · [4.7 Project teams](#47-project-teams)
   - [4.8 Sprints](#48-sprints) · [4.9 Epics](#49-epics) · [4.10 Issues](#410-issues) · [4.11 Comments](#411-comments)
-  - [4.12 Activity log](#412-activity-log) · [4.13 Metrics](#413-metrics)
+  - [4.12 Activity log](#412-activity-log) · [4.13 Metrics](#413-metrics) · [4.14 Field definitions](#414-field-definitions)
 - [5. Frontend integration notes](#5-frontend-integration-notes)
 - [6. Known gaps](#6-known-gaps-read-before-starting-the-frontend)
 
@@ -222,6 +222,21 @@ something it *points at* cannot be used.
 | `ASSIGNEE_TEAM_NOT_FOUND` | 422 | issue |
 | `COMMENT_NOT_FOUND` | 404 | comment |
 | `COMMENT_NOT_OWNED` | 403 | comment |
+| `PROJECT_STATUS_NOT_DEFINED` | 422 | project |
+| `TEAM_FIELD_NOT_DEFINED` | 422 | team |
+| `SPRINT_STATUS_NOT_DEFINED` | 422 | sprint |
+| `EPIC_STATUS_NOT_DEFINED` | 422 | epic |
+| `ISSUE_STATUS_NOT_DEFINED` | 422 | issue |
+| `ISSUE_TYPE_NOT_DEFINED` | 422 | issue |
+| `ISSUE_PRIORITY_NOT_DEFINED` | 422 | issue |
+| `ISSUE_UNIT_NOT_DEFINED` | 422 | issue |
+| `FIELD_DEFINITION_NOT_FOUND` | 404 | field definition |
+| `FIELD_CODE_ALREADY_EXISTS` | 409 | field definition |
+| `LAST_DONE_FIELD_REQUIRED` | 422 | field definition |
+| `DEFAULT_FIELD_REQUIRED` | 422 | field definition |
+| `FIELD_KIND_NOT_PROJECT_SCOPED` | 422 | field definition |
+| `FIELD_KIND_NOT_GLOBAL` | 422 | field definition |
+| `REORDER_SET_MISMATCH` | 422 | field definition |
 
 ### Date & time formats
 
@@ -247,21 +262,37 @@ Re-adding a removed member revives the original row rather than inserting a new 
 
 ## 2. Enum reference
 
-Send and expect these as raw uppercase strings. Every one mirrors a `CHECK` constraint in the schema.
+Send and expect these as raw uppercase strings. `Role`, `MetricsBucket` and `MetricsDimension` are
+still fixed and mirror a `CHECK` constraint in the schema, same as before.
 
 | Enum | Values |
 |------|--------|
 | `Role` | `USER`, `DEVELOPER`, `EDITOR`, `ADMIN` |
-| `TeamField` | `BACKEND`, `FRONTEND`, `ANDROID`, `IOS`, `DESIGN`, `DATA` |
-| `ProjectStatus` | `PLANNING`, `ACTIVE`, `ON_HOLD`, `COMPLETED`, `CANCELLED` |
-| `SprintStatus` | `TODO`, `IN_PROGRESS`, `TESTING`, `COMPLETED` |
-| `EpicStatus` | `TODO`, `IN_PROGRESS`, `ON_HOLD`, `COMPLETED`, `CANCELLED` |
-| `IssueStatus` | `BACKLOG`, `TODO`, `IN_PROGRESS`, `IN_REVIEW`, `DONE`, `ON_HOLD`, `CANCELLED` |
-| `IssueType` | `BUG`, `FEATURE`, `STORY`, `TASK`, `ENHANCEMENT`, `REFACTOR` |
-| `IssuePriority` | `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` |
-| `IssueUnit` | `BACKEND`, `FRONTEND`, `IOS`, `ANDROID` |
 | `MetricsBucket` | `DAY`, `WEEK`, `MONTH` |
 | `MetricsDimension` | `TYPE`, `PRIORITY` |
+
+**Everything else is no longer a fixed enum.** `TeamField`, `ProjectStatus`, `SprintStatus`,
+`EpicStatus`, `IssueStatus`, `IssueType`, `IssuePriority` and `IssueUnit` used to be closed value
+sets; they are now rows a caller can add to, relabel, reorder and retire through the **field
+definitions** endpoints (§4.14) — see `FieldKind` there for the exact eight kind names. A status,
+type, priority or unit is still sent and received as a raw string on every endpoint that used to
+carry one of these enums (`issues.status`, `ChangeStatusRequest.status`, and so on); the difference
+is that the *set of valid strings is data now*, fetched with `GET /api/projects/{id}/field-
+definitions?kind=ISSUE_STATUS` (or `GET /api/field-definitions?kind=TEAM_FIELD` for the two global
+kinds) rather than hardcoded client-side.
+
+`TeamField` and `ProjectStatus` are the two **global** kinds — one set for the whole instance,
+managed under `/api/field-definitions`, `ADMIN`-only to write. The other six kinds are **per
+project** — every project gets its own copy, seeded from the global defaults at creation time, and
+`EDITOR`+ (or the project's leader) can customize a given project's set under
+`/api/projects/{id}/field-definitions` without touching any other project's.
+
+A field definition row carries four semantic flags a client can use to render sensibly without
+hardcoding a project's chosen codes: `isDefault` (what a new record gets when nothing is specified),
+`isDone` (counts as delivered), `isCancelled` (left the flow without being delivered) and
+`isActiveWork` (someone is actively working it — what a flow-efficiency chart divides by).
+`isDefect` applies only to `ISSUE_TYPE` rows and marks which type(s) count toward defect-ratio and
+MTTR metrics — `BUG` by default, but a project may rename or add to that set.
 
 **Activity action types** — returned as `actionType` strings on activity rows. Rendering them as
 sentences is the client's job; that is why the API returns the raw name.
@@ -274,12 +305,14 @@ sentences is the client's job; that is why the API returns the raw name.
 
 Lifecycle rules worth encoding in the UI:
 
-- **Nothing is created in a chosen status.** Projects are born `PLANNING`, sprints and epics `TODO`,
-  issues `BACKLOG`. No create request accepts a status field — status moves only through its own
-  `PATCH .../status` endpoint. Do not render a status picker on any create form.
-- `IssuePriority` **is** accepted at creation (filing something `CRITICAL` from the start is
-  ordinary); omitting it takes the `MEDIUM` default.
-- `CANCELLED` is a decision, not a deletion. Deleting is a separate `DELETE`.
+- **Nothing is created in a chosen status.** Projects, sprints, epics and issues are all born at
+  whichever code in their kind currently has `isDefault: true` — no create request accepts a status
+  field, and status moves only through its own `PATCH .../status` endpoint. Do not render a status
+  picker on any create form; fetch the default from the field-definitions list instead of assuming
+  a name like `BACKLOG` or `PLANNING`, since a project may have renamed it.
+- `priority` **is** accepted at creation (filing something at the highest severity from the start is
+  ordinary); omitting it takes the project's `ISSUE_PRIORITY` default.
+- A code flagged `isCancelled` is a decision, not a deletion. Deleting is a separate `DELETE`.
 
 ---
 
@@ -1412,6 +1445,84 @@ queue forming that is the only thing it is drawn to show.
 
 ---
 
+### 4.14 Field definitions
+
+`fielddef/FieldDefinitionController.java` (project-scoped) and
+`fielddef/GlobalFieldDefinitionController.java` (the two global kinds). See §2 for what these
+replace and why every status/type/priority/unit is now data rather than a fixed enum.
+
+| Method | Path | Access |
+|--------|------|--------|
+| `GET` | `/api/projects/{id}/field-definitions` | auth |
+| `POST` | `/api/projects/{id}/field-definitions` | editor / leader |
+| `PUT` | `/api/projects/{id}/field-definitions/{defId}` | editor / leader |
+| `PATCH` | `/api/projects/{id}/field-definitions/reorder` | editor / leader |
+| `DELETE` | `/api/projects/{id}/field-definitions/{defId}` | editor / leader |
+| `GET` | `/api/field-definitions` | auth |
+| `POST` | `/api/field-definitions` | **ADMIN** |
+| `PUT` | `/api/field-definitions/{defId}` | **ADMIN** |
+| `PATCH` | `/api/field-definitions/reorder` | **ADMIN** |
+| `DELETE` | `/api/field-definitions/{defId}` | **ADMIN** |
+
+**`FieldDefinitionResponse`**:
+```json
+{
+  "id": 50, "kind": "ISSUE_STATUS", "projectId": 1,
+  "code": "SHIPPED", "label": "Shipped", "color": "#22C55E", "sortOrder": 7,
+  "isActive": true, "isDefault": false, "isDone": true, "isCancelled": false,
+  "isActiveWork": false, "isDefect": false,
+  "createdAt": "...", "updatedAt": "..."
+}
+```
+`kind` is one of `PROJECT_STATUS`, `SPRINT_STATUS`, `EPIC_STATUS`, `ISSUE_STATUS`, `ISSUE_TYPE`,
+`ISSUE_PRIORITY`, `ISSUE_UNIT`, `TEAM_FIELD`. `projectId` is `null` for the two global kinds
+(`PROJECT_STATUS`, `TEAM_FIELD`) and for every row returned by the `/api/field-definitions` routes.
+`code` is what every other endpoint stores and expects back — **immutable** once created; relabel
+with `label`, not by creating a new code and retiring the old one, or every issue already carrying
+the old code becomes orphaned.
+
+#### `GET /api/projects/{id}/field-definitions` → `200`
+Query: `kind` (optional — omit it to get every kind at once, sorted by kind then `sortOrder`).
+Attempting a global kind here returns `422 FIELD_KIND_NOT_PROJECT_SCOPED`.
+
+#### `POST /api/projects/{id}/field-definitions` → `201`, `Location: .../field-definitions/{id}`
+```json
+{
+  "kind": "ISSUE_STATUS", "code": "SHIPPED", "label": "Shipped", "color": "#22C55E",
+  "isDefault": false, "isDone": true, "isCancelled": false, "isActiveWork": false, "isDefect": false
+}
+```
+`code` must be `UPPER_SNAKE_CASE` and unique within this project's rows of that `kind`. Setting
+`isDefault: true` silently un-defaults whatever row currently holds it — there is always exactly
+one. Errors: `409 FIELD_CODE_ALREADY_EXISTS`, `422 FIELD_KIND_NOT_PROJECT_SCOPED`,
+`400 VALIDATION_FAILED`.
+
+#### `PUT /api/projects/{id}/field-definitions/{defId}` → `200`
+```json
+{ "label": "Shipped", "color": "#22C55E", "isDefault": false, "isDone": true, "isCancelled": false, "isActiveWork": false, "isDefect": false }
+```
+No `code` — it never changes. Unsetting `isDone` (or `isDefault`) on the last row of this project's
+`ISSUE_STATUS` set that carries it is refused: `422 LAST_DONE_FIELD_REQUIRED` /
+`422 DEFAULT_FIELD_REQUIRED`. A project's metrics depend on always having at least one done status
+and exactly one default — see §2.
+
+#### `PATCH /api/projects/{id}/field-definitions/reorder` → `200`
+```json
+{ "kind": "ISSUE_STATUS", "orderedIds": [4, 1, 7, 2, 9, 3, 5] }
+```
+`orderedIds` must name **exactly** the project's active rows of that `kind` — no more, no fewer.
+Errors: `422 REORDER_SET_MISMATCH`.
+
+#### `DELETE /api/projects/{id}/field-definitions/{defId}` → `200` empty
+Soft delete (`isActive: false`); issues already carrying this code keep it, they just cannot be set
+to it again. Same last-done/default guard as the `PUT` above.
+
+#### Global routes
+Same shapes, `kind` restricted to `PROJECT_STATUS` / `TEAM_FIELD`, no `{id}` in the path. Sending a
+project-scoped `kind` here returns `422 FIELD_KIND_NOT_GLOBAL`.
+
+---
+
 ## 5. Frontend integration notes
 
 ### Endpoint totals
@@ -1430,7 +1541,8 @@ queue forming that is the only thing it is drawn to show.
 | Comments | 5 |
 | Activity | 3 |
 | Metrics | 14 |
-| **Total** | **79** |
+| Field definitions (project + global) | 10 |
+| **Total** | **89** |
 
 ### Suggested route → endpoint mapping
 
