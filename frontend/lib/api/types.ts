@@ -2,20 +2,16 @@
  * Every DTO the backend returns or accepts (docs/API.md §4). Hand-written
  * against that document since there is no OpenAPI/springdoc in this project —
  * if the backend and this file disagree, the backend wins; fix this file.
+ *
+ * Status/type/priority/unit/field values (project status, sprint status, epic
+ * status, issue status, issue type, issue priority, issue resolving unit,
+ * team field) are plain `string` now, not fixed unions — they are
+ * `field_definitions` codes (docs/API.md §2/§4.14), user-defined per project
+ * or globally. See `lib/api/types.ts`'s FieldDefinition* types below and
+ * `lib/project/ProjectContext.tsx` / `lib/fielddef/GlobalFieldDefinitionsProvider.tsx`
+ * for how a raw code is resolved to a label/color.
  */
-import type {
-  EpicStatus,
-  IssuePriority,
-  IssueResolvingUnit,
-  IssueStatus,
-  IssueType,
-  MetricsBucket,
-  ProjectStatus,
-  Role,
-  SprintStatus,
-  TeamField,
-  ActivityActionType,
-} from "./enums";
+import type { MetricsBucket, Role, ActivityActionType } from "./enums";
 
 // ---------------------------------------------------------------- envelope
 
@@ -84,7 +80,7 @@ export type UserTeamMembershipResponse = {
   membershipId: number;
   teamId: number;
   teamName: string;
-  teamField: TeamField | null;
+  teamField: string | null;
   /** Derived server-side from a nullable `updated_at` — see lib/format.ts. */
   joinedAt: string | null;
 };
@@ -92,7 +88,7 @@ export type UserTeamMembershipResponse = {
 export type UserProjectMembershipResponse = {
   projectId: number;
   projectName: string;
-  projectStatus: ProjectStatus;
+  projectStatus: string;
   directlyAssigned: boolean;
 };
 
@@ -101,7 +97,7 @@ export type UserProjectMembershipResponse = {
 export type TeamResponse = {
   id: number;
   name: string;
-  field: TeamField | null;
+  field: string | null;
   leaderId: number;
   isActive: boolean;
   createdAt: string;
@@ -109,11 +105,11 @@ export type TeamResponse = {
 
 export type CreateTeamRequest = {
   name: string;
-  field?: TeamField;
+  field?: string;
   leaderId: number;
 };
 
-export type UpdateTeamRequest = { name: string; field?: TeamField };
+export type UpdateTeamRequest = { name: string; field?: string };
 
 export type ChangeTeamLeaderRequest = { leaderId: number };
 
@@ -137,7 +133,7 @@ export type ProjectResponse = {
   startDate: string;
   endDate: string | null;
   leaderId: number | null;
-  status: ProjectStatus;
+  status: string;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -164,7 +160,7 @@ export type UpdateProjectRequest = {
 };
 
 export type ChangeProjectLeaderRequest = { leaderId: number };
-export type ChangeProjectStatusRequest = { status: ProjectStatus };
+export type ChangeProjectStatusRequest = { status: string };
 
 export type ProjectMemberResponse = {
   id: number;
@@ -202,7 +198,7 @@ export type SprintResponse = {
   description: string | null;
   startDate: string;
   endDate: string;
-  status: SprintStatus;
+  status: string;
   committedPoints: number | null;
   committedAt: string | null;
   createdAt: string;
@@ -223,7 +219,7 @@ export type UpdateSprintRequest = {
   endDate: string;
 };
 
-export type ChangeSprintStatusRequest = { status: SprintStatus };
+export type ChangeSprintStatusRequest = { status: string };
 
 // ------------------------------------------------------------------- epic
 
@@ -232,7 +228,7 @@ export type EpicResponse = {
   projectId: number;
   name: string;
   description: string | null;
-  status: EpicStatus;
+  status: string;
   reporterId: number;
   createdAt: string;
   updatedAt: string;
@@ -240,7 +236,7 @@ export type EpicResponse = {
 
 export type CreateEpicRequest = { name: string; description?: string };
 export type UpdateEpicRequest = { name: string; description?: string };
-export type ChangeEpicStatusRequest = { status: EpicStatus };
+export type ChangeEpicStatusRequest = { status: string };
 
 // ------------------------------------------------------------------ issue
 
@@ -249,12 +245,12 @@ export type IssueResponse = {
   projectId: number;
   sprintId: number | null;
   epicId: number | null;
-  type: IssueType;
+  type: string;
   name: string;
   description: string | null;
-  status: IssueStatus;
-  priority: IssuePriority;
-  resolvingUnit: IssueResolvingUnit | null;
+  status: string;
+  priority: string;
+  resolvingUnit: string | null;
   storyPoint: number | null;
   reporterId: number;
   assigneeUserId: number | null;
@@ -266,9 +262,9 @@ export type IssueResponse = {
 export type CreateIssueRequest = {
   name: string;
   description?: string;
-  type: IssueType;
-  priority?: IssuePriority;
-  resolvingUnit?: IssueResolvingUnit;
+  type: string;
+  priority?: string;
+  resolvingUnit?: string;
   storyPoint?: number;
   sprintId?: number;
   epicId?: number;
@@ -280,15 +276,15 @@ export type CreateIssueRequest = {
 export type UpdateIssueRequest = {
   name: string;
   description?: string;
-  type: IssueType;
-  priority: IssuePriority;
-  resolvingUnit?: IssueResolvingUnit;
+  type: string;
+  priority: string;
+  resolvingUnit?: string;
   storyPoint?: number;
   sprintId?: number;
   epicId?: number;
 };
 
-export type ChangeIssueStatusRequest = { status: IssueStatus };
+export type ChangeIssueStatusRequest = { status: string };
 
 /** null means the backlog, not "leave it alone" — the field is the whole body. */
 export type ChangeIssueSprintRequest = { sprintId: number | null };
@@ -297,8 +293,8 @@ export type ChangeIssueEpicRequest = { epicId: number | null };
 
 /** Replaced as a group, so a caller changing one restates the other two as they stand. */
 export type ChangeIssueClassificationRequest = {
-  type: IssueType;
-  priority: IssuePriority;
+  type: string;
+  priority: string;
   storyPoint: number | null;
 };
 
@@ -310,10 +306,10 @@ export type ChangeIssueAssigneeRequest = {
 
 export type IssueListQuery = {
   name?: string;
-  type?: IssueType;
-  status?: IssueStatus;
-  priority?: IssuePriority;
-  resolvingUnit?: IssueResolvingUnit;
+  type?: string;
+  status?: string;
+  priority?: string;
+  resolvingUnit?: string;
   sprintId?: number;
   epicId?: number;
   reporterId?: number;
@@ -407,7 +403,7 @@ export type ThroughputBreakdownResponse = {
 };
 
 export type TimeInStatusEntry = {
-  status: IssueStatus;
+  status: string;
   issueCount: number;
   totalSeconds: number;
   p50Seconds: number;
@@ -462,7 +458,7 @@ export type DefectRatioResponse = {
 };
 
 export type WipStatusEntry = {
-  status: IssueStatus;
+  status: string;
   issueCount: number;
   storyPoints: number;
   oldestAgeSeconds: number;
@@ -470,12 +466,12 @@ export type WipStatusEntry = {
 };
 export type WipOldestEntry = {
   issueId: number;
-  status: IssueStatus;
+  status: string;
   enteredAt: string;
   ageSeconds: number;
   storyPoint: number | null;
-  type: IssueType;
-  priority: IssuePriority;
+  type: string;
+  priority: string;
 };
 export type WipResponse = {
   asOf: string;
@@ -486,7 +482,7 @@ export type WipResponse = {
 export type VelocitySprintEntry = {
   sprintId: number;
   name: string;
-  status: SprintStatus;
+  status: string;
   startDate: string;
   endDate: string;
   committedPoints: number | null;
@@ -506,7 +502,7 @@ export type BurndownPoint = {
 export type BurndownResponse = {
   sprintId: number;
   name: string;
-  status: SprintStatus;
+  status: string;
   startDate: string;
   endDate: string;
   committedPoints: number | null;
@@ -515,10 +511,88 @@ export type BurndownResponse = {
 
 export type CumulativeFlowPoint = {
   bucketStart: string;
-  status: IssueStatus;
+  status: string;
   issueCount: number;
 };
 export type CumulativeFlowResponse = {
   window: MetricsWindow;
   points: CumulativeFlowPoint[];
+};
+
+// ------------------------------------------------------------ field definitions
+
+/**
+ * The eight classification points every status/type/priority/unit/field code
+ * belongs to (docs/API.md §2). Fixed — unlike the codes themselves, this set
+ * doesn't change. `PROJECT_STATUS` and `TEAM_FIELD` are global; the other six
+ * are project-scoped.
+ */
+export const FIELD_KINDS = [
+  "PROJECT_STATUS",
+  "SPRINT_STATUS",
+  "EPIC_STATUS",
+  "ISSUE_STATUS",
+  "ISSUE_TYPE",
+  "ISSUE_PRIORITY",
+  "ISSUE_UNIT",
+  "TEAM_FIELD",
+] as const;
+export type FieldKind = (typeof FIELD_KINDS)[number];
+
+export const GLOBAL_FIELD_KINDS: FieldKind[] = ["PROJECT_STATUS", "TEAM_FIELD"];
+
+/**
+ * One user-defined status/type/priority/unit/field value (docs/API.md §4.14).
+ * `projectId` is null for a global-kind row. `code` is immutable once
+ * created; everything else (`label`, `color`, `sortOrder`, the five flags)
+ * can change without touching any issue/sprint/epic/project already carrying
+ * this code. A soft-deleted (`isActive: false`) row can still be referenced
+ * by old data — callers resolving a code should fall back to showing the raw
+ * code when no matching row is found, not assume one always exists.
+ */
+export type FieldDefinitionResponse = {
+  id: number;
+  kind: FieldKind;
+  projectId: number | null;
+  code: string;
+  label: string;
+  color: string | null;
+  sortOrder: number;
+  isActive: boolean;
+  isDefault: boolean;
+  isDone: boolean;
+  isCancelled: boolean;
+  isActiveWork: boolean;
+  isDefect: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateFieldDefinitionRequest = {
+  kind: FieldKind;
+  code: string;
+  label: string;
+  color?: string;
+  isDefault: boolean;
+  isDone: boolean;
+  isCancelled: boolean;
+  isActiveWork: boolean;
+  isDefect: boolean;
+};
+
+/** No `code` — it never changes once created, see FieldDefinitionResponse. */
+export type UpdateFieldDefinitionRequest = {
+  label: string;
+  color?: string;
+  isDefault: boolean;
+  isDone: boolean;
+  isCancelled: boolean;
+  isActiveWork: boolean;
+  isDefect: boolean;
+};
+
+/** `orderedIds` must name exactly the active rows of this kind — no more, no fewer. */
+export type ReorderFieldDefinitionsRequest = {
+  kind: FieldKind;
+  orderedIds: number[];
 };

@@ -6,6 +6,7 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SessionProvider } from "@/lib/auth/session";
 import { UserDirectoryProvider } from "@/lib/users/directory";
+import { GlobalFieldDefinitionsProvider } from "@/lib/fielddef/GlobalFieldDefinitionsProvider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -29,7 +30,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider delayDuration={300}>
         <SessionProvider>
-          <UserDirectoryProvider>{children}</UserDirectoryProvider>
+          <UserDirectoryProvider>
+            <GlobalFieldDefinitionsProvider>{children}</GlobalFieldDefinitionsProvider>
+          </UserDirectoryProvider>
         </SessionProvider>
       </TooltipProvider>
       <ReactQueryDevtools initialIsOpen={false} />
