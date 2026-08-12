@@ -39,7 +39,7 @@ class IssueChangeDetector {
     boolean detailsChanged =
         nameChanged
             || !Objects.equals(before.description(), after.getDescription())
-            || before.type() != after.getType();
+            || !Objects.equals(before.type(), after.getType());
 
     if (!detailsChanged) {
       return;
@@ -50,10 +50,6 @@ class IssueChangeDetector {
             IssueField.DETAILS,
             nameChanged ? before.name() : null,
             nameChanged ? after.getName() : null));
-  }
-
-  private static String name(Enum<?> value) {
-    return value == null ? null : value.name();
   }
 
   private static String number(Integer value) {
@@ -69,15 +65,13 @@ class IssueChangeDetector {
 
     addDetails(changes, before, after);
 
-    if (before.status() != after.getStatus()) {
-      changes.add(
-          new IssueFieldChange(IssueField.STATUS, name(before.status()), name(after.getStatus())));
+    if (!Objects.equals(before.status(), after.getStatus())) {
+      changes.add(new IssueFieldChange(IssueField.STATUS, before.status(), after.getStatus()));
     }
 
-    if (before.priority() != after.getPriority()) {
+    if (!Objects.equals(before.priority(), after.getPriority())) {
       changes.add(
-          new IssueFieldChange(
-              IssueField.PRIORITY, name(before.priority()), name(after.getPriority())));
+          new IssueFieldChange(IssueField.PRIORITY, before.priority(), after.getPriority()));
     }
 
     if (!Objects.equals(before.storyPoint(), after.getStoryPoint())) {

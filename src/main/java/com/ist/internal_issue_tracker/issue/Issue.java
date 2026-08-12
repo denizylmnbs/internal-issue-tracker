@@ -44,16 +44,19 @@ public class Issue {
 
   /**
    * Nullable in the schema, required by the API. Widening it later is a migration-free change;
-   * narrowing it would not have been, which is why the API is the stricter of the two.
+   * narrowing it would not have been, which is why the API is the stricter of the two. A code
+   * from this project's {@code ISSUE_TYPE} field definitions, not a fixed enum - see {@code
+   * FieldDefinition}.
    */
-  @Enumerated(EnumType.STRING)
-  @Column(length = 20)
-  private IssueType type;
+  @Column(length = 30)
+  private String type;
 
-  /** Which unit resolves the issue - optional, set once triage assigns it to a team. */
-  @Enumerated(EnumType.STRING)
-  @Column(name = "resolving_unit", length = 20)
-  private IssueUnit resolvingUnit;
+  /**
+   * Which unit resolves the issue - optional, set once triage assigns it to a team. A code from
+   * this project's {@code ISSUE_UNIT} field definitions.
+   */
+  @Column(name = "resolving_unit", length = 30)
+  private String resolvingUnit;
 
   /** No uniqueness of any kind - two issues on one project may share a name. */
   @NotBlank
@@ -64,15 +67,19 @@ public class Issue {
   @Column(columnDefinition = "text")
   private String description;
 
-  @NotNull
-  @Enumerated(EnumType.STRING)
-  @Column(nullable = false, length = 20)
-  private IssueStatus status = IssueStatus.BACKLOG;
+  /**
+   * A code from this project's {@code ISSUE_STATUS} field definitions, not a fixed enum. {@code
+   * IssueService} resolves the default on create and validates every write through {@code
+   * FieldDefinitionLookup}.
+   */
+  @NotBlank
+  @Column(nullable = false, length = 30)
+  private String status;
 
-  @NotNull
-  @Enumerated(EnumType.STRING)
-  @Column(nullable = false, length = 20)
-  private IssuePriority priority = IssuePriority.MEDIUM;
+  /** A code from this project's {@code ISSUE_PRIORITY} field definitions. */
+  @NotBlank
+  @Column(nullable = false, length = 30)
+  private String priority;
 
   /** Estimate, in whatever unit the team has agreed on. Null until someone sizes the work. */
   private Integer storyPoint;

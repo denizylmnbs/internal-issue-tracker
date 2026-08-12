@@ -19,6 +19,8 @@ import com.ist.internal_issue_tracker.shared.event.IssueFieldChange;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
 import com.ist.internal_issue_tracker.shared.exception.CommonErrorCode;
 import com.ist.internal_issue_tracker.shared.port.EpicLookup;
+import com.ist.internal_issue_tracker.shared.port.FieldDefinitionLookup;
+import com.ist.internal_issue_tracker.shared.port.FieldKind;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.SprintLookup;
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
@@ -69,7 +71,34 @@ public class IssueService {
   private final EpicLookup epicLookup;
   private final UserLookup userLookup;
   private final TeamLookup teamLookup;
+  private final FieldDefinitionLookup fieldDefinitionLookup;
   private final ApplicationEventPublisher eventPublisher;
+
+  private void requireValidStatus(Integer projectId, String status) {
+    if (!fieldDefinitionLookup.isValidCode(projectId, FieldKind.ISSUE_STATUS, status)) {
+      throw new AppException(IssueErrorCode.ISSUE_STATUS_NOT_DEFINED);
+    }
+  }
+
+  private void requireValidType(Integer projectId, String type) {
+    if (!fieldDefinitionLookup.isValidCode(projectId, FieldKind.ISSUE_TYPE, type)) {
+      throw new AppException(IssueErrorCode.ISSUE_TYPE_NOT_DEFINED);
+    }
+  }
+
+  private void requireValidPriority(Integer projectId, String priority) {
+    if (!fieldDefinitionLookup.isValidCode(projectId, FieldKind.ISSUE_PRIORITY, priority)) {
+      throw new AppException(IssueErrorCode.ISSUE_PRIORITY_NOT_DEFINED);
+    }
+  }
+
+  /** {@code resolvingUnit} is optional, so only a non-null value is checked. */
+  private void requireValidResolvingUnitIfPresent(Integer projectId, String resolvingUnit) {
+    if (resolvingUnit != null
+        && !fieldDefinitionLookup.isValidCode(projectId, FieldKind.ISSUE_UNIT, resolvingUnit)) {
+      throw new AppException(IssueErrorCode.ISSUE_UNIT_NOT_DEFINED);
+    }
+  }
 
   /**
    * The issue's type, priority, estimate and sprint as they stand right now, travelling with the
@@ -77,15 +106,13 @@ public class IssueService {
    * entity rather than from the request, so a field the request did not mention still reports what
    * the issue actually holds.
    *
-   * <p>The enums are rendered by {@code name()}, which is what the CHECK constraints on {@code
-   * issue_activities} and the metric queries' string literals both expect.
+   * <p>{@code type} and {@code priority} are already the raw codes {@code issue_activities} and the
+   * metric queries store and match against - no {@code enum.name()} rendering needed now that both
+   * are plain strings on {@link Issue} itself.
    */
   private static IssueDimensions dimensionsOf(Issue issue) {
     return new IssueDimensions(
-        issue.getType() != null ? issue.getType().name() : null,
-        issue.getPriority() != null ? issue.getPriority().name() : null,
-        issue.getStoryPoint(),
-        issue.getSprintId());
+        issue.getType(), issue.getPriority(), issue.getStoryPoint(), issue.getSprintId());
   }
 
   /**
@@ -187,8 +214,16 @@ public class IssueService {
     requireActiveProject(projectId);
     requireValidPlacement(projectId, request.sprintId(), request.epicId());
     requireValidAssignees(request.assigneeUserId(), request.assigneeTeamId());
+    requireValidType(projectId, request.type());
+    if (request.priority() != null) {
+      requireValidPriority(projectId, request.priority());
+    }
+    requireValidResolvingUnitIfPresent(projectId, request.resolvingUnit());
 
-    Issue issue = issueMapper.toEntity(projectId, reporterId, request);
+    String defaultStatus = fieldDefinitionLookup.defaultCode(projectId, FieldKind.ISSUE_STATUS);
+    String defaultPriority = fieldDefinitionLookup.defaultCode(projectId, FieldKind.ISSUE_PRIORITY);
+    Issue issue =
+        issueMapper.toEntity(projectId, reporterId, request, defaultStatus, defaultPriority);
 
     Issue savedIssue = issueRepository.save(issue);
 
@@ -212,10 +247,10 @@ public class IssueService {
   public PagedResponse<IssueResponse> getIssuesByProjectId(
       Integer projectId,
       String name,
-      IssueType type,
-      IssueStatus status,
-      IssuePriority priority,
-      IssueUnit resolvingUnit,
+      String type,
+      String status,
+      String priority,
+      String resolvingUnit,
       Integer sprintId,
       Integer epicId,
       Integer reporterId,
@@ -255,6 +290,9 @@ public class IssueService {
     Issue issue = requireLiveIssue(projectId, issueId);
 
     requireValidPlacement(projectId, request.sprintId(), request.epicId());
+    requireValidType(projectId, request.type());
+    requireValidPriority(projectId, request.priority());
+    requireValidResolvingUnitIfPresent(projectId, request.resolvingUnit());
 
     IssueSnapshot before = IssueSnapshot.of(issue);
 
@@ -279,6 +317,7 @@ public class IssueService {
     Issue issue = requireLiveIssue(projectId, issueId);
 
     requireEditorLeaderOrAssignee(projectId, actorId, issue);
+    requireValidStatus(projectId, request.status());
 
     IssueSnapshot before = IssueSnapshot.of(issue);
 
@@ -295,7 +334,10 @@ public class IssueService {
   /**
    * The narrow counterpart of {@link #updateIssue}: it moves the sprint and touches nothing else,
    * so a caller planning a sprint does not have to carry every other field through the round trip
-   * to leave it where it was.
+   * to leave it where it was. (Previously this also forced the status to a hardcoded {@code TODO}
+   * on every call, contradicting this method's own contract and {@code docs/API.md}'s "nothing else
+   * on the issue is touched" - that line is dropped here rather than carried forward, since a
+   * hardcoded target status has no meaning once statuses are project-defined data.)
    *
    * <p>The placement check is the same one {@code updateIssue} makes and is made for the same
    * reason - see {@link #requireValidPlacement}. The epic is passed as null because this call does
@@ -317,7 +359,6 @@ public class IssueService {
     IssueSnapshot before = IssueSnapshot.of(issue);
 
     issue.setSprintId(request.sprintId());
-    issue.setStatus(IssueStatus.TODO);
 
     Issue savedIssue = issueRepository.save(issue);
 
@@ -365,6 +406,9 @@ public class IssueService {
     requireActiveProject(projectId);
 
     Issue issue = requireLiveIssue(projectId, issueId);
+
+    requireValidType(projectId, request.type());
+    requireValidPriority(projectId, request.priority());
 
     IssueSnapshot before = IssueSnapshot.of(issue);
 

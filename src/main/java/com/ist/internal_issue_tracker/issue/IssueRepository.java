@@ -1,6 +1,5 @@
 package com.ist.internal_issue_tracker.issue;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -69,10 +68,10 @@ interface IssueRepository extends JpaRepository<Issue, Integer> {
   Page<Issue> findAllByFilters(
       @Param("projectId") Integer projectId,
       @Param("name") String name,
-      @Param("type") IssueType type,
-      @Param("status") IssueStatus status,
-      @Param("priority") IssuePriority priority,
-      @Param("resolvingUnit") IssueUnit resolvingUnit,
+      @Param("type") String type,
+      @Param("status") String status,
+      @Param("priority") String priority,
+      @Param("resolvingUnit") String resolvingUnit,
       @Param("sprintId") Integer sprintId,
       @Param("epicId") Integer epicId,
       @Param("reporterId") Integer reporterId,
@@ -81,52 +80,24 @@ interface IssueRepository extends JpaRepository<Issue, Integer> {
       Pageable pageable);
 
   /**
-   * One person's live issues across every project they hold any, filtered to the given statuses -
-   * "My Work"'s active-issue list. Unlike every other query here there is no {@code projectId}: the
-   * whole point is that a person's work is not confined to one.
+   * Every live issue assigned to one person, across every project they hold any - unpaged and
+   * un-projectId'd, because "My Work" is exactly the opposite of a project-scoped question.
    *
-   * <p>Read through {@code UserWorkService}, the only caller.
+   * <p>Used to be a single {@code status IN (:statuses)} query against a fixed {@code IssueStatus}
+   * set. Now that statuses are project-scoped data, "active" can mean a different set of codes on
+   * every project this person touches, and this module cannot join {@code field_definitions} to
+   * resolve that in SQL - {@code UserWorkService} does it in memory instead, against each issue's
+   * own project. Read through {@code UserWorkService}, the only caller.
    */
-  @Query(
-      """
-      SELECT i FROM Issue i
-      WHERE i.assigneeUserId = :assigneeUserId
-      AND i.deletedAt IS NULL
-      AND i.status IN :statuses
-      """)
-  Page<Issue> findByAssigneeAndStatuses(
-      @Param("assigneeUserId") Integer assigneeUserId,
-      @Param("statuses") Collection<IssueStatus> statuses,
-      Pageable pageable);
+  List<Issue> findByAssigneeUserIdAndDeletedAtIsNull(Integer assigneeUserId);
 
   /**
-   * One person's story points, summed per project-and-sprint pair, read from {@code issues}'
-   * current state - see {@code UserSprintPoints} for why that is a deliberately different reading
-   * from the project-wide velocity query. {@code CANCELLED} issues are excluded entirely, on both
-   * sides of the sum: dropped work was never a commitment either finished or missed.
+   * Every live, sprint-assigned issue for one person, across every project - the raw rows {@code
+   * UserWorkService#getSprintProgress} groups and sums per project-and-sprint pair.
    *
-   * <p>Unpaged and un-projectId'd like {@link #findByAssigneeAndStatuses}, for the same reason -
-   * {@code UserWorkService} needs every sprint this person touched, anywhere, to build current,
-   * previous and average progress.
+   * <p>Used to be a {@code GROUP BY}/{@code CASE WHEN} aggregate query bound to a fixed {@code
+   * DONE}/{@code CANCELLED} pair. That pair is project-scoped data now, for the same reason {@link
+   * #findByAssigneeUserIdAndDeletedAtIsNull} moved out of SQL - see {@code UserWorkService}.
    */
-  @Query(
-      """
-      SELECT i.projectId AS projectId,
-             i.sprintId AS sprintId,
-             coalesce(sum(coalesce(i.storyPoint, 0)), 0) AS assignedPoints,
-             coalesce(sum(CASE WHEN i.status = :doneStatus THEN coalesce(i.storyPoint, 0) ELSE 0 END), 0)
-                 AS completedPoints,
-             count(i) AS assignedIssueCount,
-             sum(CASE WHEN i.status = :doneStatus THEN 1L ELSE 0L END) AS completedIssueCount
-      FROM Issue i
-      WHERE i.assigneeUserId = :assigneeUserId
-      AND i.deletedAt IS NULL
-      AND i.sprintId IS NOT NULL
-      AND i.status <> :cancelledStatus
-      GROUP BY i.projectId, i.sprintId
-      """)
-  List<UserSprintPoints> sprintPointsByAssignee(
-      @Param("assigneeUserId") Integer assigneeUserId,
-      @Param("doneStatus") IssueStatus doneStatus,
-      @Param("cancelledStatus") IssueStatus cancelledStatus);
+  List<Issue> findByAssigneeUserIdAndDeletedAtIsNullAndSprintIdIsNotNull(Integer assigneeUserId);
 }

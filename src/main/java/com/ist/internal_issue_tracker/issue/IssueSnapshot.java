@@ -16,9 +16,9 @@ package com.ist.internal_issue_tracker.issue;
 record IssueSnapshot(
     String name,
     String description,
-    IssueType type,
-    IssueStatus status,
-    IssuePriority priority,
+    String type,
+    String status,
+    String priority,
     Integer storyPoint,
     Integer sprintId,
     Integer assigneeUserId,

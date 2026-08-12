@@ -10,11 +10,18 @@ import org.springframework.stereotype.Component;
 public class IssueMapper {
 
   /**
-   * The project comes from the path and the reporter from the authenticated caller. The status is
-   * left alone so the entity's {@code BACKLOG} default stands; the priority is only overwritten
-   * when one was actually given, which is what makes omitting it fall back to {@code MEDIUM}.
+   * The project comes from the path and the reporter from the authenticated caller. {@code
+   * defaultStatus} is this project's {@code ISSUE_STATUS} default code, always applied - status has
+   * no endpoint-facing field on create. {@code defaultPriority} is this project's {@code
+   * ISSUE_PRIORITY} default, applied only when the request left priority out - what used to be the
+   * entity's {@code MEDIUM} default is now project data, resolved by {@code IssueService}.
    */
-  public Issue toEntity(Integer projectId, Integer reporterId, IssueCreateRequest request) {
+  public Issue toEntity(
+      Integer projectId,
+      Integer reporterId,
+      IssueCreateRequest request,
+      String defaultStatus,
+      String defaultPriority) {
     Issue issue = new Issue();
 
     issue.setProjectId(projectId);
@@ -28,10 +35,8 @@ public class IssueMapper {
     issue.setEpicId(request.epicId());
     issue.setAssigneeUserId(request.assigneeUserId());
     issue.setAssigneeTeamId(request.assigneeTeamId());
-
-    if (request.priority() != null) {
-      issue.setPriority(request.priority());
-    }
+    issue.setStatus(defaultStatus);
+    issue.setPriority(request.priority() != null ? request.priority() : defaultPriority);
 
     return issue;
   }

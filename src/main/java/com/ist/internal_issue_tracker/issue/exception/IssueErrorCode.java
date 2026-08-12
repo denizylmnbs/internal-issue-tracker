@@ -21,7 +21,19 @@ public enum IssueErrorCode implements ErrorCode {
   ASSIGNEE_USER_NOT_FOUND(
       HttpStatus.UNPROCESSABLE_ENTITY, "The given assignee does not exist or is not active."),
   ASSIGNEE_TEAM_NOT_FOUND(
-      HttpStatus.UNPROCESSABLE_ENTITY, "The given assignee team does not exist or is not active.");
+      HttpStatus.UNPROCESSABLE_ENTITY, "The given assignee team does not exist or is not active."),
+  ISSUE_STATUS_NOT_DEFINED(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      "This status is not one of the project's defined issue statuses."),
+  ISSUE_TYPE_NOT_DEFINED(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      "This type is not one of the project's defined issue types."),
+  ISSUE_PRIORITY_NOT_DEFINED(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      "This priority is not one of the project's defined issue priorities."),
+  ISSUE_UNIT_NOT_DEFINED(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      "This resolving unit is not one of the project's defined issue units.");
 
   private final HttpStatus httpStatus;
   private final String message;

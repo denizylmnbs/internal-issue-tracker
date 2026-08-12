@@ -1,8 +1,6 @@
 package com.ist.internal_issue_tracker.issue.dto;
 
-import com.ist.internal_issue_tracker.issue.IssuePriority;
-import com.ist.internal_issue_tracker.issue.IssueType;
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.PositiveOrZero;
 
 /**
@@ -15,10 +13,11 @@ import jakarta.validation.constraints.PositiveOrZero;
  * the description, so a caller restating all three from what it is displaying cannot silently
  * discard something long that someone else has just written.
  *
- * <p>{@code storyPoint} is nullable and null means unestimated, on the same terms as {@link
+ * <p>{@code type} and {@code priority} are codes from this project's field definitions. {@code
+ * storyPoint} is nullable and null means unestimated, on the same terms as {@link
  * ChangeSprintRequest}'s null.
  */
 public record ChangeClassificationRequest(
-    @NotNull(message = "Type cannot be null") IssueType type,
-    @NotNull(message = "Priority cannot be null") IssuePriority priority,
+    @NotBlank(message = "Type cannot be blank") String type,
+    @NotBlank(message = "Priority cannot be blank") String priority,
     @PositiveOrZero(message = "Story point cannot be negative") Integer storyPoint) {}
