@@ -5,14 +5,17 @@ import type { ActivityResponse } from "@/lib/api/types";
 
 /** Activity-only spine — the project activity feed and the sprint activity
  * view. The issue page builds its own richer version that interleaves
- * comments, reusing SpineRow directly (see components/issue/IssueSpine.tsx). */
+ * comments, reusing SpineRow directly (see components/issue/IssueSpine.tsx).
+ *
+ * No `domain` prop: `ActivityRow` derives it per-row from `activity.scope`
+ * (docs/API.md §4.12), which matters here specifically because the project
+ * feed is a union of project/issue/sprint history — a single fixed domain
+ * would mis-decode two of the three kinds of row it can now contain. */
 export function ActivitySpine({
   activities,
-  domain,
   projectId,
 }: {
   activities: ActivityResponse[];
-  domain: "issue" | "sprint" | "project";
   projectId: number;
 }) {
   if (activities.length === 0) {
@@ -31,9 +34,10 @@ export function ActivitySpine({
         const showDate = !prev || !isSameDay(new Date(prev.createdAt), new Date(activity.createdAt));
         return (
           <ActivityRow
-            key={activity.id}
+            // `id` is only unique within one activity table — the union feed
+            // can hand back an ISSUE row and a SPRINT row that share an id.
+            key={`${activity.scope}-${activity.id}`}
             activity={activity}
-            domain={domain}
             projectId={projectId}
             showDate={showDate}
           />

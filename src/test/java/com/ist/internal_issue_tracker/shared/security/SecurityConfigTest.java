@@ -2,6 +2,8 @@ package com.ist.internal_issue_tracker.shared.security;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -9,24 +11,27 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ist.internal_issue_tracker.activity.ActivityController;
 import com.ist.internal_issue_tracker.activity.ActivityService;
 import com.ist.internal_issue_tracker.activity.metrics.IssueMetricsController;
 import com.ist.internal_issue_tracker.activity.metrics.IssueMetricsService;
+import com.ist.internal_issue_tracker.auth.AuthController;
+import com.ist.internal_issue_tracker.auth.AuthService;
 import com.ist.internal_issue_tracker.comment.CommentController;
 import com.ist.internal_issue_tracker.comment.CommentService;
 import com.ist.internal_issue_tracker.comment.dto.CommentResponse;
 import com.ist.internal_issue_tracker.epic.EpicController;
 import com.ist.internal_issue_tracker.epic.EpicService;
-import com.ist.internal_issue_tracker.epic.EpicStatus;
 import com.ist.internal_issue_tracker.epic.dto.EpicResponse;
+import com.ist.internal_issue_tracker.fielddef.FieldDefinitionController;
+import com.ist.internal_issue_tracker.fielddef.FieldDefinitionService;
+import com.ist.internal_issue_tracker.fielddef.GlobalFieldDefinitionController;
 import com.ist.internal_issue_tracker.issue.IssueController;
-import com.ist.internal_issue_tracker.issue.IssuePriority;
 import com.ist.internal_issue_tracker.issue.IssueService;
-import com.ist.internal_issue_tracker.issue.IssueStatus;
-import com.ist.internal_issue_tracker.issue.IssueType;
 import com.ist.internal_issue_tracker.issue.dto.IssueResponse;
 import com.ist.internal_issue_tracker.project.ProjectController;
 import com.ist.internal_issue_tracker.project.ProjectMemberController;
@@ -39,9 +44,10 @@ import com.ist.internal_issue_tracker.project.dto.ProjectMemberResponse;
 import com.ist.internal_issue_tracker.project.dto.ProjectTeamResponse;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
+import com.ist.internal_issue_tracker.shared.ratelimit.RateLimitFilter;
+import com.ist.internal_issue_tracker.shared.ratelimit.RateLimiterService;
 import com.ist.internal_issue_tracker.sprint.SprintController;
 import com.ist.internal_issue_tracker.sprint.SprintService;
-import com.ist.internal_issue_tracker.sprint.SprintStatus;
 import com.ist.internal_issue_tracker.sprint.dto.SprintResponse;
 import com.ist.internal_issue_tracker.team.TeamController;
 import com.ist.internal_issue_tracker.team.TeamMemberController;
@@ -51,9 +57,11 @@ import com.ist.internal_issue_tracker.team.UserTeamsController;
 import com.ist.internal_issue_tracker.team.dto.TeamMemberResponse;
 import com.ist.internal_issue_tracker.user.UserController;
 import com.ist.internal_issue_tracker.user.UserService;
+import com.ist.internal_issue_tracker.user.dto.UserResponse;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.List;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -74,10 +82,10 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
  * requests carry a pre-built {@code Authentication} identical in shape to the one {@link
  * JwtAuthenticationFilter} produces: an {@link AuthenticatedUser} principal plus the caller's own
  * role, and only that role.
- *
  */
 @WebMvcTest(
     controllers = {
+      AuthController.class,
       UserController.class,
       TeamController.class,
       TeamMemberController.class,
@@ -91,7 +99,9 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
       IssueController.class,
       CommentController.class,
       ActivityController.class,
-      IssueMetricsController.class
+      IssueMetricsController.class,
+      FieldDefinitionController.class,
+      GlobalFieldDefinitionController.class
     })
 @Import({SecurityConfig.class, RestAuthenticationEntryPoint.class, RestAccessDeniedHandler.class})
 class SecurityConfigTest {
@@ -115,16 +125,29 @@ class SecurityConfigTest {
       "{\"name\":\"Login fails\",\"description\":\"x\",\"type\":\"BUG\",\"priority\":\"HIGH\"}";
   private static final String CHANGE_ISSUE_STATUS_BODY = "{\"status\":\"IN_PROGRESS\"}";
   private static final String CHANGE_ASSIGNEE_BODY = "{\"assigneeUserId\":7,\"assigneeTeamId\":3}";
+
+  /** Keyed by the last path segment, so the parameterised planning tests can walk the routes. */
+  private static final java.util.Map<String, String> PLANNING_BODIES =
+      java.util.Map.of(
+          "sprint", "{\"sprintId\":10}",
+          "epic", "{\"epicId\":20}",
+          "classification", "{\"type\":\"BUG\",\"priority\":\"HIGH\",\"storyPoint\":5}");
+
   private static final String COMMENT_BODY = "{\"content\":\"Reproduced on staging.\"}";
-
+  private static final String LOGIN_BODY =
+      "{\"email\":\"jane@example.com\",\"password\":\"password123\"}";
+  private static final String REGISTER_BODY =
+      "{\"name\":\"Jane\",\"surname\":\"Doe\",\"email\":\"jane@example.com\","
+          + "\"password\":\"password123\"}";
+  /** MockMvc's default client address, and so the key {@link RateLimitFilter} consumes under. */
+  private static final String DEFAULT_IP_KEY = "ip:127.0.0.1";
   @Autowired private MockMvc mockMvc;
-
+  @MockitoBean private AuthService authService;
   @MockitoBean private UserService userService;
   @MockitoBean private TeamService teamService;
   @MockitoBean private TeamMemberService teamMemberService;
   @MockitoBean private JwtService jwtService;
   @MockitoBean private AuthenticatedUserLookup authenticatedUserLookup;
-
   @MockitoBean private ProjectService projectService;
   @MockitoBean private ProjectMemberService projectMemberService;
   @MockitoBean private ProjectTeamService projectTeamService;
@@ -134,11 +157,12 @@ class SecurityConfigTest {
   @MockitoBean private CommentService commentService;
   @MockitoBean private ActivityService activityService;
   @MockitoBean private IssueMetricsService issueMetricsService;
-
+  @MockitoBean private FieldDefinitionService fieldDefinitionService;
   /** {@code securityFilterChain} takes the ports directly, so the slice has to supply them. */
   @MockitoBean private TeamLookup teamLookup;
-
   @MockitoBean private ProjectLookup projectLookup;
+  /** {@code securityFilterChain} also wires {@link RateLimitFilter} through this port. */
+  @MockitoBean private RateLimiterService rateLimiterService;
 
   /** Mirrors {@link JwtAuthenticationFilter}: the principal carries exactly one authority. */
   private static RequestPostProcessor as(Integer userId, Role role) {
@@ -147,6 +171,84 @@ class SecurityConfigTest {
             new AuthenticatedUser(userId, role),
             null,
             List.of(new SimpleGrantedAuthority(role.authority()))));
+  }
+
+  private static SprintResponse sprintResponse() {
+    return new SprintResponse(
+        10,
+        1,
+        "Sprint 1",
+        "x",
+        LocalDate.of(2026, 1, 1),
+        LocalDate.of(2026, 1, 15),
+        "TODO",
+        null,
+        null,
+        OffsetDateTime.now(),
+        OffsetDateTime.now());
+  }
+
+  private static EpicResponse epicResponse() {
+    return new EpicResponse(
+        20,
+        1,
+        "Checkout rewrite",
+        "x",
+        "TODO",
+        99,
+        OffsetDateTime.now(),
+        OffsetDateTime.now());
+  }
+
+  private static IssueResponse issueResponse() {
+    return new IssueResponse(
+        30,
+        1,
+        null,
+        null,
+        "BUG",
+        "Login fails",
+        "x",
+        "BACKLOG",
+        "HIGH",
+        null,
+        null,
+        99,
+        null,
+        null,
+        OffsetDateTime.now(),
+        OffsetDateTime.now());
+  }
+
+  private static com.ist.internal_issue_tracker.fielddef.dto.FieldDefinitionResponse
+      fieldDefinitionResponse() {
+    return new com.ist.internal_issue_tracker.fielddef.dto.FieldDefinitionResponse(
+        50,
+        "ISSUE_STATUS",
+        1,
+        "SHIPPED",
+        "Shipped",
+        null,
+        7,
+        true,
+        false,
+        true,
+        false,
+        false,
+        false,
+        OffsetDateTime.now(),
+        OffsetDateTime.now());
+  }
+
+  private static CommentResponse commentResponse() {
+    return new CommentResponse(
+        40, 30, 6, "Reproduced on staging.", OffsetDateTime.now(), OffsetDateTime.now());
+  }
+
+  /** Every rule above is unrelated to rate limiting, so it stays out of their way by default. */
+  @BeforeEach
+  void allowEveryBucketByDefault() {
+    when(rateLimiterService.tryConsume(any(), any())).thenReturn(true);
   }
 
   @Test
@@ -190,10 +292,10 @@ class SecurityConfigTest {
   }
 
   /**
-   * The hierarchy's whole purpose, observed end to end: {@code DELETE /api/teams/{id}} declares only
-   * {@code hasRole("EDITOR")}, yet an admin gets through without the rule ever naming {@code ADMIN}.
-   * Deleting the {@code EDITOR -> DEVELOPER} link or the {@code RoleHierarchy} bean turns the admin
-   * case red.
+   * The hierarchy's whole purpose, observed end to end: {@code DELETE /api/teams/{id}} declares
+   * only {@code hasRole("EDITOR")}, yet an admin gets through without the rule ever naming {@code
+   * ADMIN}. Deleting the {@code EDITOR -> DEVELOPER} link or the {@code RoleHierarchy} bean turns
+   * the admin case red.
    */
   @ParameterizedTest
   @EnumSource(
@@ -329,9 +431,7 @@ class SecurityConfigTest {
   @ParameterizedTest
   @EnumSource(Role.class)
   void getTeamMembers_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
-    mockMvc
-        .perform(get("/api/teams/1/members").with(as(1, role)))
-        .andExpect(status().isOk());
+    mockMvc.perform(get("/api/teams/1/members").with(as(1, role))).andExpect(status().isOk());
   }
 
   /** Removing a member is gated exactly like adding one. */
@@ -370,8 +470,8 @@ class SecurityConfigTest {
   }
 
   /**
-   * Someone else's team list is readable too - the rule is {@code anyRequest().authenticated()}, not
-   * self-or-admin, so the caller's id deliberately differs from the one in the path.
+   * Someone else's team list is readable too - the rule is {@code anyRequest().authenticated()},
+   * not self-or-admin, so the caller's id deliberately differs from the one in the path.
    */
   @ParameterizedTest
   @EnumSource(Role.class)
@@ -598,21 +698,6 @@ class SecurityConfigTest {
         .andExpect(status().isOk());
   }
 
-  private static SprintResponse sprintResponse() {
-    return new SprintResponse(
-        10,
-        1,
-        "Sprint 1",
-        "x",
-        LocalDate.of(2026, 1, 1),
-        LocalDate.of(2026, 1, 15),
-        SprintStatus.TODO,
-        null,
-        null,
-        OffsetDateTime.now(),
-        OffsetDateTime.now());
-  }
-
   @ParameterizedTest
   @EnumSource(
       value = Role.class,
@@ -732,18 +817,6 @@ class SecurityConfigTest {
   void getSprints_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
     mockMvc.perform(get("/api/projects/1/sprints").with(as(1, role))).andExpect(status().isOk());
     mockMvc.perform(get("/api/projects/1/sprints/10").with(as(1, role))).andExpect(status().isOk());
-  }
-
-  private static EpicResponse epicResponse() {
-    return new EpicResponse(
-        20,
-        1,
-        "Checkout rewrite",
-        "x",
-        EpicStatus.TODO,
-        99,
-        OffsetDateTime.now(),
-        OffsetDateTime.now());
   }
 
   @ParameterizedTest
@@ -871,25 +944,6 @@ class SecurityConfigTest {
     mockMvc.perform(get("/api/projects/1/epics/20").with(as(1, role))).andExpect(status().isOk());
   }
 
-  private static IssueResponse issueResponse() {
-    return new IssueResponse(
-        30,
-        1,
-        null,
-        null,
-        IssueType.BUG,
-        "Login fails",
-        "x",
-        IssueStatus.BACKLOG,
-        IssuePriority.HIGH,
-        null,
-        99,
-        null,
-        null,
-        OffsetDateTime.now(),
-        OffsetDateTime.now());
-  }
-
   @ParameterizedTest
   @EnumSource(
       value = Role.class,
@@ -921,8 +975,8 @@ class SecurityConfigTest {
   }
 
   /**
-   * The rule these routes exist to prove: a developer who neither is an editor nor leads the project
-   * may still file work on it, so long as they actually work on it.
+   * The rule these routes exist to prove: a developer who neither is an editor nor leads the
+   * project may still file work on it, so long as they actually work on it.
    */
   @Test
   void createIssue_isAllowed_forAParticipantOfThatProject() throws Exception {
@@ -968,6 +1022,45 @@ class SecurityConfigTest {
                     "{\"name\":\"Login fails\",\"description\":\"x\",\"type\":\"BUG\","
                         + "\"priority\":\"HIGH\"}"))
         .andExpect(status().isOk());
+  }
+
+  /**
+   * The three narrow planning PATCHes are {@code PUT /issues/{issueId}} taken apart, so they carry
+   * the same gate rather than the assignee-aware one the status and assignee routes get. A route
+   * added to the controller and left out of {@code SecurityConfig} would fall through to {@code
+   * anyRequest().authenticated()} and quietly open to everyone logged in - which is what these two
+   * walk each of them for.
+   */
+  @ParameterizedTest
+  @ValueSource(strings = {"sprint", "epic", "classification"})
+  void changeIssuePlanningField_isAllowed_forAParticipantOfThatProject(String field)
+      throws Exception {
+    when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
+    when(issueService.changeSprint(eq(1), eq(30), eq(6), any())).thenReturn(issueResponse());
+    when(issueService.changeEpic(eq(1), eq(30), eq(6), any())).thenReturn(issueResponse());
+    when(issueService.changeClassification(eq(1), eq(30), eq(6), any()))
+        .thenReturn(issueResponse());
+
+    mockMvc
+        .perform(
+            patch("/api/projects/1/issues/30/" + field)
+                .with(as(6, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(PLANNING_BODIES.get(field)))
+        .andExpect(status().isOk());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"sprint", "epic", "classification"})
+  void changeIssuePlanningField_returns403_forADeveloperOffTheProject(String field)
+      throws Exception {
+    mockMvc
+        .perform(
+            patch("/api/projects/1/issues/30/" + field)
+                .with(as(6, Role.DEVELOPER))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(PLANNING_BODIES.get(field)))
+        .andExpect(status().isForbidden());
   }
 
   @Test
@@ -1032,8 +1125,8 @@ class SecurityConfigTest {
   }
 
   /**
-   * The trailing {@code {issueId}} must not be mistaken for the project the rule authorizes against:
-   * user 30 leads project 30, not project 1.
+   * The trailing {@code {issueId}} must not be mistaken for the project the rule authorizes
+   * against: user 30 leads project 30, not project 1.
    */
   @Test
   void deleteIssue_returns403_forTheLeaderOfADifferentProject() throws Exception {
@@ -1052,15 +1145,10 @@ class SecurityConfigTest {
     mockMvc.perform(get("/api/projects/1/issues/30").with(as(1, role))).andExpect(status().isOk());
   }
 
-  private static CommentResponse commentResponse() {
-    return new CommentResponse(
-        40, 30, 6, "Reproduced on staging.", OffsetDateTime.now(), OffsetDateTime.now());
-  }
-
   /**
    * These tests cover the coarse gate only. Whether a caller who gets through may touch a
-   * <em>particular</em> comment is decided by {@code CommentService} from the author column, which a
-   * request matcher cannot see and this slice therefore cannot exercise.
+   * <em>particular</em> comment is decided by {@code CommentService} from the author column, which
+   * a request matcher cannot see and this slice therefore cannot exercise.
    */
   @Test
   void createComment_isAllowed_forAParticipantOfThatProject() throws Exception {
@@ -1175,8 +1263,8 @@ class SecurityConfigTest {
   }
 
   /**
-   * The activity feeds are the one place reading is restricted, so these three assert the opposite of
-   * every other GET in this class: being logged in is not enough.
+   * The activity feeds are the one place reading is restricted, so these three assert the opposite
+   * of every other GET in this class: being logged in is not enough.
    */
   @ParameterizedTest
   @EnumSource(
@@ -1184,7 +1272,9 @@ class SecurityConfigTest {
       names = {"USER", "DEVELOPER"})
   void getActivities_returns403_forEveryRoleBelowEditorThatDoesNotWorkOnTheProject(Role role)
       throws Exception {
-    mockMvc.perform(get("/api/projects/1/activities").with(as(5, role))).andExpect(status().isForbidden());
+    mockMvc
+        .perform(get("/api/projects/1/activities").with(as(5, role)))
+        .andExpect(status().isForbidden());
     mockMvc
         .perform(get("/api/projects/1/issues/30/activities").with(as(5, role)))
         .andExpect(status().isForbidden());
@@ -1197,7 +1287,9 @@ class SecurityConfigTest {
   void getActivities_isAllowed_forAParticipantOfThatProject() throws Exception {
     when(projectLookup.isParticipantOfProject(1, 6)).thenReturn(true);
 
-    mockMvc.perform(get("/api/projects/1/activities").with(as(6, Role.DEVELOPER))).andExpect(status().isOk());
+    mockMvc
+        .perform(get("/api/projects/1/activities").with(as(6, Role.DEVELOPER)))
+        .andExpect(status().isOk());
     mockMvc
         .perform(get("/api/projects/1/issues/30/activities").with(as(6, Role.DEVELOPER)))
         .andExpect(status().isOk());
@@ -1211,7 +1303,9 @@ class SecurityConfigTest {
       value = Role.class,
       names = {"EDITOR", "ADMIN"})
   void getActivities_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
-    mockMvc.perform(get("/api/projects/1/activities").with(as(99, role))).andExpect(status().isOk());
+    mockMvc
+        .perform(get("/api/projects/1/activities").with(as(99, role)))
+        .andExpect(status().isOk());
   }
 
   /** {@code {id}} is the project, whatever follows it - see the comment rule above. */
@@ -1224,13 +1318,117 @@ class SecurityConfigTest {
         .andExpect(status().isForbidden());
   }
 
+  // ---------------------------------------------------------------------
+  // Field definitions: project-scoped reads are open to anyone logged in, writes are
+  // EDITOR+; the two global kinds (PROJECT_STATUS, TEAM_FIELD) are ADMIN-only for
+  // everything but reading. See SecurityConfig for why the GET on /api/field-definitions
+  // has to precede the wildcard rule below it.
+  // ---------------------------------------------------------------------
+
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void getProjectFieldDefinitions_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc
+        .perform(get("/api/projects/1/field-definitions").with(as(1, role)))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void getProjectFieldDefinitions_returns401_whenUnauthenticated() throws Exception {
+    mockMvc.perform(get("/api/projects/1/field-definitions")).andExpect(status().isUnauthorized());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"EDITOR", "ADMIN"})
+  void createProjectFieldDefinition_isAllowed_forEveryRoleFromEditorUp(Role role) throws Exception {
+    when(fieldDefinitionService.create(eq(1), any())).thenReturn(fieldDefinitionResponse());
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/field-definitions")
+                .with(as(99, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"kind\":\"ISSUE_STATUS\",\"code\":\"SHIPPED\",\"label\":\"Shipped\","
+                        + "\"isDefault\":false,\"isDone\":true,\"isCancelled\":false,"
+                        + "\"isActiveWork\":false,\"isDefect\":false}"))
+        .andExpect(status().isCreated());
+  }
+
+  /** Working on the project - even leading it - is not enough; this route is EDITOR+ only. */
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER"})
+  void createProjectFieldDefinition_returns403_forEveryRoleBelowEditor(Role role) throws Exception {
+    when(projectLookup.isLeaderOfProject(1, 5)).thenReturn(true);
+
+    mockMvc
+        .perform(
+            post("/api/projects/1/field-definitions")
+                .with(as(5, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"kind\":\"ISSUE_STATUS\",\"code\":\"SHIPPED\",\"label\":\"Shipped\","
+                        + "\"isDefault\":false,\"isDone\":true,\"isCancelled\":false,"
+                        + "\"isActiveWork\":false,\"isDefect\":false}"))
+        .andExpect(status().isForbidden());
+  }
+
+  @ParameterizedTest
+  @EnumSource(Role.class)
+  void getGlobalFieldDefinitions_isAllowed_forEveryAuthenticatedRole(Role role) throws Exception {
+    mockMvc.perform(get("/api/field-definitions").with(as(1, role))).andExpect(status().isOk());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = Role.class,
+      names = {"USER", "DEVELOPER", "EDITOR"})
+  void createGlobalFieldDefinition_returns403_forEveryRoleBelowAdmin(Role role) throws Exception {
+    mockMvc
+        .perform(
+            post("/api/field-definitions")
+                .with(as(1, role))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"kind\":\"TEAM_FIELD\",\"code\":\"SECURITY\",\"label\":\"Security\","
+                        + "\"isDefault\":false,\"isDone\":false,\"isCancelled\":false,"
+                        + "\"isActiveWork\":false,\"isDefect\":false}"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void createGlobalFieldDefinition_isAllowed_forAdmin() throws Exception {
+    when(fieldDefinitionService.create(eq(null), any())).thenReturn(fieldDefinitionResponse());
+
+    mockMvc
+        .perform(
+            post("/api/field-definitions")
+                .with(as(1, Role.ADMIN))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(
+                    "{\"kind\":\"TEAM_FIELD\",\"code\":\"SECURITY\",\"label\":\"Security\","
+                        + "\"isDefault\":false,\"isDone\":false,\"isCancelled\":false,"
+                        + "\"isActiveWork\":false,\"isDefect\":false}"))
+        .andExpect(status().isCreated());
+  }
+
+  // ---------------------------------------------------------------------
+  // Rate limiting: RateLimitFilter (IP / authenticated user) and the account-level
+  // checks AuthController/UserController run themselves for login and register.
+  // ---------------------------------------------------------------------
+
   /**
    * One matcher covers every metric route through {@code /metrics/**}, so these walk each of them
    * rather than trusting the wildcard. A route added to the controller and not to this list is a
    * route nothing checks.
    *
-   * <p>{@code burndown} carries its query string because {@code sprintId} is required there - without
-   * it the request fails to bind and returns 400, which would pass the 403 test for the wrong reason.
+   * <p>{@code burndown} carries its query string because {@code sprintId} is required there -
+   * without it the request fails to bind and returns 400, which would pass the 403 test for the
+   * wrong reason.
    */
   @ParameterizedTest
   @ValueSource(
@@ -1291,5 +1489,102 @@ class SecurityConfigTest {
     mockMvc
         .perform(get("/api/projects/1/metrics/cycle-time").with(as(99, role)))
         .andExpect(status().isOk());
+  }
+
+  /**
+   * Anonymous only: an office NAT sharing one IP must not be able to exhaust an authenticated
+   * colleague's traffic, so an authenticated request is never checked against the IP bucket at all
+   * (see {@link #request_isNotCheckedAgainstAnIpBucket_whenAuthenticated}).
+   */
+  @Test
+  void request_returns429_whenTheIpBucketIsExhausted() throws Exception {
+    when(rateLimiterService.tryConsume(eq(DEFAULT_IP_KEY), any())).thenReturn(false);
+
+    mockMvc
+        .perform(get("/api/users"))
+        .andExpect(status().is(429))
+        .andExpect(header().string("Retry-After", "60"))
+        .andExpect(jsonPath("$.success").value(false))
+        .andExpect(jsonPath("$.error.code").value("RATE_LIMITED"));
+  }
+
+  @Test
+  void request_returns429_whenTheAuthenticatedUsersBucketIsExhausted() throws Exception {
+    when(rateLimiterService.tryConsume(eq("user:1"), any())).thenReturn(false);
+
+    mockMvc.perform(get("/api/users").with(as(1, Role.USER))).andExpect(status().is(429));
+  }
+
+  /** An anonymous request never resolves a principal, so only the IP bucket is ever checked. */
+  @Test
+  void request_isNotCheckedAgainstAUserBucket_whenUnauthenticated() throws Exception {
+    mockMvc.perform(get("/api/users")).andExpect(status().isUnauthorized());
+
+    verify(rateLimiterService, never()).tryConsume(eq("user:1"), any());
+  }
+
+  /**
+   * The other half of the exclusivity rule: once a request carries a principal, the buckets are
+   * never stacked, so a colleague behind the same office IP cannot be locked out by someone else's
+   * traffic.
+   */
+  @Test
+  void request_isNotCheckedAgainstAnIpBucket_whenAuthenticated() throws Exception {
+    mockMvc.perform(get("/api/users").with(as(1, Role.USER))).andExpect(status().isOk());
+
+    verify(rateLimiterService, never()).tryConsume(eq(DEFAULT_IP_KEY), any());
+  }
+
+  @Test
+  void login_isAllowed_whenNeitherBucketIsExhausted() throws Exception {
+    mockMvc
+        .perform(
+            post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(LOGIN_BODY))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void login_returns429_andNeverCallsAuthService_whenTheAccountBucketIsExhausted()
+      throws Exception {
+    when(rateLimiterService.tryConsume(eq("account:login:jane@example.com"), any()))
+        .thenReturn(false);
+
+    mockMvc
+        .perform(
+            post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(LOGIN_BODY))
+        .andExpect(status().is(429))
+        .andExpect(jsonPath("$.error.code").value("RATE_LIMITED"));
+
+    verify(authService, never()).login(any());
+  }
+
+  @Test
+  void register_isAllowed_whenNeitherBucketIsExhausted() throws Exception {
+    when(userService.createUser(any()))
+        .thenReturn(new UserResponse(1, "Jane", "Doe", "jane@example.com", Role.USER, true, null));
+
+    mockMvc
+        .perform(
+            post("/api/users/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(REGISTER_BODY))
+        .andExpect(status().isCreated());
+  }
+
+  @Test
+  void register_returns429_andNeverCallsUserService_whenTheAccountBucketIsExhausted()
+      throws Exception {
+    when(rateLimiterService.tryConsume(eq("account:register:jane@example.com"), any()))
+        .thenReturn(false);
+
+    mockMvc
+        .perform(
+            post("/api/users/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(REGISTER_BODY))
+        .andExpect(status().is(429))
+        .andExpect(jsonPath("$.error.code").value("RATE_LIMITED"));
+
+    verify(userService, never()).createUser(any());
   }
 }

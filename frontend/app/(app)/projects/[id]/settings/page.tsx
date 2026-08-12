@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2, X, UserPlus, Users as UsersIcon } from "lucide-react";
+import { Pencil, Trash2, X, UserPlus, Users as UsersIcon, ChevronLeft, ChevronRight } from "lucide-react";
 import { useProjectContext } from "@/lib/project/ProjectContext";
 import { useSession } from "@/lib/auth/session";
 import { isEditorOrAbove } from "@/lib/auth/can";
@@ -45,18 +45,30 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { PROJECT_STATUSES, PROJECT_STATUS_LABEL } from "@/lib/api/enums";
-import type { ProjectStatus } from "@/lib/api/enums";
+import { useGlobalFieldDefinitions } from "@/lib/fielddef/GlobalFieldDefinitionsProvider";
+import { FieldDefinitionsSection } from "@/components/settings/FieldDefinitionsSection";
 import { formatDateOnly } from "@/lib/format";
 import { useTeamName } from "@/lib/hooks/useTeamName";
+
+const PAGE_SIZE = 10;
 
 export default function ProjectSettingsPage() {
   const router = useRouter();
   const { user } = useSession();
   const { projectId, project, canManage } = useProjectContext();
+  const { listGlobal, resolveGlobal } = useGlobalFieldDefinitions();
+  const projectStatuses = listGlobal("PROJECT_STATUS");
 
-  const { data: members, isLoading: loadingMembers } = useProjectMembers(projectId);
-  const { data: teams, isLoading: loadingTeams } = useProjectTeams(projectId);
+  const {
+    data: members,
+    isLoading: loadingMembers,
+    isError: membersError,
+  } = useProjectMembers(projectId);
+  const {
+    data: teams,
+    isLoading: loadingTeams,
+    isError: teamsError,
+  } = useProjectTeams(projectId);
   const changeStatus = useChangeProjectStatus(projectId);
   const changeLeader = useChangeProjectLeader(projectId);
   const removeLeader = useRemoveProjectLeader(projectId);
@@ -71,6 +83,8 @@ export default function ProjectSettingsPage() {
   const [draftLeader, setDraftLeader] = useState<number | null>(null);
   const [newMember, setNewMember] = useState<number | null>(null);
   const [newTeam, setNewTeam] = useState<number | null>(null);
+  const [memberPage, setMemberPage] = useState(0);
+  const [teamPage, setTeamPage] = useState(0);
 
   if (!project) {
     return (
@@ -83,8 +97,18 @@ export default function ProjectSettingsPage() {
 
   const isEditor = isEditorOrAbove(user);
 
+  const activeMembers = members?.content.filter((m) => m.isActive) ?? [];
+  const memberPageCount = Math.max(1, Math.ceil(activeMembers.length / PAGE_SIZE));
+  const safeMemberPage = Math.min(memberPage, memberPageCount - 1);
+  const pagedMembers = activeMembers.slice(safeMemberPage * PAGE_SIZE, safeMemberPage * PAGE_SIZE + PAGE_SIZE);
+
+  const activeTeams = teams?.content.filter((t) => t.isActive) ?? [];
+  const teamPageCount = Math.max(1, Math.ceil(activeTeams.length / PAGE_SIZE));
+  const safeTeamPage = Math.min(teamPage, teamPageCount - 1);
+  const pagedTeams = activeTeams.slice(safeTeamPage * PAGE_SIZE, safeTeamPage * PAGE_SIZE + PAGE_SIZE);
+
   return (
-    <div className="max-w-2xl space-y-8 p-6">
+    <div className="max-w-4xl space-y-8 p-6">
       <div>
         <div className="mb-4 flex items-center justify-between">
           <h1 className="font-heading text-xl font-semibold tracking-tight">Settings</h1>
@@ -102,19 +126,19 @@ export default function ProjectSettingsPage() {
             {canManage ? (
               <Select
                 value={project.status}
-                onValueChange={(v) => changeStatus.mutate({ status: v as ProjectStatus })}
+                onValueChange={(v) => changeStatus.mutate({ status: v })}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {PROJECT_STATUSES.map((s) => (
-                    <SelectItem key={s} value={s}>{PROJECT_STATUS_LABEL[s]}</SelectItem>
+                  {projectStatuses.map((s) => (
+                    <SelectItem key={s.code} value={s.code}>{s.label}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             ) : (
-              <p className="text-sm">{PROJECT_STATUS_LABEL[project.status]}</p>
+              <p className="text-sm">{resolveGlobal("PROJECT_STATUS", project.status)?.label ?? project.status}</p>
             )}
           </div>
 
@@ -173,90 +197,115 @@ export default function ProjectSettingsPage() {
         </div>
       </div>
 
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="font-heading text-sm font-semibold">Members</h2>
-          {canManage && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <UserPlus className="h-3.5 w-3.5" />
-                  Add member
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-72 space-y-2" align="end">
-                <UserPicker value={newMember} onChange={setNewMember} eligibleOnly placeholder="Choose a person…" />
-                <Button
-                  size="sm"
-                  className="w-full"
-                  disabled={newMember == null}
-                  onClick={() => newMember != null && addMember.mutate(newMember, { onSuccess: () => setNewMember(null) })}
-                >
-                  Add
-                </Button>
-              </PopoverContent>
-            </Popover>
+      <div className="grid grid-cols-2 gap-6">
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="font-heading text-sm font-semibold">Members</h2>
+            {canManage && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <UserPlus className="h-3.5 w-3.5" />
+                    Add member
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 space-y-2" align="end">
+                  <UserPicker value={newMember} onChange={setNewMember} eligibleOnly placeholder="Choose a person…" />
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={newMember == null}
+                    onClick={() => newMember != null && addMember.mutate(newMember, { onSuccess: () => setNewMember(null) })}
+                  >
+                    Add
+                  </Button>
+                </PopoverContent>
+              </Popover>
+            )}
+          </div>
+          {loadingMembers ? (
+            <Skeleton className="h-16 w-full" />
+          ) : membersError ? (
+            <p className="text-sm text-rust">Could not load members. Try refreshing.</p>
+          ) : !activeMembers.length ? (
+            <p className="text-sm text-slate">No directly assigned members. People reached through a team still count as participants.</p>
+          ) : (
+            <>
+              <div className="divide-y divide-rule rounded border border-rule">
+                {pagedMembers.map((m) => (
+                  <div key={m.id} className="flex items-center justify-between px-3 py-2">
+                    <div>
+                      <p className="text-sm"><UserName id={m.userId} /></p>
+                      <p className="font-data text-xs text-slate">joined {formatDateOnly(m.joinedAt)}</p>
+                    </div>
+                    {canManage && (
+                      <Button variant="ghost" size="icon" onClick={() => removeMember.mutate(m.userId)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <PaginationControls page={safeMemberPage} pageCount={memberPageCount} onChange={setMemberPage} />
+            </>
           )}
         </div>
-        {loadingMembers ? (
-          <Skeleton className="h-16 w-full" />
-        ) : !members?.content.filter((m) => m.isActive).length ? (
-          <p className="text-sm text-slate">No directly assigned members. People reached through a team still count as participants.</p>
-        ) : (
-          <div className="divide-y divide-rule rounded border border-rule">
-            {members.content.filter((m) => m.isActive).map((m) => (
-              <div key={m.id} className="flex items-center justify-between px-3 py-2">
-                <div>
-                  <p className="text-sm"><UserName id={m.userId} /></p>
-                  <p className="font-data text-xs text-slate">joined {formatDateOnly(m.joinedAt)}</p>
-                </div>
-                {canManage && (
-                  <Button variant="ghost" size="icon" onClick={() => removeMember.mutate(m.userId)}>
-                    <X className="h-4 w-4" />
+
+        <div>
+          <div className="mb-2 flex items-center justify-between">
+            <h2 className="font-heading text-sm font-semibold">Assigned teams</h2>
+            {canManage && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button size="sm" variant="outline">
+                    <UsersIcon className="h-3.5 w-3.5" />
+                    Assign team
                   </Button>
-                )}
-              </div>
-            ))}
+                </PopoverTrigger>
+                <PopoverContent className="w-72 space-y-2" align="end">
+                  <TeamPicker value={newTeam} onChange={setNewTeam} placeholder="Choose a team…" />
+                  <Button
+                    size="sm"
+                    className="w-full"
+                    disabled={newTeam == null}
+                    onClick={() => newTeam != null && addTeam.mutate(newTeam, { onSuccess: () => setNewTeam(null) })}
+                  >
+                    Assign
+                  </Button>
+                </PopoverContent>
+              </Popover>
+            )}
           </div>
-        )}
+          {loadingTeams ? (
+            <Skeleton className="h-16 w-full" />
+          ) : teamsError ? (
+            <p className="text-sm text-rust">Could not load assigned teams. Try refreshing.</p>
+          ) : !activeTeams.length ? (
+            <p className="text-sm text-slate">No teams assigned yet.</p>
+          ) : (
+            <>
+              <div className="divide-y divide-rule rounded border border-rule">
+                {pagedTeams.map((t) => (
+                  <TeamRow key={t.id} teamId={t.teamId} assignedAt={t.assignedAt} canManage={!!canManage} onRemove={() => removeTeam.mutate(t.teamId)} />
+                ))}
+              </div>
+              <PaginationControls page={safeTeamPage} pageCount={teamPageCount} onChange={setTeamPage} />
+            </>
+          )}
+        </div>
       </div>
 
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="font-heading text-sm font-semibold">Assigned teams</h2>
-          {canManage && (
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button size="sm" variant="outline">
-                  <UsersIcon className="h-3.5 w-3.5" />
-                  Assign team
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-72 space-y-2" align="end">
-                <TeamPicker value={newTeam} onChange={setNewTeam} placeholder="Choose a team…" />
-                <Button
-                  size="sm"
-                  className="w-full"
-                  disabled={newTeam == null}
-                  onClick={() => newTeam != null && addTeam.mutate(newTeam, { onSuccess: () => setNewTeam(null) })}
-                >
-                  Assign
-                </Button>
-              </PopoverContent>
-            </Popover>
-          )}
-        </div>
-        {loadingTeams ? (
-          <Skeleton className="h-16 w-full" />
-        ) : !teams?.content.filter((t) => t.isActive).length ? (
-          <p className="text-sm text-slate">No teams assigned yet.</p>
-        ) : (
-          <div className="divide-y divide-rule rounded border border-rule">
-            {teams.content.filter((t) => t.isActive).map((t) => (
-              <TeamRow key={t.id} teamId={t.teamId} assignedAt={t.assignedAt} canManage={!!canManage} onRemove={() => removeTeam.mutate(t.teamId)} />
-            ))}
-          </div>
-        )}
+      <div className="border-t border-rule pt-6">
+        <h2 className="mb-3 font-heading text-sm font-semibold">Field definitions</h2>
+        <p className="mb-3 text-sm text-slate">
+          The statuses, types, priorities and resolving units this project offers. Changes here
+          apply only to this project.
+        </p>
+        <FieldDefinitionsSection
+          projectId={projectId}
+          kinds={["ISSUE_STATUS", "SPRINT_STATUS", "EPIC_STATUS", "ISSUE_TYPE", "ISSUE_PRIORITY", "ISSUE_UNIT"]}
+          canManage={!!canManage}
+        />
       </div>
 
       {isEditor && (
@@ -291,6 +340,45 @@ export default function ProjectSettingsPage() {
   );
 }
 
+function PaginationControls({
+  page,
+  pageCount,
+  onChange,
+}: {
+  page: number;
+  pageCount: number;
+  onChange: (page: number) => void;
+}) {
+  if (pageCount <= 1) return null;
+  return (
+    <div className="mt-2 flex items-center justify-between">
+      <p className="text-xs text-slate">
+        Page {page + 1} of {pageCount}
+      </p>
+      <div className="flex gap-1">
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-7 w-7"
+          disabled={page === 0}
+          onClick={() => onChange(page - 1)}
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-7 w-7"
+          disabled={page >= pageCount - 1}
+          onClick={() => onChange(page + 1)}
+        >
+          <ChevronRight className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function TeamRow({
   teamId,
   assignedAt,
@@ -298,7 +386,7 @@ function TeamRow({
   onRemove,
 }: {
   teamId: number;
-  assignedAt: string;
+  assignedAt: string | null;
   canManage: boolean;
   onRemove: () => void;
 }) {

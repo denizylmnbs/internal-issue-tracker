@@ -13,8 +13,8 @@ package com.ist.internal_issue_tracker.activity.metrics;
  * distance from p50 is itself the signal that the tail is long.
  *
  * <p>Every field is null when no issue completed in the window. That is left as null rather than
- * zeroed: zero seconds and no data are different answers, and a chart that draws one as the other is
- * lying.
+ * zeroed: zero seconds and no data are different answers, and a chart that draws one as the other
+ * is lying.
  */
 public interface DurationStats {
 

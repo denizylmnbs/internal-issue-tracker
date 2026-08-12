@@ -10,13 +10,14 @@ package com.ist.internal_issue_tracker.shared.event;
  * audit side does not oblige {@code issue} to learn about it - and so a rename on either side fails
  * to compile instead of silently writing the wrong row.
  *
- * <p>A plain {@code String} field name would do the same job in fewer lines and is exactly what this
- * avoids: a typo in a string reaches production as a missing metric rather than as a build error.
+ * <p>A plain {@code String} field name would do the same job in fewer lines and is exactly what
+ * this avoids: a typo in a string reaches production as a missing metric rather than as a build
+ * error.
  *
- * <p>There is no constant for an issue's epic. The {@code issue_activities} CHECK has no
- * {@code EPIC_UPDATED} action, so a change to it has nowhere to be written; adding one here without
- * the migration agreeing would only fail at insert time. If that history is wanted, the constraint
- * has to be widened first.
+ * <p>There is no constant for an issue's epic. The {@code issue_activities} CHECK has no {@code
+ * EPIC_UPDATED} action, so a change to it has nowhere to be written; adding one here without the
+ * migration agreeing would only fail at insert time. If that history is wanted, the constraint has
+ * to be widened first.
  */
 public enum IssueField {
   STATUS,

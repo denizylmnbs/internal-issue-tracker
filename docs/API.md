@@ -1,7 +1,7 @@
 # Internal Issue Tracker — API Reference
 
 Complete reference for every HTTP endpoint the backend exposes, written to be the single source a
-frontend is built against. **81 endpoints across 16 controllers.**
+frontend is built against. **89 endpoints across 18 controllers.**
 
 Generated from the source. When the code and this document disagree, the code in
 `src/main/java/com/ist/internal_issue_tracker/**/*Controller.java` wins — but please fix the document.
@@ -20,7 +20,7 @@ Generated from the source. When the code and this document disagree, the code in
   - [4.1 Auth](#41-auth) · [4.2 Users](#42-users) · [4.3 Teams](#43-teams) · [4.4 Team members](#44-team-members)
   - [4.5 Projects](#45-projects) · [4.6 Project members](#46-project-members) · [4.7 Project teams](#47-project-teams)
   - [4.8 Sprints](#48-sprints) · [4.9 Epics](#49-epics) · [4.10 Issues](#410-issues) · [4.11 Comments](#411-comments)
-  - [4.12 Activity log](#412-activity-log) · [4.13 Metrics](#413-metrics)
+  - [4.12 Activity log](#412-activity-log) · [4.13 Metrics](#413-metrics) · [4.14 Field definitions](#414-field-definitions)
 - [5. Frontend integration notes](#5-frontend-integration-notes)
 - [6. Known gaps](#6-known-gaps-read-before-starting-the-frontend)
 
@@ -222,6 +222,21 @@ something it *points at* cannot be used.
 | `ASSIGNEE_TEAM_NOT_FOUND` | 422 | issue |
 | `COMMENT_NOT_FOUND` | 404 | comment |
 | `COMMENT_NOT_OWNED` | 403 | comment |
+| `PROJECT_STATUS_NOT_DEFINED` | 422 | project |
+| `TEAM_FIELD_NOT_DEFINED` | 422 | team |
+| `SPRINT_STATUS_NOT_DEFINED` | 422 | sprint |
+| `EPIC_STATUS_NOT_DEFINED` | 422 | epic |
+| `ISSUE_STATUS_NOT_DEFINED` | 422 | issue |
+| `ISSUE_TYPE_NOT_DEFINED` | 422 | issue |
+| `ISSUE_PRIORITY_NOT_DEFINED` | 422 | issue |
+| `ISSUE_UNIT_NOT_DEFINED` | 422 | issue |
+| `FIELD_DEFINITION_NOT_FOUND` | 404 | field definition |
+| `FIELD_CODE_ALREADY_EXISTS` | 409 | field definition |
+| `LAST_DONE_FIELD_REQUIRED` | 422 | field definition |
+| `DEFAULT_FIELD_REQUIRED` | 422 | field definition |
+| `FIELD_KIND_NOT_PROJECT_SCOPED` | 422 | field definition |
+| `FIELD_KIND_NOT_GLOBAL` | 422 | field definition |
+| `REORDER_SET_MISMATCH` | 422 | field definition |
 
 ### Date & time formats
 
@@ -247,20 +262,37 @@ Re-adding a removed member revives the original row rather than inserting a new 
 
 ## 2. Enum reference
 
-Send and expect these as raw uppercase strings. Every one mirrors a `CHECK` constraint in the schema.
+Send and expect these as raw uppercase strings. `Role`, `MetricsBucket` and `MetricsDimension` are
+still fixed and mirror a `CHECK` constraint in the schema, same as before.
 
 | Enum | Values |
 |------|--------|
 | `Role` | `USER`, `DEVELOPER`, `EDITOR`, `ADMIN` |
-| `TeamField` | `BACKEND`, `FRONTEND`, `ANDROID`, `IOS`, `DESIGN`, `DATA` |
-| `ProjectStatus` | `PLANNING`, `ACTIVE`, `ON_HOLD`, `COMPLETED`, `CANCELLED` |
-| `SprintStatus` | `TODO`, `IN_PROGRESS`, `TESTING`, `COMPLETED` |
-| `EpicStatus` | `TODO`, `IN_PROGRESS`, `ON_HOLD`, `COMPLETED`, `CANCELLED` |
-| `IssueStatus` | `BACKLOG`, `TODO`, `IN_PROGRESS`, `IN_REVIEW`, `DONE`, `ON_HOLD`, `CANCELLED` |
-| `IssueType` | `BUG`, `FEATURE`, `STORY`, `TASK`, `ENHANCEMENT`, `REFACTOR` |
-| `IssuePriority` | `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` |
 | `MetricsBucket` | `DAY`, `WEEK`, `MONTH` |
 | `MetricsDimension` | `TYPE`, `PRIORITY` |
+
+**Everything else is no longer a fixed enum.** `TeamField`, `ProjectStatus`, `SprintStatus`,
+`EpicStatus`, `IssueStatus`, `IssueType`, `IssuePriority` and `IssueUnit` used to be closed value
+sets; they are now rows a caller can add to, relabel, reorder and retire through the **field
+definitions** endpoints (§4.14) — see `FieldKind` there for the exact eight kind names. A status,
+type, priority or unit is still sent and received as a raw string on every endpoint that used to
+carry one of these enums (`issues.status`, `ChangeStatusRequest.status`, and so on); the difference
+is that the *set of valid strings is data now*, fetched with `GET /api/projects/{id}/field-
+definitions?kind=ISSUE_STATUS` (or `GET /api/field-definitions?kind=TEAM_FIELD` for the two global
+kinds) rather than hardcoded client-side.
+
+`TeamField` and `ProjectStatus` are the two **global** kinds — one set for the whole instance,
+managed under `/api/field-definitions`, `ADMIN`-only to write. The other six kinds are **per
+project** — every project gets its own copy, seeded from the global defaults at creation time, and
+`EDITOR`+ (or the project's leader) can customize a given project's set under
+`/api/projects/{id}/field-definitions` without touching any other project's.
+
+A field definition row carries four semantic flags a client can use to render sensibly without
+hardcoding a project's chosen codes: `isDefault` (what a new record gets when nothing is specified),
+`isDone` (counts as delivered), `isCancelled` (left the flow without being delivered) and
+`isActiveWork` (someone is actively working it — what a flow-efficiency chart divides by).
+`isDefect` applies only to `ISSUE_TYPE` rows and marks which type(s) count toward defect-ratio and
+MTTR metrics — `BUG` by default, but a project may rename or add to that set.
 
 **Activity action types** — returned as `actionType` strings on activity rows. Rendering them as
 sentences is the client's job; that is why the API returns the raw name.
@@ -273,12 +305,14 @@ sentences is the client's job; that is why the API returns the raw name.
 
 Lifecycle rules worth encoding in the UI:
 
-- **Nothing is created in a chosen status.** Projects are born `PLANNING`, sprints and epics `TODO`,
-  issues `BACKLOG`. No create request accepts a status field — status moves only through its own
-  `PATCH .../status` endpoint. Do not render a status picker on any create form.
-- `IssuePriority` **is** accepted at creation (filing something `CRITICAL` from the start is
-  ordinary); omitting it takes the `MEDIUM` default.
-- `CANCELLED` is a decision, not a deletion. Deleting is a separate `DELETE`.
+- **Nothing is created in a chosen status.** Projects, sprints, epics and issues are all born at
+  whichever code in their kind currently has `isDefault: true` — no create request accepts a status
+  field, and status moves only through its own `PATCH .../status` endpoint. Do not render a status
+  picker on any create form; fetch the default from the field-definitions list instead of assuming
+  a name like `BACKLOG` or `PLANNING`, since a project may have renamed it.
+- `priority` **is** accepted at creation (filing something at the highest severity from the start is
+  ordinary); omitting it takes the project's `ISSUE_PRIORITY` default.
+- A code flagged `isCancelled` is a decision, not a deletion. Deleting is a separate `DELETE`.
 
 ---
 
@@ -421,7 +455,7 @@ depends on**, and it is not in the token. Errors: `401 UNAUTHENTICATED`.
 
 ### 4.2 Users
 
-`user/UserController.java`, plus two user-centric listings that live in other modules.
+`user/UserController.java`, plus four user-centric listings that live in other modules.
 
 | Method | Path | Access |
 |--------|------|--------|
@@ -435,6 +469,8 @@ depends on**, and it is not in the token. Errors: `401 UNAUTHENTICATED`.
 | `PATCH` | `/api/users/{id}/role` | ADMIN (+ outranking rule) |
 | `GET` | `/api/users/{id}/teams` | auth |
 | `GET` | `/api/users/{id}/projects` | auth |
+| `GET` | `/api/users/{id}/issues` | self+admin |
+| `GET` | `/api/users/{id}/sprint-progress` | self+admin |
 
 **`UserResponse`** — returned by every endpoint in this section that returns a user:
 
@@ -540,6 +576,64 @@ Which projects this user works on, **by either route**.
 project* is not the operation you want.
 
 > This is the endpoint to build the logged-in user's "My projects" home page from.
+
+#### `GET /api/users/{id}/issues` → `200` `PagedResponse<IssueResponse>`
+
+This person's **active** issues, across every project they hold any — not scoped to one project the
+way `GET /api/projects/{id}/issues` is. "Active" means `status` is `TODO`, `IN_PROGRESS` or
+`IN_REVIEW`; `BACKLOG` (not yet planned), `ON_HOLD`, `DONE` and `CANCELLED` are excluded. Query:
+`page`/`size`/`sort` (defaults to `updatedAt,desc` if the client doesn't override it).
+
+> Lives in `issue`, mounted under `/api/users` for the same reason `GET /api/users/{id}/teams` lives
+> in `team` — see the note on §4.1. Self-or-admin, unlike `/projects` and `/teams`: this is what a
+> person is working on, not a membership list.
+
+#### `GET /api/users/{id}/sprint-progress` → `200` `UserSprintProgressResponse`
+
+The numbers behind "My Work"'s progress tiles — what this person is carrying in each project's
+current sprint, what they carried in each project's most recently finished sprint, and how that has
+trended lately.
+
+```json
+{
+  "current": [
+    { "projectId": 7, "sprintId": 41, "sprintName": "Sprint 12",
+      "startDate": "2026-07-28", "endDate": "2026-08-11",
+      "assignedPoints": 21, "completedPoints": 13,
+      "assignedIssueCount": 5, "completedIssueCount": 3 }
+  ],
+  "previous": [
+    { "projectId": 7, "sprintId": 40, "sprintName": "Sprint 11",
+      "startDate": "2026-07-14", "endDate": "2026-07-27",
+      "assignedPoints": 18, "completedPoints": 18,
+      "assignedIssueCount": 4, "completedIssueCount": 4 }
+  ],
+  "recentAveragePoints": 15.5,
+  "recentSprintCount": 2
+}
+```
+
+- **`current`/`previous` are lists, not one number** — a person can carry work in more than one
+  project at once, each running its own sprint. Sum the list client-side for a headline figure; the
+  per-project breakdown is kept so the UI can still say where a number came from. `previous` holds at
+  most one entry per project: that project's single most recently finished sprint, not every one it
+  ever ran.
+- **`assignedPoints`/`completedPoints` are personal, not the sprint's.** They sum only this person's
+  own issues' story points — they are *not* `Sprint.committedPoints`, which is the whole team's
+  commitment. Don't divide one against the other.
+- **Completed points read `issues`' current state** (`status = DONE`, summed `storyPoint`), not the
+  activity log `GET /api/projects/{id}/metrics/velocity` replays. `issue_activities` carries no
+  assignee, so this endpoint cannot reuse that point-in-time semantics. Practically: if an issue is
+  re-estimated or moved to another sprint *after* being marked `DONE`, this number moves with it and
+  the project's velocity chart does not. Cancelled issues count on neither side of the fraction —
+  dropped work was never a commitment either kept or missed.
+- **`recentAveragePoints` is the average `completedPoints` over this person's most recent 6 finished
+  (`COMPLETED`) sprints, across all their projects**, most-recent-`endDate` first. A sprint still in
+  progress never enters the average. **It is `null`, not `0`, when the person has not finished a
+  single sprint yet** — do not coalesce it, for the same reason `sayDoRatio` in §4.13 must not be.
+  `recentSprintCount` says how many sprints actually fed it (0–6).
+- A sprint that has since been soft-deleted drops out silently, the same way an orphaned velocity row
+  does in §4.13.
 
 ---
 
@@ -795,6 +889,11 @@ of story points in the sprint at that instant. Both are `null` before the sprint
 `null` forever on a sprint that was started before the column existed. This is the `committedPoints`
 the velocity and burndown metrics read.
 
+**It is therefore not the sprint's current scope**, and `committedPoints − completedPoints` is not
+the work remaining: anything pulled in after the sprint started is missing from it, which is the
+point — scope the team did not promise has to be visible as such. To size what is actually left,
+sum `storyPoint` over `GET …/issues?sprintId=…` where the status is neither `DONE` nor `CANCELLED`.
+
 #### `POST` → `201`
 ```json
 { "name": "Sprint 12", "description": "…", "startDate": "2026-08-01", "endDate": "2026-08-15" }
@@ -866,19 +965,27 @@ first that opens writes to ordinary project participants.
 | `GET` | `/api/projects/{id}/issues` | auth |
 | `GET` | `/api/projects/{id}/issues/{issueId}` | auth |
 | `PUT` | `/api/projects/{id}/issues/{issueId}` | editor / leader / **participant** |
-| `PATCH` | `/api/projects/{id}/issues/{issueId}/status` | editor / leader / **participant** |
-| `PATCH` | `/api/projects/{id}/issues/{issueId}/assignee` | editor / leader / **participant** |
-| `DELETE` | `/api/projects/{id}/issues/{issueId}/assignee` | editor / leader / **participant** |
+| `PATCH` | `/api/projects/{id}/issues/{issueId}/sprint` | editor / leader / **participant** |
+| `PATCH` | `/api/projects/{id}/issues/{issueId}/epic` | editor / leader / **participant** |
+| `PATCH` | `/api/projects/{id}/issues/{issueId}/classification` | editor / leader / **participant** |
+| `PATCH` | `/api/projects/{id}/issues/{issueId}/status` | editor / leader / **the issue's assignee** |
+| `PATCH` | `/api/projects/{id}/issues/{issueId}/assignee` | editor / leader / **the issue's assignee** |
+| `DELETE` | `/api/projects/{id}/issues/{issueId}/assignee` | editor / leader / **the issue's assignee** |
 | `DELETE` | `/api/projects/{id}/issues/{issueId}` | editor / leader — **not** participants |
 
-Deleting is the one issue operation a participant does not get.
+Deleting is the one issue operation a participant does not get. The three assignee/status routes are
+narrower than the table's usual "participant" shorthand: `SecurityConfig`'s URL-level gate still only
+checks project participation (it never loads the issue), but `IssueService` layers a second,
+issue-aware check on top — a participant who is not the issue's own `assigneeUserId` is turned away
+with `403 FORBIDDEN` even though the gate let the request through. Being a participant is necessary
+but not sufficient here; being an editor or the project's leader always suffices on its own.
 
 **`IssueResponse`**:
 ```json
 {
   "id": 101, "projectId": 7, "sprintId": 4, "epicId": 2,
   "type": "BUG", "name": "Checkout 500s on retry", "description": "…",
-  "status": "IN_PROGRESS", "priority": "CRITICAL", "storyPoint": 3,
+  "status": "IN_PROGRESS", "priority": "CRITICAL", "resolvingUnit": "BACKEND", "storyPoint": 3,
   "reporterId": 1, "assigneeUserId": 5, "assigneeTeamId": 3,
   "createdAt": "…", "updatedAt": "…"
 }
@@ -894,6 +1001,7 @@ picked up by a person on that team, in which case both are set. Either may be nu
   "description": "…",
   "type": "BUG",
   "priority": "CRITICAL",
+  "resolvingUnit": "BACKEND",
   "storyPoint": 3,
   "sprintId": 4,
   "epicId": 2,
@@ -902,8 +1010,9 @@ picked up by a person on that team, in which case both are set. Either may be nu
 }
 ```
 `name` 2–255 (**not** unique — two issues may share a name), `type` required, `priority` optional
-(defaults `MEDIUM`), `storyPoint` ≥ 0 and optional. `sprintId`/`epicId` optional but must belong to
-*this* project. Reporter comes from the caller.
+(defaults `MEDIUM`), `resolvingUnit` optional (which unit — backend, frontend, iOS, Android — will
+resolve the issue; null until triage assigns it), `storyPoint` ≥ 0 and optional. `sprintId`/`epicId`
+optional but must belong to *this* project. Reporter comes from the caller.
 
 Errors: `422 SPRINT_NOT_FOUND`, `422 EPIC_NOT_FOUND`, `422 ASSIGNEE_USER_NOT_FOUND`,
 `422 ASSIGNEE_TEAM_NOT_FOUND`, `404 PROJECT_NOT_FOUND`.
@@ -918,6 +1027,7 @@ Every filter optional and combinable — together they cover what a board asks w
 | `type` | `IssueType` |
 | `status` | `IssueStatus` |
 | `priority` | `IssuePriority` |
+| `resolvingUnit` | `IssueUnit` |
 | `sprintId` | int |
 | `epicId` | int |
 | `reporterId` | int |
@@ -942,8 +1052,44 @@ Status and assignees are deliberately *not* here: they have their own endpoints 
 board changes one at a time cannot be clobbered by someone saving an edit form at the same moment.
 The reporter is not editable at all.
 
+**Prefer the three narrow PATCHes below when you are changing one thing.** This `PUT` is for the edit
+form, which is the one caller that genuinely holds every field. A backlog moving ten issues into a
+sprint through it would have to carry ten descriptions and estimates through the round trip just to
+leave them where they were, and would silently erase any it forgot.
+
+#### `PATCH /{issueId}/sprint` → `200` — `{ "sprintId": 4 }`
+Moves the issue into a sprint. **`null` means the backlog**, not "leave it alone" — the field is the
+whole body, which is what makes the two impossible to confuse. Nothing else on the issue is touched.
+The sprint must be live and belong to *this* project. Errors: `422 SPRINT_NOT_FOUND`,
+`404 ISSUE_NOT_FOUND`, `404 PROJECT_NOT_FOUND`.
+
+Writes a `SPRINT_UPDATED` activity row, or none at all if the issue was already in that sprint.
+
+#### `PATCH /{issueId}/epic` → `200` — `{ "epicId": 2 }`
+As above, for the epic; `null` means no epic. Errors: `422 EPIC_NOT_FOUND`.
+
+This is the one write on an issue that leaves **no activity row** — `issue_activities` has no action
+type for the epic, so the change has nowhere to be recorded. See §4.12.
+
+#### `PATCH /{issueId}/classification` → `200`
+```json
+{ "type": "BUG", "priority": "HIGH", "storyPoint": 5 }
+```
+Replaces the three fields a planner adjusts straight from a list. `type` and `priority` are required;
+`storyPoint` is ≥ 0 and nullable, where null means unestimated.
+
+**A replacement of all three, so send the other two as they currently stand** when you mean to change
+only one — otherwise a bulk priority change levels everyone's estimate. Restating a value the issue
+already holds is free and writes no activity row. They travel together rather than as three routes
+because none of them is the description, so unlike the `PUT` there is nothing long here for a stale
+client to discard.
+
+Writes `PRIORITY_UPDATED`, `STORY_POINT_UPDATED` and `DETAILS_UPDATED` rows — whichever actually moved.
+
 #### `PATCH /{issueId}/status` → `200` — `{ "status": "IN_REVIEW" }`
 The endpoint a drag-and-drop board calls. Any transition is allowed; there is no state machine.
+Errors: `403 FORBIDDEN` if the caller is neither an editor, the project's leader, nor
+`assigneeUserId` on the issue being moved.
 
 #### `PATCH /{issueId}/assignee` → `200`
 ```json
@@ -951,7 +1097,9 @@ The endpoint a drag-and-drop board calls. Any transition is allowed; there is no
 ```
 Both optional and independent. Sending only a team hands the work to that team; sending both says a
 named person on that team has it. **Sending one alone clears the other** — this is a replacement of
-the assignment as a whole, so send both fields whenever you mean to keep both.
+the assignment as a whole, so send both fields whenever you mean to keep both. The permission check
+runs against the assignee *before* this call, not after — the current assignee may hand the issue to
+someone else, but a third party may not grab it. Errors: `403 FORBIDDEN` (see status, above).
 
 #### `DELETE /{issueId}/assignee` → `200` `IssueResponse` — clears **both**.
 #### `DELETE /{issueId}` → `200` empty — soft delete.
@@ -1024,9 +1172,24 @@ All three return `PagedResponse<ActivityResponse>` in one shared shape:
   "actionType": "STATUS_UPDATED",
   "oldValue": "TODO",
   "newValue": "IN_PROGRESS",
-  "createdAt": "2026-08-01T10:00:00Z"
+  "createdAt": "2026-08-01T10:00:00Z",
+  "scope": "ISSUE",
+  "subjectId": 101
 }
 ```
+
+**`GET /api/projects/{id}/activities` is a union of all three tables**, not the project's own history
+alone — a status change on one of the project's issues and a sprint being opened both show up here,
+interleaved with the project's own rows (leader changes, membership, status), newest first. Pass
+`?scope=PROJECT` to opt back into the narrower, cheaper read of the project's own rows only.
+
+`scope` is one of `PROJECT` / `ISSUE` / `SPRINT` and says which table a row came from; `subjectId` is
+the id it hangs off on that table — a project id, an issue id, or a sprint id respectively. On the
+two single-subject endpoints (`.../issues/{issueId}/activities`, `.../sprints/{sprintId}/activities`)
+these are constant across every row (`scope` is always `ISSUE`/`SPRINT`, `subjectId` always the path's
+`issueId`/`sprintId`) and mostly redundant; on the unioned project feed they are what a client needs
+to route a row to the right page, since `id` alone is only unique within one table — two rows from
+different scopes can share the same `id`.
 
 Reading these correctly:
 
@@ -1282,6 +1445,84 @@ queue forming that is the only thing it is drawn to show.
 
 ---
 
+### 4.14 Field definitions
+
+`fielddef/FieldDefinitionController.java` (project-scoped) and
+`fielddef/GlobalFieldDefinitionController.java` (the two global kinds). See §2 for what these
+replace and why every status/type/priority/unit is now data rather than a fixed enum.
+
+| Method | Path | Access |
+|--------|------|--------|
+| `GET` | `/api/projects/{id}/field-definitions` | auth |
+| `POST` | `/api/projects/{id}/field-definitions` | editor / leader |
+| `PUT` | `/api/projects/{id}/field-definitions/{defId}` | editor / leader |
+| `PATCH` | `/api/projects/{id}/field-definitions/reorder` | editor / leader |
+| `DELETE` | `/api/projects/{id}/field-definitions/{defId}` | editor / leader |
+| `GET` | `/api/field-definitions` | auth |
+| `POST` | `/api/field-definitions` | **ADMIN** |
+| `PUT` | `/api/field-definitions/{defId}` | **ADMIN** |
+| `PATCH` | `/api/field-definitions/reorder` | **ADMIN** |
+| `DELETE` | `/api/field-definitions/{defId}` | **ADMIN** |
+
+**`FieldDefinitionResponse`**:
+```json
+{
+  "id": 50, "kind": "ISSUE_STATUS", "projectId": 1,
+  "code": "SHIPPED", "label": "Shipped", "color": "#22C55E", "sortOrder": 7,
+  "isActive": true, "isDefault": false, "isDone": true, "isCancelled": false,
+  "isActiveWork": false, "isDefect": false,
+  "createdAt": "...", "updatedAt": "..."
+}
+```
+`kind` is one of `PROJECT_STATUS`, `SPRINT_STATUS`, `EPIC_STATUS`, `ISSUE_STATUS`, `ISSUE_TYPE`,
+`ISSUE_PRIORITY`, `ISSUE_UNIT`, `TEAM_FIELD`. `projectId` is `null` for the two global kinds
+(`PROJECT_STATUS`, `TEAM_FIELD`) and for every row returned by the `/api/field-definitions` routes.
+`code` is what every other endpoint stores and expects back — **immutable** once created; relabel
+with `label`, not by creating a new code and retiring the old one, or every issue already carrying
+the old code becomes orphaned.
+
+#### `GET /api/projects/{id}/field-definitions` → `200`
+Query: `kind` (optional — omit it to get every kind at once, sorted by kind then `sortOrder`).
+Attempting a global kind here returns `422 FIELD_KIND_NOT_PROJECT_SCOPED`.
+
+#### `POST /api/projects/{id}/field-definitions` → `201`, `Location: .../field-definitions/{id}`
+```json
+{
+  "kind": "ISSUE_STATUS", "code": "SHIPPED", "label": "Shipped", "color": "#22C55E",
+  "isDefault": false, "isDone": true, "isCancelled": false, "isActiveWork": false, "isDefect": false
+}
+```
+`code` must be `UPPER_SNAKE_CASE` and unique within this project's rows of that `kind`. Setting
+`isDefault: true` silently un-defaults whatever row currently holds it — there is always exactly
+one. Errors: `409 FIELD_CODE_ALREADY_EXISTS`, `422 FIELD_KIND_NOT_PROJECT_SCOPED`,
+`400 VALIDATION_FAILED`.
+
+#### `PUT /api/projects/{id}/field-definitions/{defId}` → `200`
+```json
+{ "label": "Shipped", "color": "#22C55E", "isDefault": false, "isDone": true, "isCancelled": false, "isActiveWork": false, "isDefect": false }
+```
+No `code` — it never changes. Unsetting `isDone` (or `isDefault`) on the last row of this project's
+`ISSUE_STATUS` set that carries it is refused: `422 LAST_DONE_FIELD_REQUIRED` /
+`422 DEFAULT_FIELD_REQUIRED`. A project's metrics depend on always having at least one done status
+and exactly one default — see §2.
+
+#### `PATCH /api/projects/{id}/field-definitions/reorder` → `200`
+```json
+{ "kind": "ISSUE_STATUS", "orderedIds": [4, 1, 7, 2, 9, 3, 5] }
+```
+`orderedIds` must name **exactly** the project's active rows of that `kind` — no more, no fewer.
+Errors: `422 REORDER_SET_MISMATCH`.
+
+#### `DELETE /api/projects/{id}/field-definitions/{defId}` → `200` empty
+Soft delete (`isActive: false`); issues already carrying this code keep it, they just cannot be set
+to it again. Same last-done/default guard as the `PUT` above.
+
+#### Global routes
+Same shapes, `kind` restricted to `PROJECT_STATUS` / `TEAM_FIELD`, no `{id}` in the path. Sending a
+project-scoped `kind` here returns `422 FIELD_KIND_NOT_GLOBAL`.
+
+---
+
 ## 5. Frontend integration notes
 
 ### Endpoint totals
@@ -1300,7 +1541,8 @@ queue forming that is the only thing it is drawn to show.
 | Comments | 5 |
 | Activity | 3 |
 | Metrics | 14 |
-| **Total** | **79** |
+| Field definitions (project + global) | 10 |
+| **Total** | **89** |
 
 ### Suggested route → endpoint mapping
 
@@ -1312,10 +1554,10 @@ queue forming that is the only thing it is drawn to show.
 | `/` (my work) | `GET /api/users/{me}/projects`, `GET /api/users/{me}/teams` |
 | `/projects` | `GET /api/projects` |
 | `/projects/{id}` | `GET /api/projects/{id}`, `GET /api/projects/{id}/sprints?status=IN_PROGRESS` |
-| `/projects/{id}/board` | `GET /api/projects/{id}/issues?sprintId=…`, `PATCH …/issues/{issueId}/status` |
-| `/projects/{id}/backlog` | `GET /api/projects/{id}/issues?status=BACKLOG` |
+| `/projects/{id}/board` | `GET /api/projects/{id}/issues?sprintId=…`, `PATCH …/issues/{issueId}/status`, `…/metrics/velocity` |
+| `/projects/{id}/backlog` | `GET /api/projects/{id}/issues?status=BACKLOG`, `PATCH …/issues/{issueId}/{sprint,epic,classification}` |
 | `/projects/{id}/issues/{issueId}` | issue + `…/comments` + `…/activities` |
-| `/projects/{id}/sprints` | `GET/POST/PATCH …/sprints` |
+| `/projects/{id}/sprints` | `GET/POST/PATCH …/sprints`, `…/metrics/velocity` |
 | `/projects/{id}/epics` | `GET/POST/PATCH …/epics` |
 | `/projects/{id}/settings` | `…/members`, `…/participants`, `…/teams`, `PATCH …/leader` |
 | `/projects/{id}/insights` | the 14 metric endpoints |
@@ -1331,7 +1573,9 @@ queue forming that is the only thing it is drawn to show.
    (TanStack Query, a context, whatever) rather than firing `GET /api/users/{id}` per row.
 2. **`PUT` is a full replacement everywhere.** Omitting a field clears it. Most damaging on
    `PUT .../issues/{issueId}`, where a missing `sprintId` silently pulls the issue out of its sprint.
-   Prefill edit forms from the current entity and always send every field.
+   Prefill edit forms from the current entity and always send every field. Better still, don't use it
+   for one-field changes: `PATCH .../issues/{issueId}/sprint`, `/epic` and `/classification` exist so
+   a backlog can move a selection into a sprint without carrying every description along for the ride.
 3. **`PATCH .../assignee` replaces the pair.** Send both fields whenever you mean to keep both.
 4. **Soft deletes do not cascade to references.** An issue's `sprintId` or `epicId` can point at a
    deleted sprint/epic; following it returns `404`. Degrade gracefully instead of erroring the page.

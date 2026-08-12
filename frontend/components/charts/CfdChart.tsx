@@ -5,12 +5,13 @@ import { ChartCard } from "./ChartCard";
 import { CATEGORICAL, TOOLTIP_STYLE, AXIS_STYLE, CHART } from "./colors";
 import { bucketStarts, bucketKey } from "@/lib/metrics/densify";
 import { formatDateOnly } from "@/lib/format";
-import { ISSUE_STATUS_LABEL } from "@/lib/api/enums";
+import { useProjectContext } from "@/lib/project/ProjectContext";
 import type { CumulativeFlowResponse } from "@/lib/api/types";
 
 /** One row per day per occupied status — fixed daily bucketing, no control
  * (docs/API.md §4.13: a weekly cut would smooth away the queue it's drawn to show). */
 export function CfdChart({ data, isLoading }: { data: CumulativeFlowResponse | undefined; isLoading: boolean }) {
+  const { resolveField } = useProjectContext();
   const statuses = data ? Array.from(new Set(data.points.map((p) => p.status))) : [];
   const rows = data
     ? bucketStarts(data.window.from, data.window.to, "DAY").map((bucketStart) => {
@@ -44,7 +45,7 @@ export function CfdChart({ data, isLoading }: { data: CumulativeFlowResponse | u
             <Tooltip contentStyle={TOOLTIP_STYLE} labelFormatter={(v) => formatDateOnly(v as string)} />
             <Legend
               wrapperStyle={{ fontSize: 12 }}
-              formatter={(value) => ISSUE_STATUS_LABEL[value as keyof typeof ISSUE_STATUS_LABEL] ?? value}
+              formatter={(value) => resolveField("ISSUE_STATUS", value as string)?.label ?? value}
             />
             {statuses.map((s, i) => (
               <Area

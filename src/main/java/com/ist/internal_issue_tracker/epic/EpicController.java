@@ -44,7 +44,7 @@ public class EpicController {
   public ResponseEntity<ApiResponse<PagedResponse<EpicResponse>>> getEpics(
       @PathVariable Integer id,
       @RequestParam(required = false) String name,
-      @RequestParam(required = false) EpicStatus status,
+      @RequestParam(required = false) String status,
       @RequestParam(required = false) Integer reporterId,
       Pageable pageable) {
     PagedResponse<EpicResponse> epicResponse =

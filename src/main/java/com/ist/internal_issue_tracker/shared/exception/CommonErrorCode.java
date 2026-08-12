@@ -24,6 +24,7 @@ public enum CommonErrorCode implements ErrorCode {
   DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "A resource with these values already exists"),
   BUSINESS_RULE_VIOLATION(HttpStatus.UNPROCESSABLE_ENTITY, "The request violates a business rule"),
   PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "Request payload is too large"),
+  RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "Too many requests, please try again later"),
   INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
 
   private final HttpStatus status;

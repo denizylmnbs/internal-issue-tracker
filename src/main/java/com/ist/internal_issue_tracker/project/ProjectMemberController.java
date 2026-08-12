@@ -33,7 +33,8 @@ public class ProjectMemberController {
     ProjectMemberResponse response =
         projectMemberService.createProjectMember(id, caller.getId(), request);
 
-    return ResponseEntity.created(URI.create("/api/projects/" + id + "/members/" + response.userId()))
+    return ResponseEntity.created(
+            URI.create("/api/projects/" + id + "/members/" + response.userId()))
         .body(ApiResponse.ok(response));
   }
 
@@ -55,7 +56,9 @@ public class ProjectMemberController {
         ApiResponse.ok(projectMemberService.getProjectParticipants(id, pageable)));
   }
 
-  /** Soft delete, keyed by the pair {@code unique_active_project_user} keys a live assignment on. */
+  /**
+   * Soft delete, keyed by the pair {@code unique_active_project_user} keys a live assignment on.
+   */
   @DeleteMapping("/{id}/members/{userId}")
   public ResponseEntity<ApiResponse<Void>> removeProjectMember(
       @AuthenticationPrincipal AuthenticatedUser caller,

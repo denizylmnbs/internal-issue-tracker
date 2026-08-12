@@ -2,12 +2,14 @@ import { apiData, apiVoid, json, toQuery } from "../client";
 import type {
   ChangePasswordRequest,
   ChangeRoleRequest,
+  IssueResponse,
   PagedResponse,
   RegisterRequest,
   ResetPasswordRequest,
   UpdateUserRequest,
   UserProjectMembershipResponse,
   UserResponse,
+  UserSprintProgressResponse,
   UserTeamMembershipResponse,
 } from "../types";
 
@@ -47,10 +49,23 @@ export const changeRole = (id: number, body: ChangeRoleRequest) =>
 
 export const getUserTeams = (id: number, query: { page?: number; size?: number } = {}) =>
   apiData<PagedResponse<UserTeamMembershipResponse>>(
-    `/api/users/${id}/teams${toQuery({ sort: "joinedAt,desc", ...query })}`,
+    // `joinedAt` is a DTO field, not an entity property — this endpoint sorts
+    // against TeamMember directly and has no remap for it (unlike the
+    // /api/teams/{id}/members routes), so `sort=joinedAt` 500s. `updatedAt`
+    // is the real column it's derived from.
+    `/api/users/${id}/teams${toQuery({ sort: "updatedAt,desc", ...query })}`,
   );
 
 export const getUserProjects = (id: number, query: { page?: number; size?: number } = {}) =>
   apiData<PagedResponse<UserProjectMembershipResponse>>(
     `/api/users/${id}/projects${toQuery({ sort: "projectName,asc", ...query })}`,
   );
+
+/** Active issues (TODO/IN_PROGRESS/IN_REVIEW) assigned to this user, across every project. */
+export const getUserActiveIssues = (id: number, query: { page?: number; size?: number } = {}) =>
+  apiData<PagedResponse<IssueResponse>>(
+    `/api/users/${id}/issues${toQuery({ sort: "updatedAt,desc", ...query })}`,
+  );
+
+export const getUserSprintProgress = (id: number) =>
+  apiData<UserSprintProgressResponse>(`/api/users/${id}/sprint-progress`);

@@ -37,10 +37,10 @@ public class CommentService {
    * Three links, and all three are load-bearing.
    *
    * <p>The project is checked first and separately rather than folded into the issue check, because
-   * an issue row does not know its project has been soft-deleted - {@code
-   * existsLiveIssueInProject} would happily confirm an issue on a dead project. Asking about the
-   * project first is what makes a deleted project's comment threads unreachable, the same structural
-   * guard that covers sprints and epics.
+   * an issue row does not know its project has been soft-deleted - {@code existsLiveIssueInProject}
+   * would happily confirm an issue on a dead project. Asking about the project first is what makes
+   * a deleted project's comment threads unreachable, the same structural guard that covers sprints
+   * and epics.
    */
   private void requireLiveIssue(Integer projectId, Integer issueId) {
     if (!projectLookup.existsActiveProject(projectId)) {
@@ -73,8 +73,8 @@ public class CommentService {
    * Deleting is wider, because removing a remark is not the same as putting words in someone's
    * mouth: the author may retract, and an editor or the project's leader may moderate.
    *
-   * <p>The leadership question is asked last on purpose - it is the only one of the three that costs
-   * a query, and the two cheap checks answer it for most callers first.
+   * <p>The leadership question is asked last on purpose - it is the only one of the three that
+   * costs a query, and the two cheap checks answer it for most callers first.
    */
   private void requireAuthorOrModerator(
       Integer projectId, Comment comment, AuthenticatedUser caller) {

@@ -17,7 +17,7 @@ import { formatDateOnly } from "@/lib/format";
 export function UserProfileClient({ userId }: { userId: number }) {
   const { user: caller } = useSession();
   const { data: profile, isLoading } = useUserDetail(userId);
-  const { data: teams } = useUserTeamsList(userId);
+  const { data: teams, isError: teamsError } = useUserTeamsList(userId);
   const { data: projects } = useUserProjectsList(userId);
   const [editOpen, setEditOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
@@ -81,7 +81,9 @@ export function UserProfileClient({ userId }: { userId: number }) {
 
       <section className="mb-6">
         <h2 className="mb-2 font-heading text-sm font-semibold">Teams</h2>
-        {!teams?.content.length ? (
+        {teamsError ? (
+          <p className="text-sm text-rust">Could not load teams. Try refreshing.</p>
+        ) : !teams?.content.length ? (
           <p className="text-sm text-slate">Not on a team.</p>
         ) : (
           <div className="divide-y divide-rule rounded border border-rule">

@@ -11,9 +11,14 @@ import { EmptyState } from "@/components/shell/EmptyState";
 import { Users, LayersIcon } from "lucide-react";
 
 export default function ProjectOverviewPage() {
-  const { projectId, project, isLoading, isLeader } = useProjectContext();
-  const { data: runningSprints } = useSprintsList(projectId, { status: "IN_PROGRESS", size: 1 });
-  const runningSprint = runningSprints?.content[0];
+  const { projectId, project, isLoading, isLeader, fieldDefinitionsByKind } = useProjectContext();
+  // "IN_PROGRESS" was a hardcoded literal — SPRINT_STATUS codes flagged
+  // isActiveWork are this project's "currently running" set now (docs/API.md §2).
+  const runningStatuses = new Set(
+    (fieldDefinitionsByKind.get("SPRINT_STATUS") ?? []).filter((d) => d.isActiveWork).map((d) => d.code),
+  );
+  const { data: sprints } = useSprintsList(projectId, { size: 100, sort: "startDate,desc" });
+  const runningSprint = sprints?.content.find((s) => runningStatuses.has(s.status));
 
   if (isLoading || !project) {
     return (

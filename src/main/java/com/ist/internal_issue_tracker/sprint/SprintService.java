@@ -5,6 +5,9 @@ import com.ist.internal_issue_tracker.shared.event.SprintCreatedEvent;
 import com.ist.internal_issue_tracker.shared.event.SprintDeletedEvent;
 import com.ist.internal_issue_tracker.shared.event.SprintFieldChange;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
+import com.ist.internal_issue_tracker.shared.port.FieldDefinitionLookup;
+import com.ist.internal_issue_tracker.shared.port.FieldKind;
+import com.ist.internal_issue_tracker.shared.port.FieldSemantic;
 import com.ist.internal_issue_tracker.shared.port.IssueLookup;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
@@ -40,10 +43,26 @@ public class SprintService {
   private final SprintChangeDetector sprintChangeDetector;
   private final ProjectLookup projectLookup;
   private final IssueLookup issueLookup;
+  private final FieldDefinitionLookup fieldDefinitionLookup;
   private final ApplicationEventPublisher eventPublisher;
 
+  /** Throws unless {@code status} is one of this project's active {@code SPRINT_STATUS} codes. */
+  private void requireValidStatus(Integer projectId, String status) {
+    if (!fieldDefinitionLookup.isValidCode(projectId, FieldKind.SPRINT_STATUS, status)) {
+      throw new AppException(SprintErrorCode.SPRINT_STATUS_NOT_DEFINED);
+    }
+  }
+
+  /** Whether {@code status} carries this project's {@code SPRINT_STATUS} "running" semantic. */
+  private boolean isRunningStatus(Integer projectId, String status) {
+    return fieldDefinitionLookup
+        .codesWithSemantic(projectId, FieldKind.SPRINT_STATUS, FieldSemantic.ACTIVE_WORK)
+        .contains(status);
+  }
+
   /** Publishes only if something moved - see {@code IssueService#publishChanges}. */
-  private void publishChanges(Integer actorId, SprintSnapshot before, Sprint after) {
+  private void publishChanges(
+      Integer projectId, Integer actorId, SprintSnapshot before, Sprint after) {
     List<SprintFieldChange> changes = sprintChangeDetector.diff(before, after);
 
     if (changes.isEmpty()) {
@@ -51,7 +70,7 @@ public class SprintService {
     }
 
     eventPublisher.publishEvent(
-        new SprintChangedEvent(after.getId(), actorId, OffsetDateTime.now(), changes));
+        new SprintChangedEvent(after.getId(), projectId, actorId, OffsetDateTime.now(), changes));
   }
 
   /**
@@ -67,8 +86,8 @@ public class SprintService {
    * could recover it. The activity log knows every point that ever moved in or out of the sprint,
    * but it cannot know which of those movements the team meant as its plan.
    */
-  private void commitIfStarting(Integer projectId, Sprint sprint, SprintStatus next) {
-    if (next != SprintStatus.IN_PROGRESS || sprint.getCommittedAt() != null) {
+  private void commitIfStarting(Integer projectId, Sprint sprint, boolean startingRun) {
+    if (!startingRun || sprint.getCommittedAt() != null) {
       return;
     }
 
@@ -102,8 +121,8 @@ public class SprintService {
       throw new SprintNameAlreadyExistsException(request.name());
     }
 
-    // status is left at the entity's TODO default
-    Sprint sprint = sprintMapper.toEntity(projectId, request);
+    String defaultStatus = fieldDefinitionLookup.defaultCode(projectId, FieldKind.SPRINT_STATUS);
+    Sprint sprint = sprintMapper.toEntity(projectId, request, defaultStatus);
 
     Sprint savedSprint;
     try {
@@ -114,7 +133,7 @@ public class SprintService {
     }
 
     eventPublisher.publishEvent(
-        new SprintCreatedEvent(savedSprint.getId(), actorId, OffsetDateTime.now()));
+        new SprintCreatedEvent(savedSprint.getId(), projectId, actorId, OffsetDateTime.now()));
 
     return sprintMapper.toResponse(savedSprint);
   }
@@ -126,7 +145,7 @@ public class SprintService {
   }
 
   public PagedResponse<SprintResponse> getSprintsByProjectId(
-      Integer projectId, String name, SprintStatus status, Pageable pageable) {
+      Integer projectId, String name, String status, Pageable pageable) {
     requireActiveProject(projectId);
 
     // derived query, so the caller's sort is honoured as-is
@@ -160,7 +179,7 @@ public class SprintService {
       throw new SprintNameAlreadyExistsException(request.name());
     }
 
-    publishChanges(actorId, before, savedSprint);
+    publishChanges(projectId, actorId, before, savedSprint);
 
     return sprintMapper.toResponse(savedSprint);
   }
@@ -168,12 +187,13 @@ public class SprintService {
   /**
    * Any status may follow any other, with one exception the database owns: a project may hold only
    * one {@code IN_PROGRESS} sprint at a time. That is not a transition rule - going back to {@code
-   * TODO} from {@code COMPLETED} is fine - it is a rule about how many sprints may sit in one status
-   * at once, and it is checked here only so callers get a named 409 rather than a raw constraint
-   * violation.
+   * TODO} from {@code COMPLETED} is fine - it is a rule about how many sprints may sit in one
+   * status at once, and it is checked here only so callers get a named 409 rather than a raw
+   * constraint violation.
    *
    * <p>The check is a pre-check, not a guarantee: two requests can pass it at the same time and the
-   * partial index is what actually decides, so the save is wrapped to report the loser the same way.
+   * partial index is what actually decides, so the save is wrapped to report the loser the same
+   * way.
    *
    * <p>This is also where a sprint's commitment is frozen - see {@link #commitIfStarting}. It sits
    * here rather than in its own endpoint because starting the sprint <em>is</em> the commitment;
@@ -187,20 +207,22 @@ public class SprintService {
 
     Sprint sprint = requireLiveSprint(projectId, sprintId);
 
+    requireValidStatus(projectId, request.status());
+
     SprintSnapshot before = SprintSnapshot.of(sprint);
 
-    boolean startingAnother =
-        request.status() == SprintStatus.IN_PROGRESS && sprint.getStatus() != SprintStatus.IN_PROGRESS;
+    boolean nextIsRunning = isRunningStatus(projectId, request.status());
+    boolean startingAnother = nextIsRunning && !sprint.getIsRunning();
 
     if (startingAnother
-        && sprintRepository.existsByProjectIdAndStatusAndDeletedAtIsNull(
-            projectId, SprintStatus.IN_PROGRESS)) {
+        && sprintRepository.existsByProjectIdAndIsRunningTrueAndDeletedAtIsNull(projectId)) {
       throw new AppException(SprintErrorCode.SPRINT_ALREADY_IN_PROGRESS);
     }
 
-    commitIfStarting(projectId, sprint, request.status());
+    commitIfStarting(projectId, sprint, startingAnother);
 
     sprint.setStatus(request.status());
+    sprint.setIsRunning(nextIsRunning);
 
     Sprint savedSprint;
     try {
@@ -210,14 +232,14 @@ public class SprintService {
       throw new AppException(SprintErrorCode.SPRINT_ALREADY_IN_PROGRESS);
     }
 
-    publishChanges(actorId, before, savedSprint);
+    publishChanges(projectId, actorId, before, savedSprint);
 
     return sprintMapper.toResponse(savedSprint);
   }
 
   /**
-   * Soft delete: the row stays and {@code deletedAt} is stamped. The status is left exactly where it
-   * was, so the record still says what the sprint was doing when it was dropped.
+   * Soft delete: the row stays and {@code deletedAt} is stamped. The status is left exactly where
+   * it was, so the record still says what the sprint was doing when it was dropped.
    *
    * <p>That is only safe because {@code one_active_sprint_per_project} is partial on {@code
    * deleted_at} as well as on the status. Were it not, a deleted row still reading {@code
@@ -237,6 +259,6 @@ public class SprintService {
 
     sprintRepository.save(sprint);
 
-    eventPublisher.publishEvent(new SprintDeletedEvent(sprintId, actorId, deletedAt));
+    eventPublisher.publishEvent(new SprintDeletedEvent(sprintId, projectId, actorId, deletedAt));
   }
 }

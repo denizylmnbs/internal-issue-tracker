@@ -10,8 +10,12 @@ import org.springframework.stereotype.Component;
 @Component
 public class ProjectMapper {
 
-  /** The status is left alone so the entity's own {@code PLANNING} default stands. */
-  public Project toEntity(ProjectCreateRequest request) {
+  /**
+   * {@code defaultStatus} is the global {@code PROJECT_STATUS} default code, resolved by {@code
+   * ProjectService} - the entity no longer has a hardcoded {@code PLANNING} default now that the
+   * vocabulary is field-definition data.
+   */
+  public Project toEntity(ProjectCreateRequest request, String defaultStatus) {
     Project project = new Project();
 
     project.setName(request.name());
@@ -19,6 +23,7 @@ public class ProjectMapper {
     project.setStartDate(request.startDate());
     project.setEndDate(request.endDate());
     project.setLeaderId(request.leaderId());
+    project.setStatus(defaultStatus);
 
     return project;
   }

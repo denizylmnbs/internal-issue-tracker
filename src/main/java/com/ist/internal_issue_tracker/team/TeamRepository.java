@@ -27,16 +27,17 @@ interface TeamRepository extends JpaRepository<Team, Integer> {
   boolean existsByIdAndIsActiveTrue(Integer id);
 
   boolean existsByIdAndLeaderId(Integer id, Integer leaderId);
+
   /**
    * Soft-deleted teams are excluded unconditionally rather than through a filter parameter: a
-   * deleted team is not a team the API has anything to say about, and letting a caller opt back into
-   * them would undo the delete for every reader.
+   * deleted team is not a team the API has anything to say about, and letting a caller opt back
+   * into them would undo the delete for every reader.
    *
    * <p>The {@code CAST(:name AS String)} wrappers are load-bearing: a bare {@code :name IS NULL}
    * gives Hibernate no context to infer the parameter type from, so the driver sends it untyped and
-   * PostgreSQL fails the statement with {@code function lower(bytea) does not exist}. {@code :field}
-   * and {@code :leaderId} need no cast - comparing them against a typed column is enough for both
-   * Hibernate and PostgreSQL to infer the type.
+   * PostgreSQL fails the statement with {@code function lower(bytea) does not exist}. {@code
+   * :field} and {@code :leaderId} need no cast - comparing them against a typed column is enough
+   * for both Hibernate and PostgreSQL to infer the type.
    */
   @Query(
       """
@@ -49,7 +50,7 @@ interface TeamRepository extends JpaRepository<Team, Integer> {
               """)
   Page<Team> findAllByFilters(
       @Param("name") String name,
-      @Param("field") TeamField field,
+      @Param("field") String field,
       @Param("leaderId") Integer leaderId,
       Pageable pageable);
 }

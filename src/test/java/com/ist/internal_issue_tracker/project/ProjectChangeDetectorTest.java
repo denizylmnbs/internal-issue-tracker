@@ -7,7 +7,10 @@ import com.ist.internal_issue_tracker.shared.event.ProjectFieldChange;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
 
-/** The leader is the interesting part here: it is nullable on both sides and both nulls mean something. */
+/**
+ * The leader is the interesting part here: it is nullable on both sides and both nulls mean
+ * something.
+ */
 class ProjectChangeDetectorTest {
 
   private final ProjectChangeDetector detector = new ProjectChangeDetector();
@@ -20,7 +23,7 @@ class ProjectChangeDetectorTest {
     project.setStartDate(LocalDate.of(2026, 1, 1));
     project.setEndDate(LocalDate.of(2026, 6, 1));
     project.setLeaderId(2);
-    project.setStatus(ProjectStatus.PLANNING);
+    project.setStatus("PLANNING");
     return project;
   }
 
@@ -31,7 +34,9 @@ class ProjectChangeDetectorTest {
     assertThat(detector.diff(ProjectSnapshot.of(project), project)).isEmpty();
   }
 
-  /** A project may be handed back to nobody, and that has to record as a change rather than vanish. */
+  /**
+   * A project may be handed back to nobody, and that has to record as a change rather than vanish.
+   */
   @Test
   void diff_reportsLeader_whenItIsRemoved() {
     Project project = project();
@@ -78,7 +83,7 @@ class ProjectChangeDetectorTest {
 
     project.setName("Apollo II");
     project.setLeaderId(9);
-    project.setStatus(ProjectStatus.ACTIVE);
+    project.setStatus("ACTIVE");
 
     assertThat(detector.diff(before, project))
         .containsExactly(

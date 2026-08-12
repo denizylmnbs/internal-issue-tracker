@@ -2,13 +2,10 @@ import { ArrowRight } from "lucide-react";
 import { UserName } from "@/lib/users/directory";
 import { useTeamName } from "@/lib/hooks/useTeamName";
 import { useSprintLabel } from "@/lib/hooks/useSprintLabel";
-import {
-  ISSUE_STATUS_LABEL,
-  ISSUE_PRIORITY_LABEL,
-  SPRINT_STATUS_LABEL,
-  PROJECT_STATUS_LABEL,
-} from "@/lib/api/enums";
+import { useProjectContext } from "@/lib/project/ProjectContext";
+import { useGlobalFieldDefinitions } from "@/lib/fielddef/GlobalFieldDefinitionsProvider";
 import type { ActivityActionType } from "@/lib/api/enums";
+import type { FieldKind } from "@/lib/api/types";
 
 type Domain = "issue" | "sprint" | "project";
 
@@ -16,9 +13,20 @@ function Raw({ value }: { value: string | null }) {
   return <span className="font-data text-xs">{value ?? "—"}</span>;
 }
 
-function EnumValue({ value, label }: { value: string | null; label: Record<string, string> }) {
+/** Resolves a raw code against this project's field definitions of `kind`,
+ * falling back to the code itself when there's no matching (possibly
+ * soft-deleted) row — same contract as the chips in components/shell/chips.tsx. */
+function ProjectFieldValue({ kind, value }: { kind: FieldKind; value: string | null }) {
+  const { resolveField } = useProjectContext();
   if (value == null) return <span className="text-xs text-slate">—</span>;
-  return <span className="text-xs">{label[value] ?? value}</span>;
+  return <span className="text-xs">{resolveField(kind, value)?.label ?? value}</span>;
+}
+
+/** As above, against the global field definitions (PROJECT_STATUS). */
+function GlobalFieldValue({ kind, value }: { kind: FieldKind; value: string | null }) {
+  const { resolveGlobal } = useGlobalFieldDefinitions();
+  if (value == null) return <span className="text-xs text-slate">—</span>;
+  return <span className="text-xs">{resolveGlobal(kind, value)?.label ?? value}</span>;
 }
 
 function UserValue({ value }: { value: string | null }) {
@@ -78,11 +86,11 @@ export function ValueDelta({
   const renderValue = (value: string | null) => {
     switch (actionType) {
       case "STATUS_UPDATED":
-        if (domain === "sprint") return <EnumValue value={value} label={SPRINT_STATUS_LABEL} />;
-        if (domain === "project") return <EnumValue value={value} label={PROJECT_STATUS_LABEL} />;
-        return <EnumValue value={value} label={ISSUE_STATUS_LABEL} />;
+        if (domain === "sprint") return <ProjectFieldValue kind="SPRINT_STATUS" value={value} />;
+        if (domain === "project") return <GlobalFieldValue kind="PROJECT_STATUS" value={value} />;
+        return <ProjectFieldValue kind="ISSUE_STATUS" value={value} />;
       case "PRIORITY_UPDATED":
-        return <EnumValue value={value} label={ISSUE_PRIORITY_LABEL} />;
+        return <ProjectFieldValue kind="ISSUE_PRIORITY" value={value} />;
       case "ASSIGNEE_USER_UPDATED":
       case "LEADER_UPDATED":
       case "USER_ADDED":

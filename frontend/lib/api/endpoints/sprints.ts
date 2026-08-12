@@ -6,7 +6,6 @@ import type {
   SprintResponse,
   UpdateSprintRequest,
 } from "../types";
-import type { SprintStatus } from "../enums";
 
 export const createSprint = (projectId: number, body: CreateSprintRequest) =>
   apiData<SprintResponse>(`/api/projects/${projectId}/sprints`, json(body, "POST"));
@@ -16,7 +15,7 @@ export const getSprint = (projectId: number, sprintId: number) =>
 
 export type ListSprintsQuery = {
   name?: string;
-  status?: SprintStatus;
+  status?: string;
   page?: number;
   size?: number;
   sort?: string;

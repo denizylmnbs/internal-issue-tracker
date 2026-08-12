@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -26,12 +26,20 @@ export default function RegisterPage() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [retryAfter, setRetryAfter] = useState(0);
 
   const {
     register: field,
     handleSubmit,
     formState: { errors, isSubmitting },
   } = useForm<FormValues>({ resolver: zodResolver(schema) });
+
+  // Ticks the lockout down to 0 so the button re-enables itself without a reload.
+  useEffect(() => {
+    if (retryAfter <= 0) return;
+    const timer = setInterval(() => setRetryAfter((s) => Math.max(0, s - 1)), 1000);
+    return () => clearInterval(timer);
+  }, [retryAfter]);
 
   const onSubmit = async (values: FormValues) => {
     setServerError(null);
@@ -41,9 +49,12 @@ export default function RegisterPage() {
       // path (docs/API.md §4.2: no auth required on this route).
       await registerUser(values);
     } catch (err) {
-      setServerError(
-        isApiClientError(err) ? err.message : "Registration failed. Try again.",
-      );
+      if (isApiClientError(err)) {
+        setServerError(err.message);
+        if (err.code === "RATE_LIMITED") setRetryAfter(err.retryAfterSeconds ?? 60);
+      } else {
+        setServerError("Registration failed. Try again.");
+      }
       return;
     }
 
@@ -110,8 +121,12 @@ export default function RegisterPage() {
 
       {serverError && <p className="text-sm text-rust">{serverError}</p>}
 
-      <Button type="submit" className="w-full" disabled={isSubmitting}>
-        {isSubmitting ? "Creating account…" : "Create account"}
+      <Button type="submit" className="w-full" disabled={isSubmitting || retryAfter > 0}>
+        {retryAfter > 0
+          ? `Try again in ${retryAfter}s`
+          : isSubmitting
+            ? "Creating account…"
+            : "Create account"}
       </Button>
 
       <p className="text-center text-sm text-slate">

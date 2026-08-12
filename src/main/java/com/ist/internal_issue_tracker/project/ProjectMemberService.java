@@ -14,8 +14,8 @@ import com.ist.internal_issue_tracker.shared.port.TeamLookup;
 import com.ist.internal_issue_tracker.shared.port.UserLookup;
 import com.ist.internal_issue_tracker.shared.security.Role;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
-import java.util.Set;
 import java.time.OffsetDateTime;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -30,11 +30,11 @@ import org.springframework.transaction.annotation.Transactional;
  * Users assigned to a project directly. Membership through an assigned team is {@link
  * ProjectTeamService}'s business, and the two together are what "works on this project" means.
  *
- * <p><b>Two user ids, and they are not the same person.</b> The one on the request - or the path, on
- * a removal - is the <em>subject</em>, whose membership is being added or retired. {@code actorId} is
- * whoever is performing that, and is the one bound for {@code project_activities.user_id}: a lead
- * taking someone off a project is a fact about the lead, not about the person removed. See {@code
- * IssueService} for the full reasoning.
+ * <p><b>Two user ids, and they are not the same person.</b> The one on the request - or the path,
+ * on a removal - is the <em>subject</em>, whose membership is being added or retired. {@code
+ * actorId} is whoever is performing that, and is the one bound for {@code
+ * project_activities.user_id}: a lead taking someone off a project is a fact about the lead, not
+ * about the person removed. See {@code IssueService} for the full reasoning.
  */
 @Service
 @RequiredArgsConstructor
@@ -54,12 +54,6 @@ public class ProjectMemberService {
   private final TeamLookup teamLookup;
   private final ApplicationEventPublisher eventPublisher;
 
-  private void requireActiveProject(Integer projectId) {
-    if (!projectRepository.existsByIdAndIsActiveTrue(projectId)) {
-      throw new ProjectNotFoundException(projectId);
-    }
-  }
-
   /**
    * Revives an assignment that was soft-deleted, or rejects one that is still live. Removing a
    * member only clears {@code isActive}, so the row outlives them and would collide with a fresh
@@ -72,6 +66,12 @@ public class ProjectMemberService {
 
     membership.setIsActive(true);
     return membership;
+  }
+
+  private void requireActiveProject(Integer projectId) {
+    if (!projectRepository.existsByIdAndIsActiveTrue(projectId)) {
+      throw new ProjectNotFoundException(projectId);
+    }
   }
 
   /**
@@ -142,7 +142,8 @@ public class ProjectMemberService {
   }
 
   /**
-   * Everyone who works on the project, by either route - the population {@code memberCount} reports.
+   * Everyone who works on the project, by either route - the population {@code memberCount}
+   * reports.
    *
    * <p>The caller's sort is deliberately dropped. The query groups a union, so there is nothing to
    * order by but the user id, and an unordered paged query would hand back overlapping pages.
@@ -164,8 +165,8 @@ public class ProjectMemberService {
    * The projects a user works on, by either route. Sorting is fixed for the same reason as {@link
    * #getProjectParticipants}.
    *
-   * <p>The team route is resolved in two steps - team ids from {@code team}, then the projects those
-   * teams are on - so that the query below reads none of {@code team}'s tables.
+   * <p>The team route is resolved in two steps - team ids from {@code team}, then the projects
+   * those teams are on - so that the query below reads none of {@code team}'s tables.
    */
   public PagedResponse<UserProjectMembershipResponse> getProjectsByUserId(
       Integer userId, Pageable pageable) {

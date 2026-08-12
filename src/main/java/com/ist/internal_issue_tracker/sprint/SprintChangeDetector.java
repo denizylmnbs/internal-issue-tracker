@@ -15,6 +15,13 @@ import org.springframework.stereotype.Component;
 @Component
 class SprintChangeDetector {
 
+  /**
+   * Both dates in one value, because one action type covers the pair. An open end shows as bare.
+   */
+  private static String range(LocalDate start, LocalDate end) {
+    return (start == null ? "" : start.toString()) + ".." + (end == null ? "" : end.toString());
+  }
+
   List<SprintFieldChange> diff(SprintSnapshot before, Sprint after) {
     List<SprintFieldChange> changes = new ArrayList<>();
 
@@ -38,21 +45,11 @@ class SprintChangeDetector {
               range(after.getStartDate(), after.getEndDate())));
     }
 
-    if (before.status() != after.getStatus()) {
+    if (!Objects.equals(before.status(), after.getStatus())) {
       changes.add(
-          new SprintFieldChange(
-              SprintField.STATUS, name(before.status()), name(after.getStatus())));
+          new SprintFieldChange(SprintField.STATUS, before.status(), after.getStatus()));
     }
 
     return changes;
-  }
-
-  /** Both dates in one value, because one action type covers the pair. An open end shows as bare. */
-  private static String range(LocalDate start, LocalDate end) {
-    return (start == null ? "" : start.toString()) + ".." + (end == null ? "" : end.toString());
-  }
-
-  private static String name(Enum<?> value) {
-    return value == null ? null : value.name();
   }
 }

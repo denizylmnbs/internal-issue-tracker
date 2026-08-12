@@ -20,8 +20,8 @@ import org.springframework.web.bind.annotation.*;
  * cover these routes unchanged - the alternative was a shallower URL plus a port and an
  * authorization manager to go with it.
  *
- * <p>{@code caller} is passed down on write operations because who may edit a comment depends on who
- * wrote it, and that is a fact the request path cannot carry.
+ * <p>{@code caller} is passed down on write operations because who may edit a comment depends on
+ * who wrote it, and that is a fact the request path cannot carry.
  */
 @RestController
 @RequestMapping("/api/projects/{id}/issues/{issueId}/comments")
@@ -41,12 +41,7 @@ public class CommentController {
 
     return ResponseEntity.created(
             URI.create(
-                "/api/projects/"
-                    + id
-                    + "/issues/"
-                    + issueId
-                    + "/comments/"
-                    + commentResponse.id()))
+                "/api/projects/" + id + "/issues/" + issueId + "/comments/" + commentResponse.id()))
         .body(ApiResponse.ok(commentResponse));
   }
 

@@ -14,9 +14,9 @@ import org.springframework.data.repository.query.Param;
 /**
  * No native SQL. The roster queries used to join {@code teams} and {@code users} to keep rows of a
  * deleted team or a deactivated user off the list; those rows are now retired at the moment of the
- * delete - see {@link TeamMembershipCleanupListener} - so {@code is_active} on the membership row is
- * the whole truth and the reads are plain derived queries. Sorting works on the list endpoints again
- * as a result, which native paging had made impossible.
+ * delete - see {@link TeamMembershipCleanupListener} - so {@code is_active} on the membership row
+ * is the whole truth and the reads are plain derived queries. Sorting works on the list endpoints
+ * again as a result, which native paging had made impossible.
  */
 interface TeamMemberRepository extends JpaRepository<TeamMember, Integer> {
 
@@ -35,29 +35,30 @@ interface TeamMemberRepository extends JpaRepository<TeamMember, Integer> {
 
   /**
    * The pair's latest membership row, live or not, so re-adding someone who was removed can revive
-   * their old row instead of stacking another one behind it. Unlike the lookup above this one is not
-   * covered by the partial index - nothing stops several soft-deleted rows for the same pair, rows
-   * this method's own use is meant to stop accumulating - so it takes the newest and leaves whatever
-   * history predates it alone.
+   * their old row instead of stacking another one behind it. Unlike the lookup above this one is
+   * not covered by the partial index - nothing stops several soft-deleted rows for the same pair,
+   * rows this method's own use is meant to stop accumulating - so it takes the newest and leaves
+   * whatever history predates it alone.
    */
   Optional<TeamMember> findFirstByTeamIdAndUserIdOrderByIdDesc(Integer teamId, Integer userId);
 
   /**
    * The user's own memberships, joined to the owning team so a caller can render team names without
-   * a lookup per row. {@code TeamMember} holds a plain {@code teamId} rather than a {@code @ManyToOne
-   * Team} (see {@link Team}), so the join is expressed explicitly; both entities live in this module,
-   * so it crosses no boundary. The count query is spelled out because Spring Data cannot derive one
-   * from a constructor expression - and needs no join at all, since it selects nothing from the team.
+   * a lookup per row. {@code TeamMember} holds a plain {@code teamId} rather than a
+   * {@code @ManyToOne Team} (see {@link Team}), so the join is expressed explicitly; both entities
+   * live in this module, so it crosses no boundary. The count query is spelled out because Spring
+   * Data cannot derive one from a constructor expression - and needs no join at all, since it
+   * selects nothing from the team.
    *
    * <p>No {@code t.isActive} check: deleting a team retires its membership rows, so an active
    * membership already implies a live team. Repeating the condition would only invite the two to
    * disagree.
    *
    * <p>{@code joinedAt} comes from {@code updatedAt}, not {@code createdAt}: a membership that was
-   * removed and granted again is the same row revived, so its creation date is when the person first
-   * joined years ago rather than when they came back. Only active rows reach this query and the only
-   * things that ever write to one are joining, leaving, and the cleanup below - which only ever
-   * deactivates - so for every row returned here the last write was a join.
+   * removed and granted again is the same row revived, so its creation date is when the person
+   * first joined years ago rather than when they came back. Only active rows reach this query and
+   * the only things that ever write to one are joining, leaving, and the cleanup below - which only
+   * ever deactivates - so for every row returned here the last write was a join.
    */
   @Query(
       value =

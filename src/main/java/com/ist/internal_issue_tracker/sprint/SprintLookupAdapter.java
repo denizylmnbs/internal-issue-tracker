@@ -26,14 +26,15 @@ public class SprintLookupAdapter implements SprintLookup {
       return List.of();
     }
 
-    return sprintRepository.findAllByProjectIdAndDeletedAtIsNullOrderByStartDateAscIdAsc(projectId)
+    return sprintRepository
+        .findAllByProjectIdAndDeletedAtIsNullOrderByStartDateAscIdAsc(projectId)
         .stream()
         .map(
             sprint ->
                 new SprintSummary(
                     sprint.getId(),
                     sprint.getName(),
-                    sprint.getStatus().name(),
+                    sprint.getStatus(),
                     sprint.getStartDate(),
                     sprint.getEndDate(),
                     sprint.getCommittedPoints(),

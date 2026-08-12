@@ -17,9 +17,9 @@ import org.springframework.web.bind.annotation.RestController;
  * team module - the URL says nothing about which module owns the handler, and keeping it here
  * avoids a dependency from {@code user} on team internals.
  *
- * <p>The path variable is named {@code id} to match the rest of the {@code /api/users} namespace, so
- * a rule like {@code SecurityConfig}'s {@code selfOrAdmin} would apply as-is if this listing is ever
- * narrowed; today it is readable by any authenticated caller through {@code anyRequest}.
+ * <p>The path variable is named {@code id} to match the rest of the {@code /api/users} namespace,
+ * so a rule like {@code SecurityConfig}'s {@code selfOrAdmin} would apply as-is if this listing is
+ * ever narrowed; today it is readable by any authenticated caller through {@code anyRequest}.
  */
 @RestController
 @RequestMapping("/api/users")

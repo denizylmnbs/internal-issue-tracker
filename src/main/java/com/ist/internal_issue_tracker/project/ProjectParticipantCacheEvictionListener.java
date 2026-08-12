@@ -19,10 +19,12 @@ import org.springframework.stereotype.Component;
  * one key - but a change that names a team fans out over everyone it currently reaches, since the
  * team route folds every member's participant status into that same boolean.
  *
- * <p>Plain {@code @EventListener}, not {@code @ApplicationModuleListener}: this runs inline in the
- * publisher's transaction, the same choice {@code ProjectAssignmentCleanupListener} makes and for the
- * same reason - an async gap here would let a removed member's cached {@code true} outlive the
- * removal by however long delivery takes, on top of the two-minute TTL that already bounds it.
+ * <p>Plain {@code @EventListener}: this runs inline in the publisher's transaction, the same choice
+ * {@code ProjectAssignmentCleanupListener} makes and for the same reason - an async gap here would
+ * let a removed member's cached {@code true} outlive the removal by however long delivery takes, on
+ * top of the two-minute TTL that already bounds it. Externalising {@code ProjectMembershipEvent}
+ * for the activity log does not change that: an event reaches the broker and the in-process
+ * listeners both.
  */
 @Component
 @RequiredArgsConstructor
@@ -76,8 +78,9 @@ class ProjectParticipantCacheEvictionListener {
    * The team's own roster and its project links, read while both still say {@code true}. {@code
    * TeamMembershipCleanupListener} and {@code ProjectAssignmentCleanupListener} answer the same
    * queries with nothing the moment they run - deleting a team is exactly what deactivates those
-   * rows - so this must see them first. {@code @Order} makes that explicit rather than leaving it to
-   * incidental bean-registration order, which {@code @EventListener} does not otherwise guarantee.
+   * rows - so this must see them first. {@code @Order} makes that explicit rather than leaving it
+   * to incidental bean-registration order, which {@code @EventListener} does not otherwise
+   * guarantee.
    */
   @Order(Ordered.HIGHEST_PRECEDENCE)
   @EventListener

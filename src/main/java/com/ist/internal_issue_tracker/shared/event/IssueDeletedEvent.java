@@ -1,6 +1,7 @@
 package com.ist.internal_issue_tracker.shared.event;
 
 import java.time.OffsetDateTime;
+import org.springframework.modulith.events.Externalized;
 
 /**
  * Published when an issue is soft-deleted. The status is deliberately not carried: the issue keeps
@@ -19,6 +20,7 @@ import java.time.OffsetDateTime;
  * <p>See {@link IssueCreatedEvent} for why delivery is asynchronous and why the timestamp travels
  * with the event.
  */
+@Externalized("issue-events::#{#this.issueId().toString()}")
 public record IssueDeletedEvent(
     Integer issueId,
     Integer projectId,

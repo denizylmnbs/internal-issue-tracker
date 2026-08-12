@@ -14,10 +14,10 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 /**
- * Server-side half of the access/refresh pair. Refresh tokens are opaque random strings, not JWTs
- * - unlike the access token there is nothing to verify offline, the whole point is that Redis is
- * the source of truth and a token stops working the moment its entry is gone. Only the SHA-256 hash
- * of a token is ever stored, so a Redis dump or an over-broad access grant on that store does not
+ * Server-side half of the access/refresh pair. Refresh tokens are opaque random strings, not JWTs -
+ * unlike the access token there is nothing to verify offline, the whole point is that Redis is the
+ * source of truth and a token stops working the moment its entry is gone. Only the SHA-256 hash of
+ * a token is ever stored, so a Redis dump or an over-broad access grant on that store does not
  * itself hand out usable tokens, the same reasoning as hashing passwords rather than storing them.
  *
  * <p>Two key families cover the two things callers need to do: {@code refresh:token:<hash>} maps a
@@ -80,9 +80,6 @@ public class RefreshTokenService {
     return new RotationResult(userId, issue(userId));
   }
 
-  /** The caller needs {@code userId} back too - it is what lets it mint the new access token. */
-  public record RotationResult(Integer userId, String refreshToken) {}
-
   /** Revokes a single refresh token, e.g. on logout. A token that is already gone is a no-op. */
   public void revoke(String token) {
     String hash = hash(token);
@@ -122,4 +119,7 @@ public class RefreshTokenService {
       throw new IllegalStateException("SHA-256 is not available", e);
     }
   }
+
+  /** The caller needs {@code userId} back too - it is what lets it mint the new access token. */
+  public record RotationResult(Integer userId, String refreshToken) {}
 }

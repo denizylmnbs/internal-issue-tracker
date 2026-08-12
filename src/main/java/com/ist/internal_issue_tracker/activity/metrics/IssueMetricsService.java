@@ -15,13 +15,18 @@ import com.ist.internal_issue_tracker.activity.metrics.dto.TimeInStatusResponse;
 import com.ist.internal_issue_tracker.activity.metrics.dto.VelocityResponse;
 import com.ist.internal_issue_tracker.activity.metrics.dto.WipResponse;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
+import com.ist.internal_issue_tracker.shared.port.FieldDefinitionLookup;
+import com.ist.internal_issue_tracker.shared.port.FieldKind;
+import com.ist.internal_issue_tracker.shared.port.FieldSemantic;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.SprintLookup;
 import com.ist.internal_issue_tracker.shared.port.SprintSummary;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
@@ -30,12 +35,12 @@ import org.springframework.stereotype.Service;
 /**
  * The agile metrics, all of them derived from {@code issue_activities} and none of them stored.
  *
- * <p>Computing on read rather than maintaining a rollup is the right trade at this size: the queries
- * are indexed on {@code (project_id, action_type, created_at)} and a project's history is thousands
- * of rows, not millions. It also means a metric can be redefined by changing one query rather than
- * by rebuilding a table. When burndown and a cumulative flow diagram arrive they will not be able to
- * work this way - replaying the whole history on every draw is what a daily snapshot table exists to
- * avoid - but those are a different piece of work.
+ * <p>Computing on read rather than maintaining a rollup is the right trade at this size: the
+ * queries are indexed on {@code (project_id, action_type, created_at)} and a project's history is
+ * thousands of rows, not millions. It also means a metric can be redefined by changing one query
+ * rather than by rebuilding a table. When burndown and a cumulative flow diagram arrive they will
+ * not be able to work this way - replaying the whole history on every draw is what a daily snapshot
+ * table exists to avoid - but those are a different piece of work.
  */
 @Service
 @RequiredArgsConstructor
@@ -46,10 +51,73 @@ public class IssueMetricsService {
    * a team's numbers reflect how it works now rather than how it worked last year.
    */
   private static final int DEFAULT_WINDOW_DAYS = 90;
+  /**
+   * How many issues the aging list may name. Long enough to cover a stalled board, short enough
+   * that the answer stays a list to act on rather than a second copy of the backlog.
+   */
+  private static final int AGING_LIMIT = 20;
+  /**
+   * What an empty code set becomes before it is bound into a native {@code IN (:set)} clause - an
+   * empty collection there is invalid SQL, not "match nothing". No project can ever define a code
+   * matching this (codes are validated upper-snake-case on the way in), so it is safe as a sentinel
+   * that matches no real row.
+   */
+  private static final String NO_MATCH_SENTINEL = "__NO_MATCH__";
 
   private final IssueMetricsRepository issueMetricsRepository;
   private final ProjectLookup projectLookup;
   private final SprintLookup sprintLookup;
+  private final FieldDefinitionLookup fieldDefinitionLookup;
+
+  private static Set<String> orSentinel(Set<String> codes) {
+    return codes.isEmpty() ? Set.of(NO_MATCH_SENTINEL) : codes;
+  }
+
+  private Set<String> semanticCodes(Integer projectId, FieldSemantic semantic) {
+    return orSentinel(
+        fieldDefinitionLookup.codesWithSemantic(projectId, FieldKind.ISSUE_STATUS, semantic));
+  }
+
+  private String defaultStatus(Integer projectId) {
+    return fieldDefinitionLookup.defaultCode(projectId, FieldKind.ISSUE_STATUS);
+  }
+
+  private Set<String> defectCodes(Integer projectId) {
+    return orSentinel(
+        fieldDefinitionLookup.codesWithSemantic(
+            projectId, FieldKind.ISSUE_TYPE, FieldSemantic.DEFECT));
+  }
+
+  /** Every code, active or otherwise, this project's {@code wipByStatus} has to exclude. */
+  private Set<String> closedCodes(Integer projectId) {
+    Set<String> closed = new HashSet<>();
+    closed.addAll(fieldDefinitionLookup.codesWithSemantic(projectId, FieldKind.ISSUE_STATUS, FieldSemantic.DONE));
+    closed.addAll(fieldDefinitionLookup.codesWithSemantic(projectId, FieldKind.ISSUE_STATUS, FieldSemantic.CANCELLED));
+    return orSentinel(closed);
+  }
+
+  /**
+   * Null when there was no commitment to measure against, and null when the commitment was zero -
+   * dividing by it would be undefined, and reporting a sprint that committed to nothing as a
+   * spectacular over-delivery is worse than saying nothing.
+   */
+  private static Double sayDoRatio(Integer committedPoints, long completedPoints) {
+    if (committedPoints == null || committedPoints == 0) {
+      return null;
+    }
+
+    return (double) completedPoints / committedPoints;
+  }
+
+  private static DurationStatsResponse toResponse(MetricWindow window, DurationStats stats) {
+    return new DurationStatsResponse(
+        window,
+        stats.getIssueCount(),
+        stats.getAvgSeconds(),
+        stats.getP50Seconds(),
+        stats.getP85Seconds(),
+        stats.getP95Seconds());
+  }
 
   /**
    * Resolves the window and checks the project in one place, because every metric needs both and
@@ -70,27 +138,34 @@ public class IssueMetricsService {
   public DurationStatsResponse cycleTime(
       Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
+    Set<String> activeCodes = semanticCodes(projectId, FieldSemantic.ACTIVE_WORK);
+    Set<String> doneCodes = semanticCodes(projectId, FieldSemantic.DONE);
 
     return toResponse(
-        window, issueMetricsRepository.cycleTime(projectId, window.from(), window.to()));
+        window,
+        issueMetricsRepository.cycleTime(
+            projectId, activeCodes, doneCodes, window.from(), window.to()));
   }
 
   @Cacheable(cacheNames = "metrics-leadTime")
   public DurationStatsResponse leadTime(Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
+    Set<String> doneCodes = semanticCodes(projectId, FieldSemantic.DONE);
 
     return toResponse(
-        window, issueMetricsRepository.leadTime(projectId, window.from(), window.to()));
+        window,
+        issueMetricsRepository.leadTime(projectId, doneCodes, window.from(), window.to()));
   }
 
   @Cacheable(cacheNames = "metrics-throughput")
   public ThroughputResponse throughput(
       Integer projectId, MetricsBucket bucket, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
+    Set<String> doneCodes = semanticCodes(projectId, FieldSemantic.DONE);
 
     List<ThroughputResponse.Point> points =
         issueMetricsRepository
-            .throughput(projectId, bucket.unit(), window.from(), window.to())
+            .throughput(projectId, doneCodes, bucket.unit(), window.from(), window.to())
             .stream()
             // the projection hands back an Instant - see ThroughputBucket
             .map(
@@ -106,9 +181,12 @@ public class IssueMetricsService {
   public TimeInStatusResponse timeInStatus(
       Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
+    String defaultStatus = defaultStatus(projectId);
 
     List<TimeInStatusResponse.Entry> entries =
-        issueMetricsRepository.timeInStatus(projectId, window.from(), window.to()).stream()
+        issueMetricsRepository
+            .timeInStatus(projectId, defaultStatus, window.from(), window.to())
+            .stream()
             .map(
                 row ->
                     new TimeInStatusResponse.Entry(
@@ -125,9 +203,12 @@ public class IssueMetricsService {
   public FlowEfficiencyResponse flowEfficiency(
       Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
+    String defaultStatus = defaultStatus(projectId);
+    Set<String> activeCodes = semanticCodes(projectId, FieldSemantic.ACTIVE_WORK);
 
     FlowEfficiencyStats stats =
-        issueMetricsRepository.flowEfficiency(projectId, window.from(), window.to());
+        issueMetricsRepository.flowEfficiency(
+            projectId, defaultStatus, activeCodes, window.from(), window.to());
 
     return new FlowEfficiencyResponse(
         window, stats.getFlowEfficiency(), stats.getActiveSeconds(), stats.getTotalSeconds());
@@ -136,18 +217,14 @@ public class IssueMetricsService {
   @Cacheable(cacheNames = "metrics-reopenRate")
   public ReopenRateResponse reopenRate(Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
+    Set<String> doneCodes = semanticCodes(projectId, FieldSemantic.DONE);
 
-    ReopenStats stats = issueMetricsRepository.reopenStats(projectId, window.from(), window.to());
+    ReopenStats stats =
+        issueMetricsRepository.reopenStats(projectId, doneCodes, window.from(), window.to());
 
     return new ReopenRateResponse(
         window, stats.getDoneIssueCount(), stats.getReopenedIssueCount(), stats.getReopenRate());
   }
-
-  /**
-   * How many issues the aging list may name. Long enough to cover a stalled board, short enough that
-   * the answer stays a list to act on rather than a second copy of the backlog.
-   */
-  private static final int AGING_LIMIT = 20;
 
   /**
    * Work in progress as it stands, plus the oldest of it by name.
@@ -162,9 +239,11 @@ public class IssueMetricsService {
     }
 
     OffsetDateTime resolvedAsOf = asOf != null ? asOf : OffsetDateTime.now();
+    String defaultStatus = defaultStatus(projectId);
+    Set<String> closedCodes = closedCodes(projectId);
 
     List<WipResponse.StatusEntry> byStatus =
-        issueMetricsRepository.wipByStatus(projectId, resolvedAsOf).stream()
+        issueMetricsRepository.wipByStatus(projectId, defaultStatus, closedCodes, resolvedAsOf).stream()
             .map(
                 row ->
                     new WipResponse.StatusEntry(
@@ -175,8 +254,13 @@ public class IssueMetricsService {
                         row.getP50AgeSeconds()))
             .toList();
 
+    Set<String> excludedFromAging = new HashSet<>(closedCodes);
+    excludedFromAging.add(defaultStatus);
+
     List<WipResponse.AgingEntry> oldest =
-        issueMetricsRepository.agingWip(projectId, resolvedAsOf, AGING_LIMIT).stream()
+        issueMetricsRepository
+            .agingWip(projectId, defaultStatus, excludedFromAging, resolvedAsOf, AGING_LIMIT)
+            .stream()
             .map(
                 row ->
                     new WipResponse.AgingEntry(
@@ -196,9 +280,12 @@ public class IssueMetricsService {
   public NetFlowResponse netFlow(
       Integer projectId, MetricsBucket bucket, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
+    Set<String> doneCodes = semanticCodes(projectId, FieldSemantic.DONE);
 
     List<NetFlowResponse.Point> points =
-        issueMetricsRepository.netFlow(projectId, bucket.unit(), window.from(), window.to()).stream()
+        issueMetricsRepository
+            .netFlow(projectId, doneCodes, bucket.unit(), window.from(), window.to())
+            .stream()
             .map(
                 row ->
                     new NetFlowResponse.Point(
@@ -220,11 +307,12 @@ public class IssueMetricsService {
       OffsetDateTime from,
       OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
+    Set<String> doneCodes = semanticCodes(projectId, FieldSemantic.DONE);
 
     List<ThroughputBreakdownResponse.Point> points =
         issueMetricsRepository
             .throughputBreakdown(
-                projectId, dimension.name(), bucket.unit(), window.from(), window.to())
+                projectId, doneCodes, dimension.name(), bucket.unit(), window.from(), window.to())
             .stream()
             .map(
                 row ->
@@ -242,10 +330,12 @@ public class IssueMetricsService {
   public DefectRatioResponse defectRatio(
       Integer projectId, MetricsBucket bucket, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
+    Set<String> doneCodes = semanticCodes(projectId, FieldSemantic.DONE);
+    Set<String> defectCodes = defectCodes(projectId);
 
     List<DefectRatioResponse.Point> points =
         issueMetricsRepository
-            .defectStats(projectId, bucket.unit(), window.from(), window.to())
+            .defectStats(projectId, doneCodes, defectCodes, bucket.unit(), window.from(), window.to())
             .stream()
             .map(
                 row ->
@@ -265,11 +355,15 @@ public class IssueMetricsService {
   }
 
   @Cacheable(cacheNames = "metrics-bugMttr")
-  public DurationStatsResponse bugMttr(
-      Integer projectId, OffsetDateTime from, OffsetDateTime to) {
+  public DurationStatsResponse bugMttr(Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
+    Set<String> doneCodes = semanticCodes(projectId, FieldSemantic.DONE);
+    Set<String> defectCodes = defectCodes(projectId);
 
-    return toResponse(window, issueMetricsRepository.bugMttr(projectId, window.from(), window.to()));
+    return toResponse(
+        window,
+        issueMetricsRepository.bugMttr(
+            projectId, doneCodes, defectCodes, window.from(), window.to()));
   }
 
   /**
@@ -287,8 +381,10 @@ public class IssueMetricsService {
       throw new AppException(ActivityErrorCode.PROJECT_NOT_FOUND);
     }
 
+    Set<String> doneCodes = semanticCodes(projectId, FieldSemantic.DONE);
+
     Map<Integer, SprintVelocity> delivered =
-        issueMetricsRepository.velocity(projectId).stream()
+        issueMetricsRepository.velocity(projectId, doneCodes).stream()
             .collect(Collectors.toMap(SprintVelocity::getSprintId, row -> row));
 
     List<VelocityResponse.Sprint> sprints =
@@ -316,24 +412,12 @@ public class IssueMetricsService {
   }
 
   /**
-   * Null when there was no commitment to measure against, and null when the commitment was zero -
-   * dividing by it would be undefined, and reporting a sprint that committed to nothing as a
-   * spectacular over-delivery is worse than saying nothing.
-   */
-  private static Double sayDoRatio(Integer committedPoints, long completedPoints) {
-    if (committedPoints == null || committedPoints == 0) {
-      return null;
-    }
-
-    return (double) completedPoints / committedPoints;
-  }
-
-  /**
-   * One sprint's burndown. The window comes from the sprint rather than from the caller - a burndown
-   * over an arbitrary range is not a burndown - and stops at today so a running sprint does not
-   * trail a flat line into the future.
+   * One sprint's burndown. The window comes from the sprint rather than from the caller - a
+   * burndown over an arbitrary range is not a burndown - and stops at today so a running sprint
+   * does not trail a flat line into the future.
    *
-   * <p>A sprint with no end date runs to today, which is the same thing the client would draw anyway.
+   * <p>A sprint with no end date runs to today, which is the same thing the client would draw
+   * anyway.
    */
   @Cacheable(cacheNames = "metrics-burndown")
   public BurndownResponse burndown(Integer projectId, Integer sprintId) {
@@ -350,15 +434,19 @@ public class IssueMetricsService {
     OffsetDateTime from = sprint.startDate().atStartOfDay().atOffset(ZoneOffset.UTC);
     OffsetDateTime today = OffsetDateTime.now(ZoneOffset.UTC);
     OffsetDateTime end =
-        sprint.endDate() != null
-            ? sprint.endDate().atStartOfDay().atOffset(ZoneOffset.UTC)
-            : today;
+        sprint.endDate() != null ? sprint.endDate().atStartOfDay().atOffset(ZoneOffset.UTC) : today;
     OffsetDateTime to = end.isBefore(today) ? end : today;
+
+    String defaultStatus = defaultStatus(projectId);
+    Set<String> doneCodes = semanticCodes(projectId, FieldSemantic.DONE);
+    Set<String> cancelledCodes = semanticCodes(projectId, FieldSemantic.CANCELLED);
 
     List<BurndownResponse.Point> points =
         to.isBefore(from)
             ? List.of()
-            : issueMetricsRepository.burndown(projectId, sprintId, from, to).stream()
+            : issueMetricsRepository
+                .burndown(projectId, sprintId, defaultStatus, doneCodes, cancelledCodes, from, to)
+                .stream()
                 .map(
                     row ->
                         new BurndownResponse.Point(
@@ -383,9 +471,12 @@ public class IssueMetricsService {
   public CumulativeFlowResponse cumulativeFlow(
       Integer projectId, OffsetDateTime from, OffsetDateTime to) {
     MetricWindow window = window(projectId, from, to);
+    String defaultStatus = defaultStatus(projectId);
 
     List<CumulativeFlowResponse.Point> points =
-        issueMetricsRepository.cumulativeFlow(projectId, window.from(), window.to()).stream()
+        issueMetricsRepository
+            .cumulativeFlow(projectId, defaultStatus, window.from(), window.to())
+            .stream()
             .map(
                 row ->
                     new CumulativeFlowResponse.Point(
@@ -395,15 +486,5 @@ public class IssueMetricsService {
             .toList();
 
     return new CumulativeFlowResponse(window, points);
-  }
-
-  private static DurationStatsResponse toResponse(MetricWindow window, DurationStats stats) {
-    return new DurationStatsResponse(
-        window,
-        stats.getIssueCount(),
-        stats.getAvgSeconds(),
-        stats.getP50Seconds(),
-        stats.getP85Seconds(),
-        stats.getP95Seconds());
   }
 }

@@ -11,8 +11,9 @@ import java.time.LocalDate;
  * given and no way for the two to disagree.
  *
  * <p>The status is deliberately absent for the same reason it is on {@code ProjectCreateRequest}:
- * every sprint starts in {@code TODO} and moves on through its own endpoint, so a caller cannot open
- * one straight into {@code IN_PROGRESS} and slip past the "one running sprint per project" check.
+ * every sprint starts in {@code TODO} and moves on through its own endpoint, so a caller cannot
+ * open one straight into {@code IN_PROGRESS} and slip past the "one running sprint per project"
+ * check.
  */
 public record SprintCreateRequest(
     @NotBlank(message = "Name cannot be blank") @Size(min = 2, max = 255) String name,

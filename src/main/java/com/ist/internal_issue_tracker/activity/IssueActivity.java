@@ -13,8 +13,8 @@ import lombok.Setter;
  * is why there is no {@code updatedAt} and no soft-delete stamp - an issue being dropped is itself
  * recorded as a row rather than by hiding the rows before it.
  *
- * <p>Every id is a plain {@code Integer} rather than an association, for the reason given on
- * {@code Issue}: four of the five targets live in other modules and a {@code @ManyToOne} would break
+ * <p>Every id is a plain {@code Integer} rather than an association, for the reason given on {@code
+ * Issue}: four of the five targets live in other modules and a {@code @ManyToOne} would break
  * {@code ModularityTests}. Here the argument is stronger than usual - the history must survive the
  * thing it describes, and an association would invite a join that quietly drops rows whose subject
  * has been retired.
@@ -69,14 +69,14 @@ public class IssueActivity {
    * The issue's type, priority, estimate and sprint <em>at this moment</em>, copied from the event.
    *
    * <p>Not a cache of the issue's current state and not maintained afterwards - see {@code
-   * IssueDimensions} for why the distinction is the whole point. Together with {@code createdAt} they
-   * make this row a complete fact: a burndown can read the DONE row alone and know how many points
-   * left which sprint, without asking anything that might since have changed its mind.
+   * IssueDimensions} for why the distinction is the whole point. Together with {@code createdAt}
+   * they make this row a complete fact: a burndown can read the DONE row alone and know how many
+   * points left which sprint, without asking anything that might since have changed its mind.
    *
-   * <p>Strings rather than enums, mirroring the event. Mapping them onto {@code issue}'s enums would
-   * mean naming that module's types, and holding a private copy of each would put a second
-   * {@code MetricStatus}-shaped coupling in the codebase for no gain: nothing here branches on them,
-   * the metric queries match them as text.
+   * <p>Strings rather than enums, mirroring the event. Mapping them onto {@code issue}'s enums
+   * would mean naming that module's types, and holding a private copy of each would put a second
+   * {@code MetricStatus}-shaped coupling in the codebase for no gain: nothing here branches on
+   * them, the metric queries match them as text.
    *
    * <p>All four are nullable, and null means the issue had nothing set. Rows written before {@code
    * V3} carry that migration's approximation instead.
@@ -99,11 +99,11 @@ public class IssueActivity {
    * When the change happened, taken verbatim from the event.
    *
    * <p>Deliberately <b>not</b> {@code @CreationTimestamp}, unlike every other entity here. The
-   * listener that writes this row is asynchronous and runs after the publisher's transaction has
-   * committed, so Hibernate's persist moment is not the moment of the change; after a restart
-   * replays outstanding publications it may not even be the same day. Every metric on this table is
-   * a difference between two of these timestamps, so whatever gap crept in here would be read back
-   * as cycle time. The publisher takes the reading, once, alongside the change itself.
+   * consumer that writes this row reads it off a topic after the publisher's transaction has
+   * committed, so Hibernate's persist moment is not the moment of the change; on a replayed offset
+   * it may not even be the same month. Every metric on this table is a difference between two of
+   * these timestamps, so whatever gap crept in here would be read back as cycle time. The publisher
+   * takes the reading, once, alongside the change itself.
    */
   @Column(nullable = false, updatable = false)
   private OffsetDateTime createdAt;

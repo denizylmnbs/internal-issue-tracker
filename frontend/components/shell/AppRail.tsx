@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutGrid, FolderKanban, Users, ShieldCheck, LogOut } from "lucide-react";
+import { LayoutGrid, FolderKanban, Users, ShieldCheck, LogOut, Tags } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/auth/session";
 import { isAdmin } from "@/lib/auth/can";
@@ -21,6 +21,11 @@ const NAV = [
   { href: "/teams", label: "Teams", icon: Users },
 ];
 
+const ADMIN_NAV = [
+  { href: "/admin/users", label: "Users", icon: ShieldCheck },
+  { href: "/admin/field-definitions", label: "Field definitions", icon: Tags },
+];
+
 export function AppRail() {
   const pathname = usePathname();
   const { user, logout } = useSession();
@@ -29,14 +34,17 @@ export function AppRail() {
 
   return (
     <aside className="flex h-full w-56 shrink-0 flex-col border-r border-rule bg-sidebar">
-      <div className="flex h-12 items-center gap-2 border-b border-rule px-4">
+      <Link
+        href="/"
+        className="flex h-12 items-center gap-2 border-b border-rule px-4 hover:bg-secondary"
+      >
         <div className="flex h-6 w-6 items-center justify-center rounded bg-signal font-heading text-xs font-bold text-signal-foreground">
           I
         </div>
         <span className="font-heading text-sm font-semibold tracking-tight">
           Issue Tracker
         </span>
-      </div>
+      </Link>
 
       <nav className="flex-1 space-y-0.5 px-2 py-3">
         {NAV.map(({ href, label, icon: Icon, exact }) => {
@@ -58,18 +66,29 @@ export function AppRail() {
           );
         })}
         {isAdmin(user) && (
-          <Link
-            href="/admin/users"
-            className={cn(
-              "flex items-center gap-2.5 rounded px-2.5 py-1.5 text-sm transition-colors",
-              pathname.startsWith("/admin")
-                ? "bg-accent font-medium text-signal"
-                : "text-ink hover:bg-secondary",
-            )}
-          >
-            <ShieldCheck className="h-4 w-4" strokeWidth={2} />
-            Admin
-          </Link>
+          <>
+            <p className="mt-3 px-2.5 text-xs font-medium uppercase tracking-wide text-slate">
+              Admin
+            </p>
+            {ADMIN_NAV.map(({ href, label, icon: Icon }) => {
+              const active = pathname.startsWith(href);
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  className={cn(
+                    "flex items-center gap-2.5 rounded px-2.5 py-1.5 text-sm transition-colors",
+                    active
+                      ? "bg-accent font-medium text-signal"
+                      : "text-ink hover:bg-secondary",
+                  )}
+                >
+                  <Icon className="h-4 w-4" strokeWidth={2} />
+                  {label}
+                </Link>
+              );
+            })}
+          </>
         )}
       </nav>
 

@@ -10,9 +10,9 @@ import java.time.Instant;
  * cuts. That is not a shortcut: the two are the same question asked of a different attribute, and
  * duplicating a page of SQL to change one expression is how the two versions drift apart.
  *
- * <p>{@code dimensionValue} is never null. An issue with no type set reports as {@code UNSET}, which
- * is a real category and often a large one - a plain null would be dropped by most charting code and
- * the series would silently stop adding up to the total.
+ * <p>{@code dimensionValue} is never null. An issue with no type set reports as {@code UNSET},
+ * which is a real category and often a large one - a plain null would be dropped by most charting
+ * code and the series would silently stop adding up to the total.
  *
  * <p>The value read is the one frozen on the row where the issue reached {@code DONE}, so an issue
  * re-typed from {@code TASK} to {@code BUG} after delivery stays counted as what it was when it

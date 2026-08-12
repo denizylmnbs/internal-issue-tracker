@@ -9,10 +9,10 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * No mocks and no context: the detector takes two values and returns a list, so these are two values
- * and a list. What is being pinned down is mostly the null handling - every field but the name and
- * the status is nullable, and "was empty, now set" has to come out as a change rather than as
- * nothing.
+ * No mocks and no context: the detector takes two values and returns a list, so these are two
+ * values and a list. What is being pinned down is mostly the null handling - every field but the
+ * name and the status is nullable, and "was empty, now set" has to come out as a change rather than
+ * as nothing.
  */
 class IssueChangeDetectorTest {
 
@@ -25,9 +25,9 @@ class IssueChangeDetectorTest {
     issue.setProjectId(1);
     issue.setName("Login fails");
     issue.setDescription("Reproduced on staging");
-    issue.setType(IssueType.BUG);
-    issue.setStatus(IssueStatus.TODO);
-    issue.setPriority(IssuePriority.HIGH);
+    issue.setType("BUG");
+    issue.setStatus("TODO");
+    issue.setPriority("HIGH");
     issue.setStoryPoint(3);
     issue.setSprintId(10);
     issue.setAssigneeUserId(7);
@@ -43,8 +43,8 @@ class IssueChangeDetectorTest {
   }
 
   /**
-   * The case the whole no-op guard exists for: an update that restates every field with the value it
-   * already had must not reach the activity log.
+   * The case the whole no-op guard exists for: an update that restates every field with the value
+   * it already had must not reach the activity log.
    */
   @Test
   void diff_isEmpty_whenEveryFieldIsRestatedWithItsOwnValue() {
@@ -59,7 +59,7 @@ class IssueChangeDetectorTest {
     Issue issue = issue();
     IssueSnapshot before = IssueSnapshot.of(issue);
 
-    issue.setStatus(IssueStatus.IN_PROGRESS);
+    issue.setStatus("IN_PROGRESS");
 
     assertThat(detector.diff(before, issue))
         .containsExactly(new IssueFieldChange(IssueField.STATUS, "TODO", "IN_PROGRESS"));
@@ -71,7 +71,7 @@ class IssueChangeDetectorTest {
     IssueSnapshot before = IssueSnapshot.of(issue);
 
     issue.setName("Login broken");
-    issue.setPriority(IssuePriority.CRITICAL);
+    issue.setPriority("CRITICAL");
     issue.setStoryPoint(5);
     issue.setSprintId(11);
 
@@ -105,7 +105,7 @@ class IssueChangeDetectorTest {
     Issue issue = issue();
     IssueSnapshot before = IssueSnapshot.of(issue);
 
-    issue.setType(IssueType.TASK);
+    issue.setType("TASK");
 
     assertThat(detector.diff(before, issue))
         .containsExactly(new IssueFieldChange(IssueField.DETAILS, null, null));
@@ -119,7 +119,7 @@ class IssueChangeDetectorTest {
 
     issue.setName("Login broken");
     issue.setDescription("Also on production");
-    issue.setType(IssueType.TASK);
+    issue.setType("TASK");
 
     assertThat(detector.diff(before, issue))
         .containsExactly(new IssueFieldChange(IssueField.DETAILS, "Login fails", "Login broken"));

@@ -1,6 +1,9 @@
 import { apiData, apiVoid, json, toQuery } from "../client";
 import type {
   ChangeIssueAssigneeRequest,
+  ChangeIssueClassificationRequest,
+  ChangeIssueEpicRequest,
+  ChangeIssueSprintRequest,
   ChangeIssueStatusRequest,
   CreateIssueRequest,
   IssueListQuery,
@@ -40,6 +43,39 @@ export const changeIssueStatus = (
 ) =>
   apiData<IssueResponse>(
     `/api/projects/${projectId}/issues/${issueId}/status`,
+    json(body, "PATCH"),
+  );
+
+/** The narrow alternatives to updateIssue — see docs/API.md §5. Each replaces only
+ * what its path names, so moving an issue between sprints no longer means echoing
+ * its description and estimate back to keep them. */
+export const changeIssueSprint = (
+  projectId: number,
+  issueId: number,
+  body: ChangeIssueSprintRequest,
+) =>
+  apiData<IssueResponse>(
+    `/api/projects/${projectId}/issues/${issueId}/sprint`,
+    json(body, "PATCH"),
+  );
+
+export const changeIssueEpic = (
+  projectId: number,
+  issueId: number,
+  body: ChangeIssueEpicRequest,
+) =>
+  apiData<IssueResponse>(
+    `/api/projects/${projectId}/issues/${issueId}/epic`,
+    json(body, "PATCH"),
+  );
+
+export const changeIssueClassification = (
+  projectId: number,
+  issueId: number,
+  body: ChangeIssueClassificationRequest,
+) =>
+  apiData<IssueResponse>(
+    `/api/projects/${projectId}/issues/${issueId}/classification`,
     json(body, "PATCH"),
   );
 

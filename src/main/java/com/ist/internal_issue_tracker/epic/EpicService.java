@@ -9,6 +9,8 @@ import com.ist.internal_issue_tracker.epic.exception.EpicNameAlreadyExistsExcept
 import com.ist.internal_issue_tracker.epic.exception.EpicNotFoundException;
 import com.ist.internal_issue_tracker.epic.mapper.EpicMapper;
 import com.ist.internal_issue_tracker.shared.exception.AppException;
+import com.ist.internal_issue_tracker.shared.port.FieldDefinitionLookup;
+import com.ist.internal_issue_tracker.shared.port.FieldKind;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import java.time.OffsetDateTime;
@@ -25,6 +27,14 @@ public class EpicService {
   private final EpicRepository epicRepository;
   private final EpicMapper epicMapper;
   private final ProjectLookup projectLookup;
+  private final FieldDefinitionLookup fieldDefinitionLookup;
+
+  /** Throws unless {@code status} is one of this project's active {@code EPIC_STATUS} codes. */
+  private void requireValidStatus(Integer projectId, String status) {
+    if (!fieldDefinitionLookup.isValidCode(projectId, FieldKind.EPIC_STATUS, status)) {
+      throw new AppException(EpicErrorCode.EPIC_STATUS_NOT_DEFINED);
+    }
+  }
 
   /**
    * Every path into this service starts here, so an epic on a soft-deleted project is unreachable
@@ -56,8 +66,8 @@ public class EpicService {
       throw new EpicNameAlreadyExistsException(request.name());
     }
 
-    // status is left at the entity's TODO default
-    Epic epic = epicMapper.toEntity(projectId, reporterId, request);
+    String defaultStatus = fieldDefinitionLookup.defaultCode(projectId, FieldKind.EPIC_STATUS);
+    Epic epic = epicMapper.toEntity(projectId, reporterId, request, defaultStatus);
 
     Epic savedEpic;
     try {
@@ -77,7 +87,7 @@ public class EpicService {
   }
 
   public PagedResponse<EpicResponse> getEpicsByProjectId(
-      Integer projectId, String name, EpicStatus status, Integer reporterId, Pageable pageable) {
+      Integer projectId, String name, String status, Integer reporterId, Pageable pageable) {
     requireActiveProject(projectId);
 
     // derived query, so the caller's sort is honoured as-is
@@ -115,20 +125,20 @@ public class EpicService {
    * carries nothing like the sprint table's "one in progress per project" index. If this ever needs
    * narrowing, this is the one place it has to happen.
    */
-  public EpicResponse changeStatus(
-      Integer projectId, Integer epicId, ChangeStatusRequest request) {
+  public EpicResponse changeStatus(Integer projectId, Integer epicId, ChangeStatusRequest request) {
     requireActiveProject(projectId);
 
     Epic epic = requireLiveEpic(projectId, epicId);
 
+    requireValidStatus(projectId, request.status());
     epic.setStatus(request.status());
 
     return epicMapper.toResponse(epicRepository.save(epic));
   }
 
   /**
-   * Soft delete: the row stays and {@code deletedAt} is stamped. The status is left where it was, so
-   * the record still says what the epic was doing when it was dropped.
+   * Soft delete: the row stays and {@code deletedAt} is stamped. The status is left where it was,
+   * so the record still says what the epic was doing when it was dropped.
    */
   public void deleteEpic(Integer projectId, Integer epicId) {
     requireActiveProject(projectId);

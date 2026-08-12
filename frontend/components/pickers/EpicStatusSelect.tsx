@@ -8,8 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useChangeEpicStatus } from "@/lib/hooks/useEpics";
-import { EPIC_STATUSES, EPIC_STATUS_LABEL } from "@/lib/api/enums";
-import type { EpicStatus } from "@/lib/api/enums";
+import { useProjectContext } from "@/lib/project/ProjectContext";
 
 export function EpicStatusSelect({
   projectId,
@@ -19,24 +18,26 @@ export function EpicStatusSelect({
 }: {
   projectId: number;
   epicId: number;
-  status: EpicStatus;
+  status: string;
   disabled?: boolean;
 }) {
   const changeStatus = useChangeEpicStatus(projectId, epicId);
+  const { fieldDefinitionsByKind } = useProjectContext();
+  const statuses = fieldDefinitionsByKind.get("EPIC_STATUS") ?? [];
 
   return (
     <Select
       value={status}
       disabled={disabled || changeStatus.isPending}
-      onValueChange={(v) => changeStatus.mutate({ status: v as EpicStatus })}
+      onValueChange={(v) => changeStatus.mutate({ status: v })}
     >
       <SelectTrigger className="w-36">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {EPIC_STATUSES.map((s) => (
-          <SelectItem key={s} value={s}>
-            {EPIC_STATUS_LABEL[s]}
+        {statuses.map((s) => (
+          <SelectItem key={s.code} value={s.code}>
+            {s.label}
           </SelectItem>
         ))}
       </SelectContent>

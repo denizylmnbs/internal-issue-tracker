@@ -10,11 +10,18 @@ import org.springframework.stereotype.Component;
 public class IssueMapper {
 
   /**
-   * The project comes from the path and the reporter from the authenticated caller. The status is
-   * left alone so the entity's {@code BACKLOG} default stands; the priority is only overwritten when
-   * one was actually given, which is what makes omitting it fall back to {@code MEDIUM}.
+   * The project comes from the path and the reporter from the authenticated caller. {@code
+   * defaultStatus} is this project's {@code ISSUE_STATUS} default code, always applied - status has
+   * no endpoint-facing field on create. {@code defaultPriority} is this project's {@code
+   * ISSUE_PRIORITY} default, applied only when the request left priority out - what used to be the
+   * entity's {@code MEDIUM} default is now project data, resolved by {@code IssueService}.
    */
-  public Issue toEntity(Integer projectId, Integer reporterId, IssueCreateRequest request) {
+  public Issue toEntity(
+      Integer projectId,
+      Integer reporterId,
+      IssueCreateRequest request,
+      String defaultStatus,
+      String defaultPriority) {
     Issue issue = new Issue();
 
     issue.setProjectId(projectId);
@@ -22,29 +29,29 @@ public class IssueMapper {
     issue.setName(request.name());
     issue.setDescription(request.description());
     issue.setType(request.type());
+    issue.setResolvingUnit(request.resolvingUnit());
     issue.setStoryPoint(request.storyPoint());
     issue.setSprintId(request.sprintId());
     issue.setEpicId(request.epicId());
     issue.setAssigneeUserId(request.assigneeUserId());
     issue.setAssigneeTeamId(request.assigneeTeamId());
-
-    if (request.priority() != null) {
-      issue.setPriority(request.priority());
-    }
+    issue.setStatus(defaultStatus);
+    issue.setPriority(request.priority() != null ? request.priority() : defaultPriority);
 
     return issue;
   }
 
   /**
    * A replacement, so every field it owns is written even when null - omitting {@code sprintId}
-   * takes the issue out of its sprint rather than leaving it where it was. Status, assignees and the
-   * reporter are not this method's to touch.
+   * takes the issue out of its sprint rather than leaving it where it was. Status, assignees and
+   * the reporter are not this method's to touch.
    */
   public void updateEntity(Issue issue, IssueUpdateRequest request) {
     issue.setName(request.name());
     issue.setDescription(request.description());
     issue.setType(request.type());
     issue.setPriority(request.priority());
+    issue.setResolvingUnit(request.resolvingUnit());
     issue.setStoryPoint(request.storyPoint());
     issue.setSprintId(request.sprintId());
     issue.setEpicId(request.epicId());
@@ -61,6 +68,7 @@ public class IssueMapper {
         issue.getDescription(),
         issue.getStatus(),
         issue.getPriority(),
+        issue.getResolvingUnit(),
         issue.getStoryPoint(),
         issue.getReporterId(),
         issue.getAssigneeUserId(),

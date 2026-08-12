@@ -26,10 +26,13 @@ public class Team {
   @Size(min = 2, max = 255)
   private String name;
 
-  /** Optional - a team is not required to declare a discipline. */
-  @Enumerated(EnumType.STRING)
+  /**
+   * Optional - a team is not required to declare a discipline. A code from the global {@code
+   * TEAM_FIELD} field definitions, not a fixed enum - see {@code FieldDefinition}. {@code
+   * TeamService} validates it through {@code FieldDefinitionLookup} when set.
+   */
   @Column(length = 30)
-  private TeamField field;
+  private String field;
 
   /**
    * Plain user id rather than a {@code @ManyToOne User}: an association would pull a JPA dependency

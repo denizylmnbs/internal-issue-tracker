@@ -18,8 +18,8 @@ import org.springframework.web.bind.annotation.*;
 /**
  * Sprints live under their project, and the path variable holding the project is named {@code id}
  * rather than {@code projectId} on purpose: {@code SecurityConfig}'s leader check reads the literal
- * {@code "id"} variable, so this naming is what lets the existing {@code editorOrProjectLeader} rule
- * cover these routes without a sprint-shaped port of its own.
+ * {@code "id"} variable, so this naming is what lets the existing {@code editorOrProjectLeader}
+ * rule cover these routes without a sprint-shaped port of its own.
  */
 @RestController
 @RequestMapping("/api/projects/{id}/sprints")
@@ -45,7 +45,7 @@ public class SprintController {
   public ResponseEntity<ApiResponse<PagedResponse<SprintResponse>>> getSprints(
       @PathVariable Integer id,
       @RequestParam(required = false) String name,
-      @RequestParam(required = false) SprintStatus status,
+      @RequestParam(required = false) String status,
       Pageable pageable) {
     PagedResponse<SprintResponse> sprintResponse =
         sprintService.getSprintsByProjectId(id, name, status, pageable);
@@ -67,7 +67,8 @@ public class SprintController {
       @PathVariable Integer id,
       @PathVariable Integer sprintId,
       @Valid @RequestBody SprintUpdateRequest request) {
-    SprintResponse sprintResponse = sprintService.updateSprint(id, sprintId, caller.getId(), request);
+    SprintResponse sprintResponse =
+        sprintService.updateSprint(id, sprintId, caller.getId(), request);
 
     return ResponseEntity.ok(ApiResponse.ok(sprintResponse));
   }
@@ -78,7 +79,8 @@ public class SprintController {
       @PathVariable Integer id,
       @PathVariable Integer sprintId,
       @Valid @RequestBody ChangeStatusRequest request) {
-    SprintResponse sprintResponse = sprintService.changeStatus(id, sprintId, caller.getId(), request);
+    SprintResponse sprintResponse =
+        sprintService.changeStatus(id, sprintId, caller.getId(), request);
 
     return ResponseEntity.ok(ApiResponse.ok(sprintResponse));
   }

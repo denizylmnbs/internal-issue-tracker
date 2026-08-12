@@ -63,12 +63,10 @@ public class User {
   @UpdateTimestamp private OffsetDateTime updatedAt;
 
   public void changePassword(String newHashedPassword) {
-    // TODO: I will add some validations in the future
     this.passwordHashed = newHashedPassword;
   }
 
   public void changeRole(Role newRole) {
-    // TODO: I will add some validations in the future
     this.role = newRole;
   }
 }

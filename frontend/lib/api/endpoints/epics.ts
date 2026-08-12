@@ -6,7 +6,6 @@ import type {
   PagedResponse,
   UpdateEpicRequest,
 } from "../types";
-import type { EpicStatus } from "../enums";
 
 export const createEpic = (projectId: number, body: CreateEpicRequest) =>
   apiData<EpicResponse>(`/api/projects/${projectId}/epics`, json(body, "POST"));
@@ -16,7 +15,7 @@ export const getEpic = (projectId: number, epicId: number) =>
 
 export type ListEpicsQuery = {
   name?: string;
-  status?: EpicStatus;
+  status?: string;
   reporterId?: number;
   page?: number;
   size?: number;

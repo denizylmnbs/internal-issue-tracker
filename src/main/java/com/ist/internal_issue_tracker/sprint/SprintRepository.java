@@ -9,32 +9,32 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 /**
- * Every lookup here is derived rather than native: a sprint's world is one table, and the project it
- * hangs off is validated through {@code ProjectLookup} before any of these run. Nothing crosses a
- * module boundary, so none of the reasons that pushed the membership repositories into raw SQL apply
- * - which also means sorting keeps working on the list endpoint.
+ * Every lookup here is derived rather than native: a sprint's world is one table, and the project
+ * it hangs off is validated through {@code ProjectLookup} before any of these run. Nothing crosses
+ * a module boundary, so none of the reasons that pushed the membership repositories into raw SQL
+ * apply - which also means sorting keeps working on the list endpoint.
  */
 interface SprintRepository extends JpaRepository<Sprint, Integer> {
 
   /**
    * Both keys, always. Looking a sprint up by id alone would let the leader of project A pass their
-   * own project in the path and a sprint of project B alongside it: the authorization rule only ever
-   * sees the project, so the mismatch has to be caught here or not at all.
+   * own project in the path and a sprint of project B alongside it: the authorization rule only
+   * ever sees the project, so the mismatch has to be caught here or not at all.
    */
   Optional<Sprint> findByIdAndProjectIdAndDeletedAtIsNull(Integer id, Integer projectId);
 
   /**
-   * One project's live sprints in the order they ran, for {@code SprintLookupAdapter} to hand across
-   * as summaries. Unpaged on purpose - a velocity chart plots all of them - and the {@code id}
-   * tie-break keeps two sprints starting the same day in a stable order rather than whichever the
-   * planner happened to return.
+   * One project's live sprints in the order they ran, for {@code SprintLookupAdapter} to hand
+   * across as summaries. Unpaged on purpose - a velocity chart plots all of them - and the {@code
+   * id} tie-break keeps two sprints starting the same day in a stable order rather than whichever
+   * the planner happened to return.
    */
   List<Sprint> findAllByProjectIdAndDeletedAtIsNullOrderByStartDateAscIdAsc(Integer projectId);
 
   /**
-   * Scoped to the project and blind to deleted rows, matching
-   * {@code unique_active_sprint_name_per_project}: two projects may each have a "Sprint 1", and
-   * deleting one hands its name back.
+   * Scoped to the project and blind to deleted rows, matching {@code
+   * unique_active_sprint_name_per_project}: two projects may each have a "Sprint 1", and deleting
+   * one hands its name back.
    */
   boolean existsByProjectIdAndNameAndDeletedAtIsNull(Integer projectId, String name);
 
@@ -44,17 +44,17 @@ interface SprintRepository extends JpaRepository<Sprint, Integer> {
 
   /**
    * Pre-check for {@code one_active_sprint_per_project}, whose {@code WHERE} clause this mirrors
-   * term for term: that index covers {@code (project_id)} where the status is {@code IN_PROGRESS}
+   * term for term: that index covers {@code (project_id)} where {@code is_running} is true
    * <em>and</em> {@code deleted_at} is null. Dropping the {@code DeletedAtIsNull} here would make
    * this method stricter than the constraint it stands in for, refusing a sprint the database would
    * have accepted.
    */
-  boolean existsByProjectIdAndStatusAndDeletedAtIsNull(Integer projectId, SprintStatus status);
+  boolean existsByProjectIdAndIsRunningTrueAndDeletedAtIsNull(Integer projectId);
 
   /**
-   * One project's sprints, deleted ones excluded unconditionally - see
-   * {@code TeamRepository#findAllByFilters} for why that is not a caller-supplied filter, and for
-   * why {@code :name} needs the {@code CAST} that {@code :status} does not.
+   * One project's sprints, deleted ones excluded unconditionally - see {@code
+   * TeamRepository#findAllByFilters} for why that is not a caller-supplied filter, and for why
+   * {@code :name} needs the {@code CAST} that {@code :status} does not.
    */
   @Query(
       """
@@ -68,6 +68,6 @@ interface SprintRepository extends JpaRepository<Sprint, Integer> {
   Page<Sprint> findAllByFilters(
       @Param("projectId") Integer projectId,
       @Param("name") String name,
-      @Param("status") SprintStatus status,
+      @Param("status") String status,
       Pageable pageable);
 }

@@ -1,6 +1,13 @@
 /**
- * Every enum the backend exposes (docs/API.md §2). Sent and received as raw
- * uppercase strings — each mirrors a CHECK constraint in the schema.
+ * The enums that are still genuinely fixed (docs/API.md §2) — sent and
+ * received as raw uppercase strings, each mirroring a CHECK constraint in
+ * the schema. Status/type/priority/unit/team-field values used to live here
+ * too; they are now `field_definitions` rows (user-defined, per project or
+ * global) instead of a closed set — see `lib/api/types.ts`'s
+ * `FieldDefinitionResponse`/`FieldKind`, `lib/project/ProjectContext.tsx`
+ * (the six per-project kinds) and
+ * `lib/fielddef/GlobalFieldDefinitionsProvider.tsx` (PROJECT_STATUS,
+ * TEAM_FIELD).
  */
 
 export const ROLES = ["USER", "DEVELOPER", "EDITOR", "ADMIN"] as const;
@@ -22,123 +29,6 @@ export const ROLE_LABEL: Record<Role, string> = {
   DEVELOPER: "Developer",
   EDITOR: "Editor",
   ADMIN: "Admin",
-};
-
-export const TEAM_FIELDS = [
-  "BACKEND",
-  "FRONTEND",
-  "ANDROID",
-  "IOS",
-  "DESIGN",
-  "DATA",
-] as const;
-export type TeamField = (typeof TEAM_FIELDS)[number];
-
-export const PROJECT_STATUSES = [
-  "PLANNING",
-  "ACTIVE",
-  "ON_HOLD",
-  "COMPLETED",
-  "CANCELLED",
-] as const;
-export type ProjectStatus = (typeof PROJECT_STATUSES)[number];
-
-export const PROJECT_STATUS_LABEL: Record<ProjectStatus, string> = {
-  PLANNING: "Planning",
-  ACTIVE: "Active",
-  ON_HOLD: "On hold",
-  COMPLETED: "Completed",
-  CANCELLED: "Cancelled",
-};
-
-export const SPRINT_STATUSES = [
-  "TODO",
-  "IN_PROGRESS",
-  "TESTING",
-  "COMPLETED",
-] as const;
-export type SprintStatus = (typeof SPRINT_STATUSES)[number];
-
-export const SPRINT_STATUS_LABEL: Record<SprintStatus, string> = {
-  TODO: "To do",
-  IN_PROGRESS: "In progress",
-  TESTING: "Testing",
-  COMPLETED: "Completed",
-};
-
-export const EPIC_STATUSES = [
-  "TODO",
-  "IN_PROGRESS",
-  "ON_HOLD",
-  "COMPLETED",
-  "CANCELLED",
-] as const;
-export type EpicStatus = (typeof EPIC_STATUSES)[number];
-
-export const EPIC_STATUS_LABEL: Record<EpicStatus, string> = {
-  TODO: "To do",
-  IN_PROGRESS: "In progress",
-  ON_HOLD: "On hold",
-  COMPLETED: "Completed",
-  CANCELLED: "Cancelled",
-};
-
-export const ISSUE_STATUSES = [
-  "BACKLOG",
-  "TODO",
-  "IN_PROGRESS",
-  "IN_REVIEW",
-  "DONE",
-  "ON_HOLD",
-  "CANCELLED",
-] as const;
-export type IssueStatus = (typeof ISSUE_STATUSES)[number];
-
-export const ISSUE_STATUS_LABEL: Record<IssueStatus, string> = {
-  BACKLOG: "Backlog",
-  TODO: "To do",
-  IN_PROGRESS: "In progress",
-  IN_REVIEW: "In review",
-  DONE: "Done",
-  ON_HOLD: "On hold",
-  CANCELLED: "Cancelled",
-};
-
-/** Columns a board renders, left to right. Backlog and cancelled sit off-board. */
-export const BOARD_STATUSES: IssueStatus[] = [
-  "TODO",
-  "IN_PROGRESS",
-  "IN_REVIEW",
-  "DONE",
-];
-
-export const ISSUE_TYPES = [
-  "BUG",
-  "FEATURE",
-  "STORY",
-  "TASK",
-  "ENHANCEMENT",
-  "REFACTOR",
-] as const;
-export type IssueType = (typeof ISSUE_TYPES)[number];
-
-export const ISSUE_TYPE_LABEL: Record<IssueType, string> = {
-  BUG: "Bug",
-  FEATURE: "Feature",
-  STORY: "Story",
-  TASK: "Task",
-  ENHANCEMENT: "Enhancement",
-  REFACTOR: "Refactor",
-};
-
-export const ISSUE_PRIORITIES = ["LOW", "MEDIUM", "HIGH", "CRITICAL"] as const;
-export type IssuePriority = (typeof ISSUE_PRIORITIES)[number];
-
-export const ISSUE_PRIORITY_LABEL: Record<IssuePriority, string> = {
-  LOW: "Low",
-  MEDIUM: "Medium",
-  HIGH: "High",
-  CRITICAL: "Critical",
 };
 
 export const METRICS_BUCKETS = ["DAY", "WEEK", "MONTH"] as const;

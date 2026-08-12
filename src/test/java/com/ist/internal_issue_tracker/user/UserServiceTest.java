@@ -46,6 +46,12 @@ class UserServiceTest {
   @Mock private ApplicationEventPublisher eventPublisher;
   @InjectMocks private UserService userService;
 
+  private static User userWithRole(Role role) {
+    User user = new User();
+    user.changeRole(role);
+    return user;
+  }
+
   @Test
   void createUser_savesUser_whenEmailIsUnique() {
     User entity = new User();
@@ -217,9 +223,9 @@ class UserServiceTest {
   }
 
   /**
-   * The event is the only thing that takes the user off their teams and projects; those modules read
-   * {@code is_active} on the membership row and never join back to {@code users}, so losing it here
-   * would leave a deleted user on every roster they were part of.
+   * The event is the only thing that takes the user off their teams and projects; those modules
+   * read {@code is_active} on the membership row and never join back to {@code users}, so losing it
+   * here would leave a deleted user on every roster they were part of.
    */
   @Test
   void deleteUser_publishesUserDeactivatedEvent_whenExists() {
@@ -249,12 +255,6 @@ class UserServiceTest {
 
     assertThatThrownBy(() -> userService.deleteUser(1))
         .isInstanceOf(ResourceNotFoundException.class);
-  }
-
-  private static User userWithRole(Role role) {
-    User user = new User();
-    user.changeRole(role);
-    return user;
   }
 
   private void assertRoleChangeRejected(AuthenticatedUser caller, User target, Role newRole) {

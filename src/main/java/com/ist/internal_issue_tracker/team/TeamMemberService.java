@@ -34,6 +34,41 @@ public class TeamMemberService {
   private final ApplicationEventPublisher eventPublisher;
 
   /**
+   * Revives a membership that was soft-deleted, or rejects one that is still live. Removing a
+   * member only clears {@code isActive}, so the row outlives them and would collide with a fresh
+   * insert on {@code unique_active_team_membership} the moment they were added back.
+   */
+  private static TeamMember requireInactive(TeamMember membership) {
+    if (Boolean.TRUE.equals(membership.getIsActive())) {
+      throw new AppException(TeamMemberErrorCode.TEAM_MEMBER_ALREADY_EXIST);
+    }
+
+    membership.setIsActive(true);
+    return membership;
+  }
+
+  /**
+   * {@code TeamMemberResponse.joinedAt} is served from the entity's {@code updatedAt} ({@link
+   * TeamMemberMapper#toResponse}), but the derived queries above sort directly against {@link
+   * TeamMember}, which has no {@code joinedAt} property. A client sorting by the field it was shown
+   * - the only field this list actually has a meaningful order on - would otherwise fail every
+   * request with a {@code PropertyReferenceException}.
+   */
+  private static Pageable remapJoinedAtSort(Pageable pageable) {
+    Sort remapped =
+        Sort.by(
+            pageable.getSort().stream()
+                .map(
+                    order ->
+                        "joinedAt".equals(order.getProperty())
+                            ? order.withProperty("updatedAt")
+                            : order)
+                .toList());
+
+    return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), remapped);
+  }
+
+  /**
    * {@code activeTeamIdsOfUser} is cached under this name, keyed by the user id alone - see {@link
    * com.ist.internal_issue_tracker.shared.cache.RedisConfig}. Evicted here rather than left to its
    * two-minute TTL because it feeds authorization decisions directly.
@@ -46,24 +81,10 @@ public class TeamMemberService {
   }
 
   /**
-   * Revives a membership that was soft-deleted, or rejects one that is still live. Removing a member
-   * only clears {@code isActive}, so the row outlives them and would collide with a fresh insert on
-   * {@code unique_active_team_membership} the moment they were added back.
-   */
-  private static TeamMember requireInactive(TeamMember membership) {
-    if (Boolean.TRUE.equals(membership.getIsActive())) {
-      throw new AppException(TeamMemberErrorCode.TEAM_MEMBER_ALREADY_EXIST);
-    }
-
-    membership.setIsActive(true);
-    return membership;
-  }
-
-  /**
    * Adding someone who was removed earlier reactivates their original row rather than opening a
-   * second one, so a team's history stays one row per person. The row keeps the {@code createdAt} of
-   * their first ever join; what callers are shown as {@code joinedAt} is {@code updatedAt}, which
-   * this reactivation moves to now.
+   * second one, so a team's history stays one row per person. The row keeps the {@code createdAt}
+   * of their first ever join; what callers are shown as {@code joinedAt} is {@code updatedAt},
+   * which this reactivation moves to now.
    */
   public TeamMemberResponse createTeamMember(Integer teamId, TeamMemberCreateRequest request) {
     // variables
@@ -107,7 +128,8 @@ public class TeamMemberService {
     return teamMemberMapper.toResponse(savedTeamMember);
   }
 
-  public PagedResponse<TeamMemberResponse> getTeamMembersByTeamId(Integer teamId, Pageable pageable) {
+  public PagedResponse<TeamMemberResponse> getTeamMembersByTeamId(
+      Integer teamId, Pageable pageable) {
     if (!teamRepository.existsByIdAndIsActiveTrue(teamId)) {
       throw ResourceNotFoundException.of("Team", teamId);
     }
@@ -120,41 +142,21 @@ public class TeamMemberService {
   }
 
   public PagedResponse<TeamMemberResponse> getAllTeamMembers(Pageable pageable) {
-    Page<TeamMember> teamMembers = teamMemberRepository.findAllByIsActiveTrue(remapJoinedAtSort(pageable));
+    Page<TeamMember> teamMembers =
+        teamMemberRepository.findAllByIsActiveTrue(remapJoinedAtSort(pageable));
     Page<TeamMemberResponse> responsePage = teamMembers.map(teamMemberMapper::toResponse);
 
     return PagedResponse.from(responsePage);
   }
 
   /**
-   * {@code TeamMemberResponse.joinedAt} is served from the entity's {@code updatedAt} ({@link
-   * TeamMemberMapper#toResponse}), but the derived queries above sort directly against {@link
-   * TeamMember}, which has no {@code joinedAt} property. A client sorting by the field it was shown
-   * - the only field this list actually has a meaningful order on - would otherwise fail every
-   * request with a {@code PropertyReferenceException}.
-   */
-  private static Pageable remapJoinedAtSort(Pageable pageable) {
-    Sort remapped =
-        Sort.by(
-            pageable.getSort().stream()
-                .map(
-                    order ->
-                        "joinedAt".equals(order.getProperty())
-                            ? order.withProperty("updatedAt")
-                            : order)
-                .toList());
-
-    return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), remapped);
-  }
-
-  /**
    * The teams a user currently belongs to, each carrying its own name and field.
    *
    * <p>A missing user is a 404 here, not the 422 that {@code TeamMemberErrorCode.USER_NOT_FOUND}
-   * carries. That code is for a user named in a <em>request body</em> - adding a member who does not
-   * exist is a well-formed request pointing at something unusable. Here the user is the addressed
-   * resource itself, so it answers the same way {@code GET /api/users/{id}} does, and the same way
-   * {@link #getTeamMembersByTeamId} already answers for a missing team.
+   * carries. That code is for a user named in a <em>request body</em> - adding a member who does
+   * not exist is a well-formed request pointing at something unusable. Here the user is the
+   * addressed resource itself, so it answers the same way {@code GET /api/users/{id}} does, and the
+   * same way {@link #getTeamMembersByTeamId} already answers for a missing team.
    */
   public PagedResponse<UserTeamMembershipResponse> getTeamsByUserId(
       Integer userId, Pageable pageable) {

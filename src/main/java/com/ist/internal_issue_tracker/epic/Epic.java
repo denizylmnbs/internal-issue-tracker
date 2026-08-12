@@ -15,8 +15,8 @@ import org.hibernate.annotations.UpdateTimestamp;
  * A large body of work on one project, which issues are filed under.
  *
  * <p>Soft delete is a {@code deletedAt} stamp, as in {@code Sprint} and for the same reason: the
- * schema was drawn that way and it records when the epic was dropped rather than merely that it was.
- * A live row is one whose {@code deletedAt} is null.
+ * schema was drawn that way and it records when the epic was dropped rather than merely that it
+ * was. A live row is one whose {@code deletedAt} is null.
  */
 @Entity
 @Getter
@@ -49,10 +49,14 @@ public class Epic {
   @Column(columnDefinition = "text")
   private String description;
 
-  @NotNull
-  @Enumerated(EnumType.STRING)
-  @Column(nullable = false, length = 20)
-  private EpicStatus status = EpicStatus.TODO;
+  /**
+   * A code from this project's {@code EPIC_STATUS} field definitions, not a fixed enum - see
+   * {@code FieldDefinition}. {@code EpicService} resolves the default on create and validates every
+   * write through {@code FieldDefinitionLookup}; nothing here can enforce that on its own anymore.
+   */
+  @NotBlank
+  @Column(nullable = false, length = 30)
+  private String status;
 
   /**
    * Who opened the epic, taken from the authenticated caller and never from the request body.

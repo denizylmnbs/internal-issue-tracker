@@ -7,14 +7,18 @@ export class ApiClientError extends Error {
   readonly code: string;
   readonly fieldErrors?: { field: string; message: string }[];
   readonly traceId?: string;
+  /** Seconds to wait before retrying, from the backend's `Retry-After` header
+   * — only ever set alongside `code === "RATE_LIMITED"`. */
+  readonly retryAfterSeconds?: number;
 
-  constructor(status: number, error: ApiError) {
+  constructor(status: number, error: ApiError, retryAfterSeconds?: number) {
     super(humanize(error.code) ?? error.message);
     this.name = "ApiClientError";
     this.status = status;
     this.code = error.code;
     this.fieldErrors = error.fieldErrors;
     this.traceId = error.traceId;
+    this.retryAfterSeconds = retryAfterSeconds;
   }
 }
 
@@ -39,11 +43,13 @@ const MESSAGES: Record<string, string> = {
   DUPLICATE_RESOURCE: "That already exists.",
   BUSINESS_RULE_VIOLATION: "That request can't be completed as it stands.",
   PAYLOAD_TOO_LARGE: "That's too large to send.",
+  RATE_LIMITED: "Too many attempts. Please wait a moment and try again.",
   INTERNAL_ERROR: "Something went wrong on our side.",
 
   EMAIL_ALREADY_EXISTS: "That email is already registered.",
   CURRENT_PASSWORD_INCORRECT: "Current password is incorrect.",
   INVALID_CREDENTIALS: "Incorrect email or password.",
+  INVALID_REFRESH_TOKEN: "Your session has ended. Sign in again.",
   ROLE_CHANGE_NOT_PERMITTED:
     "You can't change that person's role — you don't outrank both their current and new role.",
   TEAM_NAME_ALREADY_EXISTS: "A team with that name already exists.",

@@ -13,13 +13,13 @@ import org.springframework.web.bind.annotation.*;
  * {@code id} for the reason given on {@code SprintController} - {@code SecurityConfig} reads it
  * literally.
  *
- * <p>Read-only by design and not merely by omission: an activity row is written by a listener or not
- * at all, so there is no POST, PUT or DELETE to leave out.
+ * <p>Read-only by design and not merely by omission: an activity row is written by a listener or
+ * not at all, so there is no POST, PUT or DELETE to leave out.
  *
  * <p>These are the first routes in the codebase where reading is restricted beyond being logged in.
  * Everything else falls through to {@code anyRequest().authenticated()}, which is defensible for a
- * board; a feed of who changed what and when is a different kind of thing, so it is held to the same
- * participation rule as writing.
+ * board; a feed of who changed what and when is a different kind of thing, so it is held to the
+ * same participation rule as writing.
  */
 @RestController
 @RequestMapping("/api/projects/{id}")
@@ -42,10 +42,15 @@ public class ActivityController {
         ApiResponse.ok(activityService.getSprintActivities(id, sprintId, pageable)));
   }
 
-  /** The project's own history - see {@code ActivityService#getProjectActivities}. */
+  /**
+   * The project-wide feed - see {@code ActivityService#getProjectActivities}. {@code scope} is
+   * optional; omit it (or send anything other than {@code PROJECT}) for the full union of project,
+   * issue and sprint history, or send {@code scope=PROJECT} for the project's own rows alone.
+   */
   @GetMapping("/activities")
   public ResponseEntity<ApiResponse<PagedResponse<ActivityResponse>>> getProjectActivities(
-      @PathVariable Integer id, Pageable pageable) {
-    return ResponseEntity.ok(ApiResponse.ok(activityService.getProjectActivities(id, pageable)));
+      @PathVariable Integer id, @RequestParam(required = false) String scope, Pageable pageable) {
+    return ResponseEntity.ok(
+        ApiResponse.ok(activityService.getProjectActivities(id, scope, pageable)));
   }
 }

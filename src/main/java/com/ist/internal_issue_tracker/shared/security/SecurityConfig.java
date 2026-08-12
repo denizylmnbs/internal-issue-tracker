@@ -2,6 +2,8 @@ package com.ist.internal_issue_tracker.shared.security;
 
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
+import com.ist.internal_issue_tracker.shared.ratelimit.RateLimitFilter;
+import com.ist.internal_issue_tracker.shared.ratelimit.RateLimiterService;
 import java.util.List;
 import java.util.function.BiPredicate;
 import org.springframework.beans.factory.annotation.Value;
@@ -23,6 +25,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import tools.jackson.databind.ObjectMapper;
 
 @Configuration
 @EnableWebSecurity
@@ -69,8 +72,7 @@ public class SecurityConfig {
       @Value("${app.cors.allowed-origins}") List<String> allowedOrigins) {
     CorsConfiguration configuration = new CorsConfiguration();
     configuration.setAllowedOrigins(allowedOrigins);
-    configuration.setAllowedMethods(
-        List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+    configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
     configuration.setAllowedHeaders(
         List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT));
     configuration.setExposedHeaders(List.of(HttpHeaders.LOCATION));
@@ -93,7 +95,9 @@ public class SecurityConfig {
       RoleHierarchy roleHierarchy,
       TeamLookup teamLookup,
       ProjectLookup projectLookup,
-      CorsConfigurationSource corsConfigurationSource)
+      CorsConfigurationSource corsConfigurationSource,
+      RateLimiterService rateLimiterService,
+      ObjectMapper objectMapper)
       throws Exception {
     http.csrf(csrf -> csrf.disable())
         // Ahead of the authorization rules on purpose: a CORS preflight carries no Authorization
@@ -127,6 +131,10 @@ public class SecurityConfig {
                     .hasRole("ADMIN")
                     .requestMatchers(HttpMethod.PATCH, "/api/users/{id}/role")
                     .hasRole("ADMIN")
+                    .requestMatchers(HttpMethod.GET, "/api/users/{id}/issues")
+                    .access(selfOrAdmin(roleHierarchy))
+                    .requestMatchers(HttpMethod.GET, "/api/users/{id}/sprint-progress")
+                    .access(selfOrAdmin(roleHierarchy))
                     .requestMatchers(HttpMethod.POST, "/api/teams")
                     .hasRole("EDITOR")
                     .requestMatchers(HttpMethod.DELETE, "/api/teams/{id}")
@@ -183,6 +191,14 @@ public class SecurityConfig {
                     .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
                     .requestMatchers(HttpMethod.PUT, "/api/projects/{id}/issues/{issueId}")
                     .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    // the same gate as the PUT above, because these three are that PUT taken apart
+                    .requestMatchers(HttpMethod.PATCH, "/api/projects/{id}/issues/{issueId}/sprint")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    .requestMatchers(HttpMethod.PATCH, "/api/projects/{id}/issues/{issueId}/epic")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    .requestMatchers(
+                        HttpMethod.PATCH, "/api/projects/{id}/issues/{issueId}/classification")
+                    .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
                     .requestMatchers(HttpMethod.PATCH, "/api/projects/{id}/issues/{issueId}/status")
                     .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
                     .requestMatchers(
@@ -218,11 +234,35 @@ public class SecurityConfig {
                     // that has to be able to see its own flow
                     .requestMatchers(HttpMethod.GET, "/api/projects/{id}/metrics/**")
                     .access(editorLeaderOrParticipant(roleHierarchy, projectLookup))
+                    // Project-scoped field definitions (the six per-project kinds - see FieldKind).
+                    // Reading them is as open as reading the project itself; only EDITOR+ may add,
+                    // relabel, reflag, reorder or retire one - see FieldDefinitionController.
+                    .requestMatchers(HttpMethod.GET, "/api/projects/{id}/field-definitions")
+                    .authenticated()
+                    .requestMatchers(HttpMethod.POST, "/api/projects/{id}/field-definitions")
+                    .hasRole("EDITOR")
+                    .requestMatchers(HttpMethod.PUT, "/api/projects/{id}/field-definitions/**")
+                    .hasRole("EDITOR")
+                    .requestMatchers(HttpMethod.PATCH, "/api/projects/{id}/field-definitions/**")
+                    .hasRole("EDITOR")
+                    .requestMatchers(HttpMethod.DELETE, "/api/projects/{id}/field-definitions/**")
+                    .hasRole("EDITOR")
+                    // The two global kinds (PROJECT_STATUS, TEAM_FIELD) - instance-wide, so writes
+                    // are ADMIN-only rather than EDITOR+. The GET rule has to precede the wildcard
+                    // below it, or the wildcard would shadow it and require ADMIN just to read.
+                    .requestMatchers(HttpMethod.GET, "/api/field-definitions")
+                    .authenticated()
+                    .requestMatchers("/api/field-definitions/**")
+                    .hasRole("ADMIN")
                     .anyRequest()
                     .authenticated())
         .addFilterBefore(
             new JwtAuthenticationFilter(jwtService, authenticatedUserLookup),
-            UsernamePasswordAuthenticationFilter.class);
+            UsernamePasswordAuthenticationFilter.class)
+        // JwtAuthenticationFilter'dan sonra: SecurityContext doluysa user-id bazlı, boşsa yalnızca
+        // IP bazlı limit uygulanır.
+        .addFilterAfter(
+            new RateLimitFilter(rateLimiterService, objectMapper), JwtAuthenticationFilter.class);
 
     return http.build();
   }
@@ -259,9 +299,9 @@ public class SecurityConfig {
   }
 
   /**
-   * The rule the issue routes run on: an editor, the project's leader, or anyone actually working on
-   * the project. Sprints and epics are planning artifacts and stay with the first two, but refusing
-   * a developer the right to file or move their own work would make the tracker unusable.
+   * The rule the issue routes run on: an editor, the project's leader, or anyone actually working
+   * on the project. Sprints and epics are planning artifacts and stay with the first two, but
+   * refusing a developer the right to file or move their own work would make the tracker unusable.
    *
    * <p>{@link #editorOrLeader} already takes the leadership question as a predicate, so widening it
    * is a matter of handing it a wider question rather than writing a second manager. Leadership is

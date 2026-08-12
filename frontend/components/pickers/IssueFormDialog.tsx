@@ -27,16 +27,21 @@ import { UserPicker } from "./UserPicker";
 import { TeamPicker } from "./TeamPicker";
 import { SprintPicker, EpicPicker } from "./SprintEpicPickers";
 import { useCreateIssue, useUpdateIssue } from "@/lib/hooks/useIssues";
-import { ISSUE_TYPES, ISSUE_TYPE_LABEL, ISSUE_PRIORITIES, ISSUE_PRIORITY_LABEL } from "@/lib/api/enums";
+import { useProjectContext } from "@/lib/project/ProjectContext";
 import type { IssueResponse } from "@/lib/api/types";
 
 // type is required at creation, but never a status field — nothing is ever
-// created in a chosen status (docs/API.md §2).
+// created in a chosen status (docs/API.md §2). type/priority/resolvingUnit
+// are field-definition codes now, not fixed enums — the set of valid values
+// is per-project data, so a runtime `z.enum([...])` can't be built at module
+// scope. The Selects below constrain what a caller can actually pick from;
+// this only guards against an empty submission.
 const schema = z.object({
   name: z.string().min(2, "At least 2 characters").max(255),
   description: z.string().max(5000).optional(),
-  type: z.enum(ISSUE_TYPES),
-  priority: z.enum(ISSUE_PRIORITIES),
+  type: z.string().min(1, "Required"),
+  priority: z.string().min(1, "Required"),
+  resolvingUnit: z.string().nullable(),
   storyPoint: z.number().min(0).nullable(),
   sprintId: z.number().nullable(),
   epicId: z.number().nullable(),
@@ -64,6 +69,10 @@ export function IssueFormDialog({
   const createIssue = useCreateIssue(projectId);
   const updateIssue = useUpdateIssue(projectId, issue?.id ?? 0);
   const isEdit = !!issue;
+  const { fieldDefinitionsByKind, defaultCodeFor } = useProjectContext();
+  const types = fieldDefinitionsByKind.get("ISSUE_TYPE") ?? [];
+  const priorities = fieldDefinitionsByKind.get("ISSUE_PRIORITY") ?? [];
+  const units = fieldDefinitionsByKind.get("ISSUE_UNIT") ?? [];
 
   const { register, handleSubmit, control, reset, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -73,6 +82,7 @@ export function IssueFormDialog({
           description: issue.description ?? "",
           type: issue.type,
           priority: issue.priority,
+          resolvingUnit: issue.resolvingUnit,
           storyPoint: issue.storyPoint,
           sprintId: issue.sprintId,
           epicId: issue.epicId,
@@ -82,8 +92,9 @@ export function IssueFormDialog({
       : {
           name: "",
           description: "",
-          type: "TASK",
-          priority: "MEDIUM",
+          type: defaultCodeFor("ISSUE_TYPE") ?? "",
+          priority: defaultCodeFor("ISSUE_PRIORITY") ?? "",
+          resolvingUnit: null,
           storyPoint: null,
           sprintId: defaultSprintId ?? null,
           epicId: null,
@@ -100,6 +111,7 @@ export function IssueFormDialog({
           description: values.description || undefined,
           type: values.type,
           priority: values.priority,
+          resolvingUnit: values.resolvingUnit ?? undefined,
           storyPoint: values.storyPoint ?? undefined,
           sprintId: values.sprintId ?? undefined,
           epicId: values.epicId ?? undefined,
@@ -118,6 +130,7 @@ export function IssueFormDialog({
           description: values.description || undefined,
           type: values.type,
           priority: values.priority,
+          resolvingUnit: values.resolvingUnit ?? undefined,
           storyPoint: values.storyPoint ?? undefined,
           sprintId: values.sprintId ?? undefined,
           epicId: values.epicId ?? undefined,
@@ -170,9 +183,9 @@ export function IssueFormDialog({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {ISSUE_TYPES.map((t) => (
-                          <SelectItem key={t} value={t}>
-                            {ISSUE_TYPE_LABEL[t]}
+                        {types.map((t) => (
+                          <SelectItem key={t.code} value={t.code}>
+                            {t.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -191,9 +204,9 @@ export function IssueFormDialog({
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        {ISSUE_PRIORITIES.map((p) => (
-                          <SelectItem key={p} value={p}>
-                            {ISSUE_PRIORITY_LABEL[p]}
+                        {priorities.map((p) => (
+                          <SelectItem key={p.code} value={p.code}>
+                            {p.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -201,6 +214,32 @@ export function IssueFormDialog({
                   )}
                 />
               </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Resolving unit</Label>
+              <Controller
+                control={control}
+                name="resolvingUnit"
+                render={({ field }) => (
+                  <Select
+                    value={field.value ?? "NONE"}
+                    onValueChange={(v) => field.onChange(v === "NONE" ? null : v)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">Unassigned</SelectItem>
+                      {units.map((u) => (
+                        <SelectItem key={u.code} value={u.code}>
+                          {u.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-3">

@@ -49,8 +49,9 @@ interface ProjectMemberRepository extends JpaRepository<ProjectMember, Integer> 
       Integer projectId, Integer userId);
 
   /**
-   * Everyone working on the project, counted once. {@code UNION} removes the overlap between the two
-   * routes, which is the whole reason this is not two additions - and the whole reason it is native.
+   * Everyone working on the project, counted once. {@code UNION} removes the overlap between the
+   * two routes, which is the whole reason this is not two additions - and the whole reason it is
+   * native.
    */
   @Query(
       value =
@@ -74,8 +75,8 @@ interface ProjectMemberRepository extends JpaRepository<ProjectMember, Integer> 
    * team half is {@code ProjectTeamRepository#existsByProjectIdAndTeamIdInAndIsActiveTrue}, and
    * {@link ProjectLookupAdapter} is where the two are put together.
    *
-   * <p>This used to be one JPQL query joining {@code TeamMember} - {@code team}'s entity, named from
-   * inside {@code project}. Splitting it costs a second round trip only for users who are not
+   * <p>This used to be one JPQL query joining {@code TeamMember} - {@code team}'s entity, named
+   * from inside {@code project}. Splitting it costs a second round trip only for users who are not
    * directly assigned; the direct case still answers in one.
    */
   boolean existsByProjectIdAndUserIdAndIsActiveTrue(Integer projectId, Integer userId);
@@ -120,14 +121,15 @@ interface ProjectMemberRepository extends JpaRepository<ProjectMember, Integer> 
 
   /**
    * The same union read from the other end: the projects one user works on, each carrying enough of
-   * itself to render a list without a lookup per row. The {@code projects} join is here for the name
-   * and status, not to filter - deleting a project retires its assignment rows, so none of them
-   * reach this query in the first place, which is also why the count query needs no join at all.
+   * itself to render a list without a lookup per row. The {@code projects} join is here for the
+   * name and status, not to filter - deleting a project retires its assignment rows, so none of
+   * them reach this query in the first place, which is also why the count query needs no join at
+   * all.
    *
    * <p>The team route used to be a join onto {@code team_users}. It is now a plain {@code IN} over
    * team ids the caller has already resolved through {@code TeamLookup}, which leaves this query
-   * reading nothing but {@code project}'s own tables. {@code teamIds} must not be empty - see {@code
-   * ProjectMemberService#getProjectsByUserId}.
+   * reading nothing but {@code project}'s own tables. {@code teamIds} must not be empty - see
+   * {@code ProjectMemberService#getProjectsByUserId}.
    */
   @Query(
       value =

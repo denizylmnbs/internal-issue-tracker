@@ -8,8 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useChangeSprintStatus } from "@/lib/hooks/useSprints";
-import { SPRINT_STATUSES, SPRINT_STATUS_LABEL } from "@/lib/api/enums";
-import type { SprintStatus } from "@/lib/api/enums";
+import { useProjectContext } from "@/lib/project/ProjectContext";
 
 /** A project may have only one running sprint at a time — attempting a
  * second surfaces 409 SPRINT_ALREADY_IN_PROGRESS as a toast via the shared
@@ -22,24 +21,26 @@ export function SprintStatusSelect({
 }: {
   projectId: number;
   sprintId: number;
-  status: SprintStatus;
+  status: string;
   disabled?: boolean;
 }) {
   const changeStatus = useChangeSprintStatus(projectId, sprintId);
+  const { fieldDefinitionsByKind } = useProjectContext();
+  const statuses = fieldDefinitionsByKind.get("SPRINT_STATUS") ?? [];
 
   return (
     <Select
       value={status}
       disabled={disabled || changeStatus.isPending}
-      onValueChange={(v) => changeStatus.mutate({ status: v as SprintStatus })}
+      onValueChange={(v) => changeStatus.mutate({ status: v })}
     >
       <SelectTrigger className="w-36">
         <SelectValue />
       </SelectTrigger>
       <SelectContent>
-        {SPRINT_STATUSES.map((s) => (
-          <SelectItem key={s} value={s}>
-            {SPRINT_STATUS_LABEL[s]}
+        {statuses.map((s) => (
+          <SelectItem key={s.code} value={s.code}>
+            {s.label}
           </SelectItem>
         ))}
       </SelectContent>

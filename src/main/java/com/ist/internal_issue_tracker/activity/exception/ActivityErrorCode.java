@@ -5,8 +5,8 @@ import org.springframework.http.HttpStatus;
 
 /**
  * All {@code 404}, unlike {@code IssueErrorCode}'s reference codes: here the thing being addressed
- * <em>is</em> the subject of the request rather than something it points at, so a missing issue means
- * the history being asked for does not exist.
+ * <em>is</em> the subject of the request rather than something it points at, so a missing issue
+ * means the history being asked for does not exist.
  */
 public enum ActivityErrorCode implements ErrorCode {
   PROJECT_NOT_FOUND(HttpStatus.NOT_FOUND, "This project does not exist."),

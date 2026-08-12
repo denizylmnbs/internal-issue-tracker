@@ -36,12 +36,6 @@ public class ProjectTeamService {
   private final TeamLookup teamLookup;
   private final ApplicationEventPublisher eventPublisher;
 
-  private void requireActiveProject(Integer projectId) {
-    if (!projectRepository.existsByIdAndIsActiveTrue(projectId)) {
-      throw new ProjectNotFoundException(projectId);
-    }
-  }
-
   /**
    * Revives an assignment that was soft-deleted, or rejects one that is still live - the mirror of
    * {@code ProjectMemberService}'s, over {@code unique_active_project_team}.
@@ -53,6 +47,12 @@ public class ProjectTeamService {
 
     assignment.setIsActive(true);
     return assignment;
+  }
+
+  private void requireActiveProject(Integer projectId) {
+    if (!projectRepository.existsByIdAndIsActiveTrue(projectId)) {
+      throw new ProjectNotFoundException(projectId);
+    }
   }
 
   /**

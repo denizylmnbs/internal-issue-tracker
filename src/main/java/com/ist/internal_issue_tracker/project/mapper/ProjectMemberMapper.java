@@ -2,7 +2,6 @@ package com.ist.internal_issue_tracker.project.mapper;
 
 import com.ist.internal_issue_tracker.project.ProjectMember;
 import com.ist.internal_issue_tracker.project.ProjectParticipant;
-import com.ist.internal_issue_tracker.project.ProjectStatus;
 import com.ist.internal_issue_tracker.project.UserProject;
 import com.ist.internal_issue_tracker.project.dto.ProjectMemberCreateRequest;
 import com.ist.internal_issue_tracker.project.dto.ProjectMemberResponse;
@@ -27,21 +26,28 @@ public class ProjectMemberMapper {
         participant.getUserId(), Boolean.TRUE.equals(participant.getDirectlyAssigned()));
   }
 
-  /** The status arrives as the raw column value, since a native projection cannot convert it. */
   public UserProjectMembershipResponse toUserProjectResponse(UserProject userProject) {
     return new UserProjectMembershipResponse(
         userProject.getProjectId(),
         userProject.getProjectName(),
-        ProjectStatus.valueOf(userProject.getProjectStatus()),
+        userProject.getProjectStatus(),
         Boolean.TRUE.equals(userProject.getDirectlyAssigned()));
   }
 
+  /**
+   * {@code updatedAt} is nullable (no default, unlike {@code createdAt}) for any row that has never
+   * gone through Hibernate's {@code @UpdateTimestamp} path. Falling back to {@code createdAt} there
+   * is not a guess: for a membership never touched since it was created, "joined" and "created" are
+   * the same moment.
+   */
   public ProjectMemberResponse toResponse(ProjectMember projectMember) {
     return new ProjectMemberResponse(
         projectMember.getId(),
         projectMember.getUserId(),
         projectMember.getProjectId(),
         projectMember.getIsActive(),
-        projectMember.getUpdatedAt());
+        projectMember.getUpdatedAt() != null
+            ? projectMember.getUpdatedAt()
+            : projectMember.getCreatedAt());
   }
 }

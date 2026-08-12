@@ -58,9 +58,8 @@ export function IssueSpine({ projectId, issueId }: { projectId: number; issueId:
               />
             ) : (
               <ActivityRow
-                key={`a${item.data.id}`}
+                key={`a-${item.data.scope}-${item.data.id}`}
                 activity={item.data}
-                domain="issue"
                 projectId={projectId}
                 showDate={showDate}
               />

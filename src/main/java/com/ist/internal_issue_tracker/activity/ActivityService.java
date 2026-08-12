@@ -30,12 +30,20 @@ public class ActivityService {
   /**
    * The caller's sort is deliberately dropped in favour of newest-first.
    *
-   * <p>A history read in an arbitrary order is not a history, and the id tie-break is not decoration:
-   * one operation writes several rows carrying the same instant - a rename, a re-prioritisation and a
-   * re-estimate from a single update - so ordering on the timestamp alone leaves them in whatever
-   * order the database happens to return.
+   * <p>A history read in an arbitrary order is not a history, and the id tie-break is not
+   * decoration: one operation writes several rows carrying the same instant - a rename, a
+   * re-prioritisation and a re-estimate from a single update - so ordering on the timestamp alone
+   * leaves them in whatever order the database happens to return.
    */
   private static final Sort NEWEST_FIRST = Sort.by(Sort.Direction.DESC, "createdAt", "id");
+
+  /**
+   * Same tie-break as {@link #NEWEST_FIRST}, but against the union query's own column names ({@code
+   * created_at}, {@code id}) rather than JPA property names - {@link
+   * ProjectActivityRepository#findFeedByProjectId} is native, so this is what Spring Data appends
+   * as the query's {@code ORDER BY}.
+   */
+  private static final Sort FEED_NEWEST_FIRST = Sort.by(Sort.Direction.DESC, "created_at", "id");
 
   private final IssueActivityRepository issueActivityRepository;
   private final SprintActivityRepository sprintActivityRepository;
@@ -45,14 +53,18 @@ public class ActivityService {
   private final IssueLookup issueLookup;
   private final SprintLookup sprintLookup;
 
+  private static Pageable newestFirst(Pageable pageable) {
+    return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), NEWEST_FIRST);
+  }
+
+  private static Pageable feedNewestFirst(Pageable pageable) {
+    return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), FEED_NEWEST_FIRST);
+  }
+
   private void requireActiveProject(Integer projectId) {
     if (!projectLookup.existsActiveProject(projectId)) {
       throw new AppException(ActivityErrorCode.PROJECT_NOT_FOUND);
     }
-  }
-
-  private static Pageable newestFirst(Pageable pageable) {
-    return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), NEWEST_FIRST);
   }
 
   /**
@@ -88,16 +100,31 @@ public class ActivityService {
   }
 
   /**
-   * The project's own history - who led it, when it changed status, who was put on it. Not the
-   * issues' history, which is read per issue: merging the three tables into one feed would mean a
-   * union across them, and the three answer different questions.
+   * Everything that happened on the project - its own history plus every issue's and every
+   * sprint's, merged into one feed and ordered by when each thing happened rather than which table
+   * it lives in. That is what a client watching "this project" actually wants: a status change on
+   * an issue and a team being added to the project are both project activity, even though they are
+   * two different tables underneath.
+   *
+   * <p>{@code scope = "PROJECT"} opts back into the old, narrower read - the project's own history
+   * alone, none of its issues' or sprints'. Nothing in this codebase asks for that today, but the
+   * union is strictly more expensive, so a caller that only ever wants project-level rows (say, an
+   * audit screen with no interest in issue churn) has a cheaper path available.
    */
-  public PagedResponse<ActivityResponse> getProjectActivities(Integer projectId, Pageable pageable) {
+  public PagedResponse<ActivityResponse> getProjectActivities(
+      Integer projectId, String scope, Pageable pageable) {
     requireActiveProject(projectId);
+
+    if ("PROJECT".equalsIgnoreCase(scope)) {
+      return PagedResponse.from(
+          projectActivityRepository
+              .findAllByProjectId(projectId, newestFirst(pageable))
+              .map(activityMapper::toResponse));
+    }
 
     return PagedResponse.from(
         projectActivityRepository
-            .findAllByProjectId(projectId, newestFirst(pageable))
+            .findFeedByProjectId(projectId, feedNewestFirst(pageable))
             .map(activityMapper::toResponse));
   }
 }

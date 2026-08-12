@@ -3,24 +3,32 @@ import { cn } from "@/lib/utils";
 import { IssueStatusChip } from "@/components/shell/chips";
 import { IssueCard } from "./IssueCard";
 import type { IssueResponse } from "@/lib/api/types";
-import type { IssueStatus } from "@/lib/api/enums";
+import type { FieldDefinitionResponse } from "@/lib/api/types";
 
 export function BoardColumn({
   status,
   issues,
   projectId,
+  canWriteIssue,
+  currentUserId,
 }: {
-  status: IssueStatus;
+  /** The ISSUE_STATUS field definition this column renders — its `code` is
+   * both the droppable id and what a dropped card's status is set to. */
+  status: FieldDefinitionResponse;
   issues: IssueResponse[];
   projectId: number;
+  /** Editor / project leader / the issue's own assignee — see lib/auth/can.ts. */
+  canWriteIssue: (issue: IssueResponse) => boolean;
+  /** Highlights cards assigned to the signed-in user. */
+  currentUserId?: number;
 }) {
-  const { setNodeRef, isOver } = useDroppable({ id: status });
+  const { setNodeRef, isOver } = useDroppable({ id: status.code });
   const points = issues.reduce((sum, i) => sum + (i.storyPoint ?? 0), 0);
 
   return (
     <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded border border-rule">
       <div className="flex items-center justify-between border-b border-rule bg-secondary px-2 py-1.5">
-        <IssueStatusChip status={status} />
+        <IssueStatusChip status={status.code} />
         <span className="font-data text-xs text-slate">
           {issues.length} · {points}pt
         </span>
@@ -28,14 +36,22 @@ export function BoardColumn({
       <div
         ref={setNodeRef}
         className={cn(
-          "flex min-h-24 flex-1 flex-col gap-2 p-2 transition-colors",
+          "flex min-h-24 flex-1 flex-col gap-2 overflow-y-auto p-2 transition-colors",
           isOver && "bg-accent",
         )}
       >
         {issues.length === 0 ? (
           <p className="p-2 text-xs text-slate">Empty</p>
         ) : (
-          issues.map((issue) => <IssueCard key={issue.id} issue={issue} projectId={projectId} />)
+          issues.map((issue) => (
+            <IssueCard
+              key={issue.id}
+              issue={issue}
+              projectId={projectId}
+              disabled={!canWriteIssue(issue)}
+              currentUserId={currentUserId}
+            />
+          ))
         )}
       </div>
     </div>

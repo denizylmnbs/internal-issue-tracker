@@ -1,6 +1,9 @@
 package com.ist.internal_issue_tracker.issue;
 
 import com.ist.internal_issue_tracker.issue.dto.ChangeAssigneeRequest;
+import com.ist.internal_issue_tracker.issue.dto.ChangeClassificationRequest;
+import com.ist.internal_issue_tracker.issue.dto.ChangeEpicRequest;
+import com.ist.internal_issue_tracker.issue.dto.ChangeSprintRequest;
 import com.ist.internal_issue_tracker.issue.dto.ChangeStatusRequest;
 import com.ist.internal_issue_tracker.issue.dto.IssueCreateRequest;
 import com.ist.internal_issue_tracker.issue.dto.IssueResponse;
@@ -21,8 +24,8 @@ import org.springframework.web.bind.annotation.*;
  * rather than {@code projectId} for the reason given on {@code SprintController}.
  *
  * <p>These are the first routes open to project participants rather than only editors and leaders,
- * which is what {@code SecurityConfig}'s {@code editorLeaderOrParticipant} is for. Deleting an issue
- * stays with editors and leaders.
+ * which is what {@code SecurityConfig}'s {@code editorLeaderOrParticipant} is for. Deleting an
+ * issue stays with editors and leaders.
  *
  * <p>Every write here passes the caller down as well as the request - see {@link IssueService} for
  * what that identity is for and why it is taken from the principal rather than the body.
@@ -55,9 +58,10 @@ public class IssueController {
   public ResponseEntity<ApiResponse<PagedResponse<IssueResponse>>> getIssues(
       @PathVariable Integer id,
       @RequestParam(required = false) String name,
-      @RequestParam(required = false) IssueType type,
-      @RequestParam(required = false) IssueStatus status,
-      @RequestParam(required = false) IssuePriority priority,
+      @RequestParam(required = false) String type,
+      @RequestParam(required = false) String status,
+      @RequestParam(required = false) String priority,
+      @RequestParam(required = false) String resolvingUnit,
       @RequestParam(required = false) Integer sprintId,
       @RequestParam(required = false) Integer epicId,
       @RequestParam(required = false) Integer reporterId,
@@ -71,6 +75,7 @@ public class IssueController {
             type,
             status,
             priority,
+            resolvingUnit,
             sprintId,
             epicId,
             reporterId,
@@ -107,6 +112,46 @@ public class IssueController {
       @PathVariable Integer issueId,
       @Valid @RequestBody ChangeStatusRequest request) {
     IssueResponse issueResponse = issueService.changeStatus(id, issueId, caller.getId(), request);
+
+    return ResponseEntity.ok(ApiResponse.ok(issueResponse));
+  }
+
+  /**
+   * The three that follow are {@link IssueUpdateRequest} taken apart along the lines a board and a
+   * backlog actually move things: a sprint at a time, an epic at a time, a classification at a
+   * time. The full replacement stays for the edit form, which is the one caller that really does
+   * hold every field.
+   */
+  @PatchMapping("/{issueId}/sprint")
+  public ResponseEntity<ApiResponse<IssueResponse>> changeSprint(
+      @AuthenticationPrincipal AuthenticatedUser caller,
+      @PathVariable Integer id,
+      @PathVariable Integer issueId,
+      @Valid @RequestBody ChangeSprintRequest request) {
+    IssueResponse issueResponse = issueService.changeSprint(id, issueId, caller.getId(), request);
+
+    return ResponseEntity.ok(ApiResponse.ok(issueResponse));
+  }
+
+  @PatchMapping("/{issueId}/epic")
+  public ResponseEntity<ApiResponse<IssueResponse>> changeEpic(
+      @AuthenticationPrincipal AuthenticatedUser caller,
+      @PathVariable Integer id,
+      @PathVariable Integer issueId,
+      @Valid @RequestBody ChangeEpicRequest request) {
+    IssueResponse issueResponse = issueService.changeEpic(id, issueId, caller.getId(), request);
+
+    return ResponseEntity.ok(ApiResponse.ok(issueResponse));
+  }
+
+  @PatchMapping("/{issueId}/classification")
+  public ResponseEntity<ApiResponse<IssueResponse>> changeClassification(
+      @AuthenticationPrincipal AuthenticatedUser caller,
+      @PathVariable Integer id,
+      @PathVariable Integer issueId,
+      @Valid @RequestBody ChangeClassificationRequest request) {
+    IssueResponse issueResponse =
+        issueService.changeClassification(id, issueId, caller.getId(), request);
 
     return ResponseEntity.ok(ApiResponse.ok(issueResponse));
   }

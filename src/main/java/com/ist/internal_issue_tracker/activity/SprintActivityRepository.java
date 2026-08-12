@@ -8,8 +8,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 /** Append and read back - see {@link IssueActivityRepository}. */
 interface SprintActivityRepository extends JpaRepository<SprintActivity, Integer> {
 
-  /** Guards the replayed event, and is a check rather than an index for the reason given on {@link
-   * IssueActivityRepository#existsByIssueIdAndActionTypeAndCreatedAt}. */
+  /**
+   * Guards the replayed event, and is a check rather than an index for the reason given on {@link
+   * IssueActivityRepository#existsByIssueIdAndActionTypeAndCreatedAt}.
+   */
   boolean existsBySprintIdAndActionTypeAndCreatedAt(
       Integer sprintId, SprintActionType actionType, OffsetDateTime createdAt);
 

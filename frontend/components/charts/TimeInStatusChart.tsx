@@ -4,7 +4,7 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGri
 import { ChartCard } from "./ChartCard";
 import { CHART, TOOLTIP_STYLE, AXIS_STYLE } from "./colors";
 import { formatDurationSeconds } from "@/lib/format";
-import { ISSUE_STATUS_LABEL } from "@/lib/api/enums";
+import { useProjectContext } from "@/lib/project/ProjectContext";
 import type { TimeInStatusResponse } from "@/lib/api/types";
 
 /** Read across the entries: a large total against a small count is where a
@@ -17,9 +17,10 @@ export function TimeInStatusChart({
   data: TimeInStatusResponse | undefined;
   isLoading: boolean;
 }) {
+  const { resolveField } = useProjectContext();
   const rows = [...(data?.entries ?? [])]
     .sort((a, b) => b.totalSeconds - a.totalSeconds)
-    .map((e) => ({ ...e, label: ISSUE_STATUS_LABEL[e.status] }));
+    .map((e) => ({ ...e, label: resolveField("ISSUE_STATUS", e.status)?.label ?? e.status }));
 
   return (
     <ChartCard title="Time in status" subtitle="where the time went">

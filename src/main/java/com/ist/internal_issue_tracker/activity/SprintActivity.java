@@ -13,8 +13,9 @@ import lombok.Setter;
  * - see it for why the ids are plain integers and why {@code createdAt} is not a
  * {@code @CreationTimestamp}.
  *
- * <p>No {@code projectId} here, because the table has none. A sprint's history is read through the
- * sprint, and the project it belongs to is resolved through {@code SprintLookup}.
+ * <p>{@code projectId} was added by {@code V4__sprint_activities_project_id.sql}, mirroring the
+ * column {@code V2} added to {@code issue_activities} and for the same reason: it is what lets the
+ * project-wide activity feed union this table without reading {@code sprint}'s own table.
  */
 @Entity
 @Getter
@@ -30,6 +31,10 @@ public class SprintActivity {
   @NotNull
   @Column(nullable = false, updatable = false)
   private Integer sprintId;
+
+  @NotNull
+  @Column(nullable = false, updatable = false)
+  private Integer projectId;
 
   /** Who made the change. */
   @NotNull

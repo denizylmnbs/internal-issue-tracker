@@ -13,9 +13,9 @@ import org.hibernate.annotations.UpdateTimestamp;
  * long as this row is active.
  *
  * <p>Owned by {@code project}, not {@code team}: a team has no business knowing which projects it
- * has been put on, while a project very much needs to know which teams it works with. {@code teamId}
- * is a plain id validated through {@code TeamLookup}, which keeps the dependency one-way and out of
- * the type system entirely.
+ * has been put on, while a project very much needs to know which teams it works with. {@code
+ * teamId} is a plain id validated through {@code TeamLookup}, which keeps the dependency one-way
+ * and out of the type system entirely.
  */
 @Entity
 @Getter
