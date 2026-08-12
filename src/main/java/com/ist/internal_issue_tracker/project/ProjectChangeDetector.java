@@ -41,10 +41,6 @@ class ProjectChangeDetector {
             nameChanged ? after.getName() : null));
   }
 
-  private static String name(Enum<?> value) {
-    return value == null ? null : value.name();
-  }
-
   private static String number(Integer value) {
     return value == null ? null : String.valueOf(value);
   }
@@ -60,10 +56,9 @@ class ProjectChangeDetector {
               ProjectField.LEADER, number(before.leaderId()), number(after.getLeaderId())));
     }
 
-    if (before.status() != after.getStatus()) {
+    if (!Objects.equals(before.status(), after.getStatus())) {
       changes.add(
-          new ProjectFieldChange(
-              ProjectField.STATUS, name(before.status()), name(after.getStatus())));
+          new ProjectFieldChange(ProjectField.STATUS, before.status(), after.getStatus()));
     }
 
     return changes;

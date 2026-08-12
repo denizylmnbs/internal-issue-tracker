@@ -6,6 +6,7 @@ import com.ist.internal_issue_tracker.project.dto.ProjectCreateRequest;
 import com.ist.internal_issue_tracker.project.dto.ProjectDetailResponse;
 import com.ist.internal_issue_tracker.project.dto.ProjectResponse;
 import com.ist.internal_issue_tracker.project.dto.ProjectUpdateRequest;
+import com.ist.internal_issue_tracker.project.exception.ProjectErrorCode;
 import com.ist.internal_issue_tracker.project.exception.ProjectLeaderNotFoundException;
 import com.ist.internal_issue_tracker.project.exception.ProjectNameAlreadyExistsException;
 import com.ist.internal_issue_tracker.project.exception.ProjectNotFoundException;
@@ -15,6 +16,10 @@ import com.ist.internal_issue_tracker.shared.event.ProjectCreatedEvent;
 import com.ist.internal_issue_tracker.shared.event.ProjectDeactivatedEvent;
 import com.ist.internal_issue_tracker.shared.event.ProjectDeletedEvent;
 import com.ist.internal_issue_tracker.shared.event.ProjectFieldChange;
+import com.ist.internal_issue_tracker.shared.exception.AppException;
+import com.ist.internal_issue_tracker.shared.port.FieldDefinitionLookup;
+import com.ist.internal_issue_tracker.shared.port.FieldDefinitionProvisioning;
+import com.ist.internal_issue_tracker.shared.port.FieldKind;
 import com.ist.internal_issue_tracker.shared.port.UserLookup;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import java.time.LocalDate;
@@ -45,6 +50,8 @@ public class ProjectService {
   private final ProjectMapper projectMapper;
   private final ProjectChangeDetector projectChangeDetector;
   private final UserLookup userLookup;
+  private final FieldDefinitionLookup fieldDefinitionLookup;
+  private final FieldDefinitionProvisioning fieldDefinitionProvisioning;
   private final ApplicationEventPublisher eventPublisher;
   private final CacheManager cacheManager;
 
@@ -110,8 +117,10 @@ public class ProjectService {
       requireActiveUser(request.leaderId());
     }
 
-    // map to entity - the status is left at the entity's PLANNING default
-    Project project = projectMapper.toEntity(request);
+    // map to entity, with the global PROJECT_STATUS default resolved here now that the
+    // vocabulary is field-definition data rather than a hardcoded entity default
+    String defaultStatus = fieldDefinitionLookup.defaultCode(null, FieldKind.PROJECT_STATUS);
+    Project project = projectMapper.toEntity(request, defaultStatus);
 
     // save to db and prevent race conditions
     Project savedProject;
@@ -121,6 +130,9 @@ public class ProjectService {
       // only unique constraint on Project currently is name, revisit if a second one is added
       throw new ProjectNameAlreadyExistsException(request.name());
     }
+
+    // seeded in the same transaction as the project itself - see FieldDefinitionProvisioning
+    fieldDefinitionProvisioning.seedDefaults(savedProject.getId());
 
     eventPublisher.publishEvent(
         new ProjectCreatedEvent(savedProject.getId(), actorId, OffsetDateTime.now()));
@@ -140,7 +152,7 @@ public class ProjectService {
 
   public PagedResponse<ProjectResponse> getAllProjects(
       String name,
-      ProjectStatus status,
+      String status,
       Integer leaderId,
       LocalDate startDateAfter,
       LocalDate endDateBefore,
@@ -232,6 +244,10 @@ public class ProjectService {
   @Transactional
   public ProjectResponse changeStatus(Integer id, Integer actorId, ChangeStatusRequest request) {
     Project project = requireActiveProject(id);
+
+    if (!fieldDefinitionLookup.isValidCode(null, FieldKind.PROJECT_STATUS, request.status())) {
+      throw new AppException(ProjectErrorCode.PROJECT_STATUS_NOT_DEFINED);
+    }
 
     ProjectSnapshot before = ProjectSnapshot.of(project);
 

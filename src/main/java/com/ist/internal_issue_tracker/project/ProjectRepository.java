@@ -58,7 +58,7 @@ interface ProjectRepository extends JpaRepository<Project, Integer> {
             """)
   Page<Project> findAllByFilters(
       @Param("name") String name,
-      @Param("status") ProjectStatus status,
+      @Param("status") String status,
       @Param("leaderId") Integer leaderId,
       @Param("startDateAfter") LocalDate startDateAfter,
       @Param("endDateBefore") LocalDate endDateBefore,

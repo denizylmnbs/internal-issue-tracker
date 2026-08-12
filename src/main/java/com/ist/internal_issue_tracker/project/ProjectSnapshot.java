@@ -12,7 +12,7 @@ record ProjectSnapshot(
     LocalDate startDate,
     LocalDate endDate,
     Integer leaderId,
-    ProjectStatus status) {
+    String status) {
 
   static ProjectSnapshot of(Project project) {
     return new ProjectSnapshot(

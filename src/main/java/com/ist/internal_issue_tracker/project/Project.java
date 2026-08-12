@@ -52,10 +52,15 @@ public class Project {
    */
   private Integer leaderId;
 
-  @NotNull
-  @Enumerated(EnumType.STRING)
-  @Column(nullable = false, length = 20)
-  private ProjectStatus status = ProjectStatus.PLANNING;
+  /**
+   * A code from the global {@code PROJECT_STATUS} field definitions, not a fixed enum - see {@code
+   * FieldDefinition}. Global rather than project-scoped, unlike the other six kinds: a project
+   * cannot own the vocabulary used to list projects. {@code ProjectService} resolves the default on
+   * create and validates every write through {@code FieldDefinitionLookup}.
+   */
+  @NotBlank
+  @Column(nullable = false, length = 30)
+  private String status;
 
   /** Soft-delete flag. Independent of {@link #status} - see {@link ProjectStatus}. */
   @NotNull

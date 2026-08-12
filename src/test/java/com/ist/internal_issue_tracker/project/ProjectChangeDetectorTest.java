@@ -23,7 +23,7 @@ class ProjectChangeDetectorTest {
     project.setStartDate(LocalDate.of(2026, 1, 1));
     project.setEndDate(LocalDate.of(2026, 6, 1));
     project.setLeaderId(2);
-    project.setStatus(ProjectStatus.PLANNING);
+    project.setStatus("PLANNING");
     return project;
   }
 
@@ -83,7 +83,7 @@ class ProjectChangeDetectorTest {
 
     project.setName("Apollo II");
     project.setLeaderId(9);
-    project.setStatus(ProjectStatus.ACTIVE);
+    project.setStatus("ACTIVE");
 
     assertThat(detector.diff(before, project))
         .containsExactly(

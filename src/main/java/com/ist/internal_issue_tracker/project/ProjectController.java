@@ -53,7 +53,7 @@ public class ProjectController {
   @GetMapping
   public ResponseEntity<ApiResponse<PagedResponse<ProjectResponse>>> getAllProjects(
       @RequestParam(required = false) String name,
-      @RequestParam(required = false) ProjectStatus status,
+      @RequestParam(required = false) String status,
       @RequestParam(required = false) Integer leaderId,
       @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
           LocalDate startDateAfter,
