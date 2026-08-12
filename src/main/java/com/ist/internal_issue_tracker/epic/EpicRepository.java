@@ -54,7 +54,7 @@ interface EpicRepository extends JpaRepository<Epic, Integer> {
   Page<Epic> findAllByFilters(
       @Param("projectId") Integer projectId,
       @Param("name") String name,
-      @Param("status") EpicStatus status,
+      @Param("status") String status,
       @Param("reporterId") Integer reporterId,
       Pageable pageable);
 }
