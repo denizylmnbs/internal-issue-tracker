@@ -19,8 +19,8 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * Runs after {@link com.ist.internal_issue_tracker.shared.security.JwtAuthenticationFilter}, so
- * the SecurityContext is already populated when this checks for an authenticated principal.
+ * Runs after {@link com.ist.internal_issue_tracker.shared.security.JwtAuthenticationFilter}, so the
+ * SecurityContext is already populated when this checks for an authenticated principal.
  *
  * <p>The two buckets are exclusive, not stacked: an authenticated request is checked only against
  * its user bucket, never the IP one. Sharing a single IP bucket across every authenticated request
@@ -46,12 +46,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
       throws ServletException, IOException {
 
     Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-    boolean allowed;
-    if (authentication != null && authentication.getPrincipal() instanceof AuthenticatedUser user) {
-      allowed = rateLimiterService.tryConsume("user:" + user.getId(), RateLimiterService.perUser());
-    } else {
-      allowed = rateLimiterService.tryConsume("ip:" + clientIp(request), RateLimiterService.perIp());
-    }
+    boolean allowed =
+        (authentication != null && authentication.getPrincipal() instanceof AuthenticatedUser user)
+            ? rateLimiterService.tryConsume("user:" + user.getId(), RateLimiterService.perUser())
+            : rateLimiterService.tryConsume("ip:" + clientIp(request), RateLimiterService.perIp());
 
     if (!allowed) {
       writeRateLimitedResponse(request, response);
