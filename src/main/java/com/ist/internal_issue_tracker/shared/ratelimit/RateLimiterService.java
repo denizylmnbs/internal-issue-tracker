@@ -16,24 +16,24 @@ public class RateLimiterService {
     this.proxyManager = proxyManager;
   }
 
-  public boolean tryConsume(String key, Bandwidth bandwidth) {
-    Supplier<BucketConfiguration> configSupplier =
-        () -> BucketConfiguration.builder().addLimit(bandwidth).build();
-    return proxyManager.builder().build(key, configSupplier).tryConsume(1);
-  }
-
-  // login/register: aynı IP'den dakikada 10 deneme
+  // login/register: aynı IP'den dakikada 5 deneme
   public static Bandwidth perIp() {
-    return Bandwidth.builder().capacity(10).refillGreedy(10, Duration.ofMinutes(1)).build();
+    return Bandwidth.builder().capacity(5).refillGreedy(5, Duration.ofMinutes(1)).build();
   }
 
-  // aynı hesaba dağıtık IP'lerden dakikada 5 deneme (credential stuffing koruması)
+  // aynı hesaba dağıtık IP'lerden dakikada 3 deneme (credential stuffing koruması)
   public static Bandwidth perAccount() {
-    return Bandwidth.builder().capacity(5).refillGreedy(5, Duration.ofMinutes(1)).build();
+    return Bandwidth.builder().capacity(3).refillGreedy(3, Duration.ofMinutes(1)).build();
   }
 
   // kimliği doğrulanmış genel API kullanımı
   public static Bandwidth perUser() {
-    return Bandwidth.builder().capacity(20).refillGreedy(20, Duration.ofSeconds(1)).build();
+    return Bandwidth.builder().capacity(50).refillGreedy(50, Duration.ofSeconds(1)).build();
+  }
+
+  public boolean tryConsume(String key, Bandwidth bandwidth) {
+    Supplier<BucketConfiguration> configSupplier =
+        () -> BucketConfiguration.builder().addLimit(bandwidth).build();
+    return proxyManager.builder().build(key, configSupplier).tryConsume(1);
   }
 }
