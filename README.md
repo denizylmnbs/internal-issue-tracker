@@ -34,6 +34,34 @@ Cross-module events (activity logging, cache eviction, cleanup on delete) are ex
 Spring Modulith's event publication outbox, so a module never calls another module's internals directly — only reacts
 to what happened.
 
+## Screenshots
+
+![Walkthrough](./docs/screenshots/demo.gif)
+
+**My work** — every project and team the signed-in user touches, sprint progress, and active
+issues assigned to them, in one place.
+
+![My work](./docs/screenshots/my-work.png)
+
+**Board** — one column per active issue status, sized to fit however many a project defines,
+with drag-and-drop status changes.
+
+![Board](./docs/screenshots/board.png)
+
+Above the board, a sprint forecast projects completion from the team's actual delivery rate over
+the last six sprints — not just "days left":
+
+| On track | Won't make it | All done |
+|---|---|---|
+| ![On track](./docs/screenshots/board-on-track.png) | ![Won't make it](./docs/screenshots/board-wont-make-it.png) | ![All done](./docs/screenshots/board-all-done.png) |
+
+**Insights** — 14 agile metrics computed from the activity log rather than current state, so
+they stay historical rather than a snapshot.
+
+![Insights — duration](./docs/screenshots/insights-duration.png)
+![Insights — flow](./docs/screenshots/insights-flow.png)
+![Insights — quality](./docs/screenshots/insights-quality.png)
+
 ## Tech Stack
 
 ### Backend
