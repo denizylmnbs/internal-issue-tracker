@@ -29,6 +29,7 @@
     <properties>
         <java.version>25</java.version>
         <spring-modulith.version>2.1.0</spring-modulith.version>
+        <aws.sdk.version>2.35.0</aws.sdk.version>
     </properties>
     <dependencies>
         <dependency>
@@ -165,6 +166,36 @@
             <artifactId>bucket4j-redis</artifactId>
             <version>8.10.1</version>
         </dependency>
+        <!--
+            MinIO speaks the S3 API, so the official AWS SDK talks to it directly once the client is
+            pointed at MinIO's endpoint (see shared.storage.StorageConfig) - no separate MinIO SDK
+            needed. apache-client/netty-nio-client are excluded because url-connection-client below is
+            all a synchronous, <=2MB PUT needs; leaving both out without a replacement would make
+            S3Client.builder().build() fail at startup with "Unable to load an HTTP implementation".
+        -->
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>s3</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>apache-client</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>software.amazon.awssdk</groupId>
+                    <artifactId>netty-nio-client</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>url-connection-client</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-web</artifactId>
+            <version>7.0.8</version>
+        </dependency>
     </dependencies>
     <dependencyManagement>
         <dependencies>
@@ -172,6 +203,13 @@
                 <groupId>org.springframework.modulith</groupId>
                 <artifactId>spring-modulith-bom</artifactId>
                 <version>${spring-modulith.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>software.amazon.awssdk</groupId>
+                <artifactId>bom</artifactId>
+                <version>${aws.sdk.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>

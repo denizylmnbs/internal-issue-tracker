@@ -23,9 +23,14 @@ public enum CommonErrorCode implements ErrorCode {
   CONFLICT(HttpStatus.CONFLICT, "The request conflicts with the current state"),
   DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "A resource with these values already exists"),
   BUSINESS_RULE_VIOLATION(HttpStatus.UNPROCESSABLE_ENTITY, "The request violates a business rule"),
+  MALWARE_DETECTED(HttpStatus.BAD_REQUEST, "The uploaded file was rejected by malware scanning"),
   PAYLOAD_TOO_LARGE(HttpStatus.PAYLOAD_TOO_LARGE, "Request payload is too large"),
   RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS, "Too many requests, please try again later"),
-  INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
+  INTERNAL_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred"),
+  // Handed to the client as a 503, but note that handleApp() replaces the body of any 5xx
+  // AppException with a trace id - so the status is what carries the meaning here, not the message.
+  // That masking rule is deliberate and not worth punching a hole in for this one code.
+  SERVICE_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "A required service is temporarily unavailable");
 
   private final HttpStatus status;
   private final String defaultMessage;
