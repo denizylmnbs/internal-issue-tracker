@@ -11,15 +11,18 @@ import jakarta.validation.Valid;
 import java.net.URI;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/users")
 @RequiredArgsConstructor
 public class UserController {
   private final UserService userService;
+  private final UserAvatarService userAvatarService;
   private final RateLimiterService rateLimiterService;
 
   @PostMapping("/register")
@@ -84,6 +87,27 @@ public class UserController {
     userService.resetPassword(id, request);
 
     return ResponseEntity.ok(ApiResponse.ok());
+  }
+
+  // consumes = MULTIPART_FORM_DATA_VALUE turns a wrong content type into a clean framework 415
+  // instead of a confusing bind failure. Part name "file" must match uploadAvatar in the
+  // frontend's users.ts endpoint file exactly.
+  @PutMapping(value = "/{id}/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+  public ResponseEntity<ApiResponse<UserResponse>> uploadAvatar(
+      @PathVariable Integer id, @RequestPart("file") MultipartFile file) {
+    UserResponse userResponse = userAvatarService.replaceAvatar(id, file);
+
+    return ResponseEntity.ok(ApiResponse.ok(userResponse));
+  }
+
+  // Returns the refreshed UserResponse rather than Void: unlike DELETE /{id}, the user still
+  // exists afterwards and the caller wants its new state (avatarUrl now null) in the same round
+  // trip.
+  @DeleteMapping("/{id}/avatar")
+  public ResponseEntity<ApiResponse<UserResponse>> deleteAvatar(@PathVariable Integer id) {
+    UserResponse userResponse = userAvatarService.removeAvatar(id);
+
+    return ResponseEntity.ok(ApiResponse.ok(userResponse));
   }
 
   @PatchMapping("/{id}/role")

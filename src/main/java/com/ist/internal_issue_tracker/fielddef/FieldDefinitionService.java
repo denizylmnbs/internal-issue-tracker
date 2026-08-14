@@ -9,6 +9,7 @@ import com.ist.internal_issue_tracker.fielddef.exception.FieldDefErrorCode;
 import com.ist.internal_issue_tracker.fielddef.exception.FieldDefinitionNotFoundException;
 import com.ist.internal_issue_tracker.fielddef.exception.FieldDefinitionRuleViolationException;
 import com.ist.internal_issue_tracker.shared.event.FieldDefinitionsChangedEvent;
+import com.ist.internal_issue_tracker.shared.port.FieldCodeUsageResolver;
 import com.ist.internal_issue_tracker.shared.port.FieldKind;
 import java.util.Comparator;
 import java.util.List;
@@ -35,6 +36,14 @@ public class FieldDefinitionService {
 
   private final FieldDefinitionRepository repository;
   private final ApplicationEventPublisher eventPublisher;
+  private final List<FieldCodeUsageResolver> usageResolvers;
+
+  private FieldCodeUsageResolver resolverFor(FieldKind kind) {
+    return usageResolvers.stream()
+        .filter(r -> r.supports(kind))
+        .findFirst()
+        .orElseThrow(() -> new IllegalStateException("No usage resolver registered for " + kind));
+  }
 
   private static FieldDefinitionResponse toResponse(FieldDefinition f) {
     return new FieldDefinitionResponse(
@@ -166,9 +175,29 @@ public class FieldDefinitionService {
     return toResponse(saved);
   }
 
-  /** Soft delete - see {@code FieldDefinition}. Blocked when it would leave an invariant broken. */
+  /** How many live rows (issues, sprints, ...) still carry this code - see {@link #delete}. */
+  @Transactional(readOnly = true)
+  public long usageCount(Integer projectId, Integer id) {
+    FieldDefinition field = require(id, projectId);
+    return resolverFor(field.getKind()).countUsages(field.getKind(), projectId, field.getCode());
+  }
+
+  /** Delete with no reassignment - fails with {@link FieldDefErrorCode#FIELD_IN_USE} if any row
+   * still carries this code. */
   @Transactional
   public void delete(Integer projectId, Integer id) {
+    delete(projectId, id, null);
+  }
+
+  /**
+   * Soft delete - see {@code FieldDefinition}. Blocked when it would leave an invariant broken, or
+   * when live rows still carry this code and the caller has not named {@code reassignTo} - an
+   * active field definition of the same kind/scope, other than the one being deleted - to move
+   * them onto first. This is what stops the "issues vanish from the board" failure mode: a status
+   * with issues on it can no longer be retired out from under them silently.
+   */
+  @Transactional
+  public void delete(Integer projectId, Integer id, String reassignTo) {
     FieldDefinition field = require(id, projectId);
 
     if (field.getIsDefault()) {
@@ -176,6 +205,28 @@ public class FieldDefinitionService {
     }
     if (field.getIsDone() && field.getKind() == FieldKind.ISSUE_STATUS) {
       requireAnotherDoneExists(projectId, field.getKind());
+    }
+
+    FieldCodeUsageResolver resolver = resolverFor(field.getKind());
+    long usages = resolver.countUsages(field.getKind(), projectId, field.getCode());
+    if (usages > 0) {
+      if (reassignTo == null) {
+        throw new FieldDefinitionRuleViolationException(FieldDefErrorCode.FIELD_IN_USE);
+      }
+      if (reassignTo.equals(field.getCode())) {
+        throw new FieldDefinitionRuleViolationException(FieldDefErrorCode.REASSIGN_TARGET_INVALID);
+      }
+      FieldDefinition target =
+          (projectId != null
+                  ? repository.findByProjectIdAndKindAndCodeAndIsActiveTrue(
+                      projectId, field.getKind(), reassignTo)
+                  : repository.findByProjectIdIsNullAndKindAndCodeAndIsActiveTrue(
+                      field.getKind(), reassignTo))
+              .orElseThrow(
+                  () ->
+                      new FieldDefinitionRuleViolationException(
+                          FieldDefErrorCode.REASSIGN_TARGET_INVALID));
+      resolver.reassign(field.getKind(), projectId, field.getCode(), target.getCode());
     }
 
     field.setIsActive(false);

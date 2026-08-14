@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2, X, UserPlus, Users as UsersIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { Pencil, Trash2, X, UserPlus, Users as UsersIcon } from "lucide-react";
 import { useProjectContext } from "@/lib/project/ProjectContext";
 import { useSession } from "@/lib/auth/session";
 import { isEditorOrAbove } from "@/lib/auth/can";
@@ -25,6 +25,7 @@ import { UserPicker } from "@/components/pickers/UserPicker";
 import { TeamPicker } from "@/components/pickers/TeamPicker";
 import { ProjectEditDialog } from "@/components/pickers/ProjectEditDialog";
 import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/shell/Pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
@@ -246,7 +247,7 @@ export default function ProjectSettingsPage() {
                   </div>
                 ))}
               </div>
-              <PaginationControls page={safeMemberPage} pageCount={memberPageCount} onChange={setMemberPage} />
+              <Pagination page={safeMemberPage} pageCount={memberPageCount} onChange={setMemberPage} />
             </>
           )}
         </div>
@@ -289,7 +290,7 @@ export default function ProjectSettingsPage() {
                   <TeamRow key={t.id} teamId={t.teamId} assignedAt={t.assignedAt} canManage={!!canManage} onRemove={() => removeTeam.mutate(t.teamId)} />
                 ))}
               </div>
-              <PaginationControls page={safeTeamPage} pageCount={teamPageCount} onChange={setTeamPage} />
+              <Pagination page={safeTeamPage} pageCount={teamPageCount} onChange={setTeamPage} />
             </>
           )}
         </div>
@@ -336,45 +337,6 @@ export default function ProjectSettingsPage() {
       )}
 
       {editOpen && <ProjectEditDialog open={editOpen} onOpenChange={setEditOpen} project={project} />}
-    </div>
-  );
-}
-
-function PaginationControls({
-  page,
-  pageCount,
-  onChange,
-}: {
-  page: number;
-  pageCount: number;
-  onChange: (page: number) => void;
-}) {
-  if (pageCount <= 1) return null;
-  return (
-    <div className="mt-2 flex items-center justify-between">
-      <p className="text-xs text-slate">
-        Page {page + 1} of {pageCount}
-      </p>
-      <div className="flex gap-1">
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-7 w-7"
-          disabled={page === 0}
-          onClick={() => onChange(page - 1)}
-        >
-          <ChevronLeft className="h-3.5 w-3.5" />
-        </Button>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-7 w-7"
-          disabled={page >= pageCount - 1}
-          onClick={() => onChange(page + 1)}
-        >
-          <ChevronRight className="h-3.5 w-3.5" />
-        </Button>
-      </div>
     </div>
   );
 }

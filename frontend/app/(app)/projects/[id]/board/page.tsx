@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useEffect, useMemo, Suspense } from "react";
+import { useState, useEffect, useMemo, Suspense, type CSSProperties } from "react";
 import { useSearchParams } from "next/navigation";
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
+import { cn } from "@/lib/utils";
 import { useProjectContext } from "@/lib/project/ProjectContext";
 import { useSession } from "@/lib/auth/session";
 import { canWriteIssue } from "@/lib/auth/can";
@@ -20,6 +21,23 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import Link from "next/link";
+
+/**
+ * Every visible status shares the width equally from `md` up, so the whole
+ * board fits the screen however many statuses a project defines. It used to be
+ * fixed 288px columns in a horizontally scrolling flex row, where a project
+ * with more than four or five statuses lost the rest off the right edge.
+ *
+ * `minmax(0,1fr)` rather than a bare `1fr`: without the zero floor a grid track
+ * refuses to shrink below its own content and the row overflows anyway. What
+ * holds up once a column is narrow is the card's problem - see `IssueCard`.
+ *
+ * Below `md` the fit is dropped for a 13.5rem floor and sideways scrolling.
+ * Seven columns on a phone would be 50px each, which is not a board any more -
+ * scrolling a readable one beats fitting an unusable one at that width.
+ */
+const BOARD_GRID =
+  "grid gap-3 grid-cols-[repeat(var(--board-cols),minmax(13.5rem,1fr))] overflow-x-auto md:grid-cols-[repeat(var(--board-cols),minmax(0,1fr))] md:overflow-x-visible";
 
 function BoardPageContent() {
   const { projectId, project, fieldDefinitionsByKind } = useProjectContext();
@@ -73,6 +91,11 @@ function BoardPageContent() {
     sort: "priority,desc",
   });
   const changeStatus = useChangeIssueStatus(projectId);
+
+  // How many columns there are is data, so the count travels as a CSS custom
+  // property and the track sizing stays in classes - a Tailwind class cannot be
+  // assembled from a runtime value and still exist in the stylesheet.
+  const boardVars = { "--board-cols": String(Math.max(columns.length, 1)) } as CSSProperties;
 
   const selected = sprints?.content.find((s) => s.id === sprintId);
   // a closed-out sprint has nothing left to predict — see isForecastable
@@ -137,14 +160,14 @@ function BoardPageContent() {
       )}
 
       {loadingIssues || !sprintId ? (
-        <div className="flex gap-3">
+        <div className={BOARD_GRID} style={boardVars}>
           {columns.map((s) => (
-            <Skeleton key={s.code} className="h-96 w-72" />
+            <Skeleton key={s.code} className="h-96 w-full" />
           ))}
         </div>
       ) : (
         <DndContext onDragEnd={onDragEnd}>
-          <div className="flex flex-1 gap-4 overflow-x-auto pb-2">
+          <div className={cn(BOARD_GRID, "min-h-0 flex-1 pb-2")} style={boardVars}>
             {columns.map((status) => (
               <BoardColumn
                 key={status.code}

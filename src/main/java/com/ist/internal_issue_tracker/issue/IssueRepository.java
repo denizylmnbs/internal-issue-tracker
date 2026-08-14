@@ -100,4 +100,25 @@ interface IssueRepository extends JpaRepository<Issue, Integer> {
    * #findByAssigneeUserIdAndDeletedAtIsNull} moved out of SQL - see {@code UserWorkService}.
    */
   List<Issue> findByAssigneeUserIdAndDeletedAtIsNullAndSprintIdIsNotNull(Integer assigneeUserId);
+
+  /**
+   * Usage counts/reassignment for {@code fielddef}'s delete guard - see {@code
+   * IssueFieldCodeUsageAdapter}. One pair per column a field-definition code can land on.
+   */
+  long countByProjectIdAndStatusAndDeletedAtIsNull(Integer projectId, String status);
+
+  long countByProjectIdAndTypeAndDeletedAtIsNull(Integer projectId, String type);
+
+  long countByProjectIdAndPriorityAndDeletedAtIsNull(Integer projectId, String priority);
+
+  long countByProjectIdAndResolvingUnitAndDeletedAtIsNull(Integer projectId, String resolvingUnit);
+
+  List<Issue> findByProjectIdAndStatusAndDeletedAtIsNull(Integer projectId, String status);
+
+  List<Issue> findByProjectIdAndTypeAndDeletedAtIsNull(Integer projectId, String type);
+
+  List<Issue> findByProjectIdAndPriorityAndDeletedAtIsNull(Integer projectId, String priority);
+
+  List<Issue> findByProjectIdAndResolvingUnitAndDeletedAtIsNull(
+      Integer projectId, String resolvingUnit);
 }

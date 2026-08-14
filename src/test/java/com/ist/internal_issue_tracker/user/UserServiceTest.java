@@ -58,7 +58,7 @@ class UserServiceTest {
     User savedEntity = new User();
     UserResponse expectedResponse =
         new UserResponse(
-            1, "Ada", "Lovelace", "ada@ist.com", Role.USER, true, OffsetDateTime.now());
+            1, "Ada", "Lovelace", "ada@ist.com", Role.USER, true, OffsetDateTime.now(), null);
 
     when(userRepository.existsByEmail(REQUEST.email())).thenReturn(false);
     when(passwordHasher.hash(REQUEST.password())).thenReturn("hashed-password");
@@ -106,7 +106,7 @@ class UserServiceTest {
     User entity = new User();
     UserResponse expectedResponse =
         new UserResponse(
-            1, "Ada", "Lovelace", "ada@ist.com", Role.USER, true, OffsetDateTime.now());
+            1, "Ada", "Lovelace", "ada@ist.com", Role.USER, true, OffsetDateTime.now(), null);
 
     when(userRepository.findById(1)).thenReturn(Optional.of(entity));
     when(userMapper.toResponse(entity)).thenReturn(expectedResponse);
@@ -129,7 +129,7 @@ class UserServiceTest {
     User entity = new User();
     UserResponse response =
         new UserResponse(
-            1, "Ada", "Lovelace", "ada@ist.com", Role.USER, true, OffsetDateTime.now());
+            1, "Ada", "Lovelace", "ada@ist.com", Role.USER, true, OffsetDateTime.now(), null);
     Pageable pageable = PageRequest.of(0, 20);
 
     when(userRepository.findAllByFilters("Ada", null, pageable))
@@ -149,7 +149,7 @@ class UserServiceTest {
     User savedEntity = new User();
     UserResponse expectedResponse =
         new UserResponse(
-            1, "Grace", "Hopper", "grace@ist.com", Role.USER, true, OffsetDateTime.now());
+            1, "Grace", "Hopper", "grace@ist.com", Role.USER, true, OffsetDateTime.now(), null);
 
     when(userRepository.findById(1)).thenReturn(Optional.of(entity));
     when(userRepository.existsByEmailAndIdNot(request.email(), 1)).thenReturn(false);
@@ -276,7 +276,7 @@ class UserServiceTest {
     User target = userWithRole(Role.USER);
     UserResponse expectedResponse =
         new UserResponse(
-            1, "Ada", "Lovelace", "ada@ist.com", Role.EDITOR, true, OffsetDateTime.now());
+            1, "Ada", "Lovelace", "ada@ist.com", Role.EDITOR, true, OffsetDateTime.now(), null);
 
     when(userRepository.findById(1)).thenReturn(Optional.of(target));
     when(userRepository.save(target)).thenReturn(target);

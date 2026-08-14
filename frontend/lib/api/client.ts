@@ -14,10 +14,16 @@ export async function apiFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T | undefined> {
+  // FormData bodies (see upload() below) must NOT get a Content-Type set here: only the browser
+  // can generate the multipart/form-data; boundary=... value, and setting it by hand produces a
+  // body the server cannot parse.
+  const isFormData =
+    typeof FormData !== "undefined" && init?.body instanceof FormData;
+
   const res = await fetch(`/bff${path}`, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...init?.headers,
     },
   });
@@ -75,6 +81,11 @@ export async function apiVoid(path: string, init?: RequestInit): Promise<void> {
 
 export function json(body: unknown, method: string): RequestInit {
   return { method, body: JSON.stringify(body) };
+}
+
+/** For multipart/form-data uploads - see apiFetch's isFormData branch for why no headers here. */
+export function upload(body: FormData, method: string): RequestInit {
+  return { method, body };
 }
 
 /** Builds a query string from optional params, skipping null/undefined so

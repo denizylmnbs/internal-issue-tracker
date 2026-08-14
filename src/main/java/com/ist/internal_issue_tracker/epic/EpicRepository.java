@@ -1,5 +1,6 @@
 package com.ist.internal_issue_tracker.epic;
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -57,4 +58,10 @@ interface EpicRepository extends JpaRepository<Epic, Integer> {
       @Param("status") String status,
       @Param("reporterId") Integer reporterId,
       Pageable pageable);
+
+  /** Usage count/reassignment for {@code fielddef}'s delete guard - see {@code
+   * EpicFieldCodeUsageAdapter}. */
+  long countByProjectIdAndStatusAndDeletedAtIsNull(Integer projectId, String status);
+
+  List<Epic> findByProjectIdAndStatusAndDeletedAtIsNull(Integer projectId, String status);
 }

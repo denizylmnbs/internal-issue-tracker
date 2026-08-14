@@ -33,11 +33,16 @@ function useGlobalFieldChip(kind: FieldKind, code: string) {
   return { label: def?.label ?? code, color: resolveColor(def, code) };
 }
 
+/** `max-w-full` + a truncating label so a chip in a narrow box (a board column
+ * on a small screen) gives way instead of stretching whatever holds it. */
 function DotChip({ label, color }: { label: string; color: string }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded border border-rule px-1.5 py-0.5 text-xs font-medium leading-none">
+    <span
+      className="inline-flex max-w-full items-center gap-1.5 rounded border border-rule px-1.5 py-0.5 text-xs font-medium leading-none"
+      title={label}
+    >
       <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: color }} />
-      {label}
+      <span className="truncate">{label}</span>
     </span>
   );
 }

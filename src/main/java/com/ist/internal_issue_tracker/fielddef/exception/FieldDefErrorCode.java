@@ -27,7 +27,13 @@ public enum FieldDefErrorCode implements ErrorCode {
       HttpStatus.UNPROCESSABLE_ENTITY, "This kind is managed per project, not globally."),
   REORDER_SET_MISMATCH(
       HttpStatus.UNPROCESSABLE_ENTITY,
-      "The ids given do not match exactly the active field definitions of this kind.");
+      "The ids given do not match exactly the active field definitions of this kind."),
+  FIELD_IN_USE(
+      HttpStatus.CONFLICT,
+      "Records still carry this code. Choose another field to move them to first."),
+  REASSIGN_TARGET_INVALID(
+      HttpStatus.UNPROCESSABLE_ENTITY,
+      "The replacement must be a different, active field definition of the same kind.");
 
   private final HttpStatus httpStatus;
   private final String message;

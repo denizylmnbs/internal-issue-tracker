@@ -39,8 +39,37 @@ services:
       KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'false'
     volumes:
       - kafka_data:/var/lib/kafka/data
+  minio:
+    image: 'minio/minio:latest'
+    container_name: 'issue-tracker-minio'
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    ports:
+      - '${MINIO_PORT:-9000}:9000'
+      - '${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio_data:/data
+  clamav:
+    image: 'clamav/clamav:1.4'
+    container_name: 'issue-tracker-clamav'
+    ports:
+      - '${CLAMAV_PORT:-3310}:3310'
+    # Persisting the signature database is what keeps this a one-time cost: without the volume
+    # every `compose up` re-downloads it and clamd refuses connections for minutes each time.
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: ['CMD', 'clamdcheck.sh']
+      interval: 30s
+      # Long enough to cover that first download so the container is not marked unhealthy while
+      # it is doing exactly what it should be doing.
+      start_period: 180s
 
 volumes:
   postgres_data:
   redis_data:
   kafka_data:
+  minio_data:
+  clamav_data:

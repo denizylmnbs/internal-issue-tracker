@@ -43,27 +43,35 @@ export function IssueCard({
         isMine && "border-2 border-signal shadow-sm",
       )}
     >
-      <div className="mb-1.5 flex items-center justify-between">
-        <span className="font-data text-[11px] text-slate">ISS-{issue.id}</span>
-        <TypeChip type={issue.type} />
+      {/* Everything here is written to survive a narrow column: the board
+          divides the width by however many statuses a project defines, so a
+          card can be a third of what it used to be. Nothing has a fixed width,
+          the long strings truncate or clamp, and both meta rows wrap rather
+          than pushing the card past its column. */}
+      <div className="mb-1.5 flex items-center justify-between gap-1.5">
+        <span className="shrink-0 font-data text-[11px] text-slate">ISS-{issue.id}</span>
+        <span className="min-w-0 truncate" title={issue.type}>
+          <TypeChip type={issue.type} />
+        </span>
       </div>
       <Link
         href={`/projects/${projectId}/issues/${issue.id}`}
         onClick={(e) => e.stopPropagation()}
-        className="block text-sm leading-snug hover:text-signal"
+        title={issue.name}
+        className="line-clamp-3 block break-words text-sm leading-snug hover:text-signal"
       >
         {issue.name}
       </Link>
-      <div className="mt-2 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
           <PriorityChip priority={issue.priority} />
           {issue.resolvingUnit != null && <UnitChip unit={issue.resolvingUnit} />}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 items-center gap-2">
           {issue.storyPoint != null && (
-            <span className="font-data text-xs text-slate">{issue.storyPoint}</span>
+            <span className="shrink-0 font-data text-xs text-slate">{issue.storyPoint}</span>
           )}
-          <span className="text-xs text-slate">
+          <span className="min-w-0 truncate text-xs text-slate">
             <UserName id={issue.assigneeUserId} />
           </span>
         </div>

@@ -1,5 +1,6 @@
 package com.ist.internal_issue_tracker.team;
 
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -53,4 +54,13 @@ interface TeamRepository extends JpaRepository<Team, Integer> {
       @Param("field") String field,
       @Param("leaderId") Integer leaderId,
       Pageable pageable);
+
+  /**
+   * Usage count/reassignment for {@code fielddef}'s delete guard on the global {@code TEAM_FIELD}
+   * kind - see {@code TeamFieldCodeUsageAdapter}. Scoped to {@code isActive}, matching every other
+   * read of {@code field} in this repository.
+   */
+  long countByFieldAndIsActiveTrue(String field);
+
+  List<Team> findByFieldAndIsActiveTrue(String field);
 }

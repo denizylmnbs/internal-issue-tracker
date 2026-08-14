@@ -1,6 +1,7 @@
 package com.ist.internal_issue_tracker.issue;
 
-import com.ist.internal_issue_tracker.issue.dto.ChangeAssigneeRequest;
+import com.ist.internal_issue_tracker.issue.dto
+        .ChangeAssigneeRequest;
 import com.ist.internal_issue_tracker.issue.dto.ChangeClassificationRequest;
 import com.ist.internal_issue_tracker.issue.dto.ChangeEpicRequest;
 import com.ist.internal_issue_tracker.issue.dto.ChangeSprintRequest;
@@ -21,6 +22,7 @@ import com.ist.internal_issue_tracker.shared.exception.CommonErrorCode;
 import com.ist.internal_issue_tracker.shared.port.EpicLookup;
 import com.ist.internal_issue_tracker.shared.port.FieldDefinitionLookup;
 import com.ist.internal_issue_tracker.shared.port.FieldKind;
+import com.ist.internal_issue_tracker.shared.port.FieldSemantic;
 import com.ist.internal_issue_tracker.shared.port.ProjectLookup;
 import com.ist.internal_issue_tracker.shared.port.SprintLookup;
 import com.ist.internal_issue_tracker.shared.port.TeamLookup;
@@ -28,7 +30,9 @@ import com.ist.internal_issue_tracker.shared.port.UserLookup;
 import com.ist.internal_issue_tracker.shared.security.Role;
 import com.ist.internal_issue_tracker.shared.web.PagedResponse;
 import java.time.OffsetDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
@@ -339,6 +343,10 @@ public class IssueService {
    * on the issue is touched" - that line is dropped here rather than carried forward, since a
    * hardcoded target status has no meaning once statuses are project-defined data.)
    *
+   * <p>The one case where the status does move with the sprint is {@link #returnToBacklog}: an
+   * issue pulled out of every sprint is back in the backlog, and leaving it sitting at {@code TODO}
+   * or {@code IN_PROGRESS} claims work is planned or underway when nothing schedules it any more.
+   *
    * <p>The placement check is the same one {@code updateIssue} makes and is made for the same
    * reason - see {@link #requireValidPlacement}. The epic is passed as null because this call does
    * not propose one, not because it clears one.
@@ -358,6 +366,10 @@ public class IssueService {
 
     IssueSnapshot before = IssueSnapshot.of(issue);
 
+    if (request.sprintId() == null && issue.getSprintId() != null) {
+      returnToBacklog(projectId, issue);
+    }
+
     issue.setSprintId(request.sprintId());
 
     Issue savedIssue = issueRepository.save(issue);
@@ -365,6 +377,34 @@ public class IssueService {
     publishChanges(projectId, actorId, before, savedIssue);
 
     return issueMapper.toResponse(savedIssue);
+  }
+
+  /**
+   * Puts an issue leaving its last sprint back at the project's default issue status - the one the
+   * project marked as what a brand new issue gets, which is what "backlog" <em>is</em> here. Naming
+   * a literal {@code BACKLOG} would only work for projects that never renamed the seeded row.
+   *
+   * <p>Work that already finished or was called off is left alone: a {@code DONE} issue moved out
+   * of a closed sprint is still done, and rewriting it to the default status would both lie about
+   * the issue and take it back out of every completed-throughput count that reads the activity log.
+   *
+   * <p>The caller has taken its {@code before} snapshot by the time this runs, so the status move
+   * is published as its own field change alongside the sprint one.
+   */
+  private void returnToBacklog(Integer projectId, Issue issue) {
+    Set<String> terminal =
+        new HashSet<>(
+            fieldDefinitionLookup.codesWithSemantic(
+                projectId, FieldKind.ISSUE_STATUS, FieldSemantic.DONE));
+    terminal.addAll(
+        fieldDefinitionLookup.codesWithSemantic(
+            projectId, FieldKind.ISSUE_STATUS, FieldSemantic.CANCELLED));
+
+    if (terminal.contains(issue.getStatus())) {
+      return;
+    }
+
+    issue.setStatus(fieldDefinitionLookup.defaultCode(projectId, FieldKind.ISSUE_STATUS));
   }
 
   /**

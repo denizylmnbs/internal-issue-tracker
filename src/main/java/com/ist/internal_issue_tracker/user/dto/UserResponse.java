@@ -10,4 +10,8 @@ public record UserResponse(
     String email,
     Role role,
     Boolean isActive,
-    OffsetDateTime createdAt) {}
+    OffsetDateTime createdAt,
+    // Null when the user has no avatar - the frontend's AvatarFallback (initials) is the
+    // contract for that case. When present this is a presigned URL with its own expiry (see
+    // ObjectUrlSigner); never persist or cache it beyond the response it came in.
+    String avatarUrl) {}

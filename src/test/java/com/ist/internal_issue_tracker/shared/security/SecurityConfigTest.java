@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -55,6 +56,7 @@ import com.ist.internal_issue_tracker.team.TeamMemberService;
 import com.ist.internal_issue_tracker.team.TeamService;
 import com.ist.internal_issue_tracker.team.UserTeamsController;
 import com.ist.internal_issue_tracker.team.dto.TeamMemberResponse;
+import com.ist.internal_issue_tracker.user.UserAvatarService;
 import com.ist.internal_issue_tracker.user.UserController;
 import com.ist.internal_issue_tracker.user.UserService;
 import com.ist.internal_issue_tracker.user.dto.UserResponse;
@@ -69,7 +71,9 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -144,6 +148,7 @@ class SecurityConfigTest {
   @Autowired private MockMvc mockMvc;
   @MockitoBean private AuthService authService;
   @MockitoBean private UserService userService;
+  @MockitoBean private UserAvatarService userAvatarService;
   @MockitoBean private TeamService teamService;
   @MockitoBean private TeamMemberService teamMemberService;
   @MockitoBean private JwtService jwtService;
@@ -351,6 +356,67 @@ class SecurityConfigTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(CHANGE_PASSWORD_BODY))
         .andExpect(status().isOk());
+  }
+
+  // 8-byte PNG signature is enough here - UserAvatarService itself is mocked out, so nothing
+  // beyond the multipart plumbing reads these bytes.
+  private static final byte[] PNG_BYTES = {
+    (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A
+  };
+
+  private static MockMultipartFile avatarFile() {
+    return new MockMultipartFile("file", "avatar.png", "image/png", PNG_BYTES);
+  }
+
+  @Test
+  void uploadAvatar_isAllowed_forOwner() throws Exception {
+    mockMvc
+        .perform(
+            multipart(HttpMethod.PUT, "/api/users/1/avatar")
+                .file(avatarFile())
+                .with(as(1, Role.USER)))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void uploadAvatar_isAllowed_forAdminActingOnAnotherUser() throws Exception {
+    mockMvc
+        .perform(
+            multipart(HttpMethod.PUT, "/api/users/1/avatar")
+                .file(avatarFile())
+                .with(as(99, Role.ADMIN)))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void uploadAvatar_returns403_forAnotherUser() throws Exception {
+    mockMvc
+        .perform(
+            multipart(HttpMethod.PUT, "/api/users/2/avatar")
+                .file(avatarFile())
+                .with(as(1, Role.DEVELOPER)))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void deleteAvatar_isAllowed_forOwner() throws Exception {
+    mockMvc
+        .perform(delete("/api/users/1/avatar").with(as(1, Role.USER)))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void deleteAvatar_isAllowed_forAdminActingOnAnotherUser() throws Exception {
+    mockMvc
+        .perform(delete("/api/users/1/avatar").with(as(99, Role.ADMIN)))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  void deleteAvatar_returns403_forAnotherUser() throws Exception {
+    mockMvc
+        .perform(delete("/api/users/2/avatar").with(as(1, Role.DEVELOPER)))
+        .andExpect(status().isForbidden());
   }
 
   /**
@@ -1561,7 +1627,8 @@ class SecurityConfigTest {
   @Test
   void register_isAllowed_whenNeitherBucketIsExhausted() throws Exception {
     when(userService.createUser(any()))
-        .thenReturn(new UserResponse(1, "Jane", "Doe", "jane@example.com", Role.USER, true, null));
+        .thenReturn(
+            new UserResponse(1, "Jane", "Doe", "jane@example.com", Role.USER, true, null, null));
 
     mockMvc
         .perform(

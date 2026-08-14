@@ -26,10 +26,17 @@ export function BoardColumn({
   const points = issues.reduce((sum, i) => sum + (i.storyPoint ?? 0), 0);
 
   return (
-    <div className="flex w-72 shrink-0 flex-col overflow-hidden rounded border border-rule">
-      <div className="flex items-center justify-between border-b border-rule bg-secondary px-2 py-1.5">
+    // no fixed width: the page grid hands every column an equal share and the
+    // column takes it, down to whatever a project's status count leaves over
+    <div className="flex min-w-0 flex-col overflow-hidden rounded border border-rule">
+      {/* the status label truncates before the count does - a column whose
+          issue count is cut off says nothing at all */}
+      <div className="flex items-center justify-between gap-1 border-b border-rule bg-secondary px-2 py-1.5">
         <IssueStatusChip status={status.code} />
-        <span className="font-data text-xs text-slate">
+        <span
+          className="shrink-0 font-data text-xs text-slate"
+          title={`${issues.length} issues · ${points} points`}
+        >
           {issues.length} · {points}pt
         </span>
       </div>

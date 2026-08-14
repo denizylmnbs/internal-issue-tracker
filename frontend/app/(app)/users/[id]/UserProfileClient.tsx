@@ -10,7 +10,8 @@ import { RoleChip } from "@/components/shell/chips";
 import { ProfileEditDialog } from "@/components/pickers/ProfileEditDialog";
 import { ChangePasswordDialog } from "@/components/pickers/ChangePasswordDialog";
 import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/shell/UserAvatar";
+import { AvatarUploadControl } from "@/components/pickers/AvatarUploadControl";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateOnly } from "@/lib/format";
 
@@ -33,15 +34,21 @@ export function UserProfileClient({ userId }: { userId: number }) {
 
   const canEdit = caller?.id === profile.id || isAdmin(caller);
   const canChangePassword = caller?.id === profile.id;
-  const initials = `${profile.name[0]}${profile.surname[0]}`.toUpperCase();
 
   return (
     <div className="max-w-2xl p-6">
       <div className="mb-6 flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <Avatar className="h-14 w-14">
-            <AvatarFallback className="bg-secondary text-lg font-medium">{initials}</AvatarFallback>
-          </Avatar>
+          <div className="flex flex-col items-center gap-1.5">
+            <UserAvatar
+              name={profile.name}
+              surname={profile.surname}
+              avatarUrl={profile.avatarUrl}
+              className="h-14 w-14"
+              fallbackClassName="text-lg"
+            />
+            {canEdit && <AvatarUploadControl userId={profile.id} hasAvatar={!!profile.avatarUrl} />}
+          </div>
           <div>
             <h1 className="font-heading text-xl font-semibold tracking-tight">
               {profile.name} {profile.surname}

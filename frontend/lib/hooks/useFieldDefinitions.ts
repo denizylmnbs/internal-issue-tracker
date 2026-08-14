@@ -78,10 +78,26 @@ export function useReorderFieldDefinitions(projectId: number | null) {
   });
 }
 
+/**
+ * How many live rows (issues, sprints, ...) still carry this code - checked before offering the
+ * plain "Delete" confirm, so the reassignment picker only shows up when it's actually needed.
+ * `enabled: false` while `defId` is undefined, i.e. before the user has picked something to delete.
+ */
+export const useFieldDefinitionUsage = (
+  projectId: number | null,
+  defId: number | undefined,
+) =>
+  useQuery({
+    queryKey: ["fieldDefinitions", "usage", projectId, defId] as const,
+    queryFn: () => fieldDefinitions.getFieldDefinitionUsage(projectId, defId as number),
+    enabled: defId !== undefined,
+  });
+
 export function useDeleteFieldDefinition(projectId: number | null) {
   const queryClient = useQueryClient();
-  return useApiMutation<void, number>({
-    mutationFn: (defId) => fieldDefinitions.deleteFieldDefinition(projectId, defId),
+  return useApiMutation<void, { defId: number; reassignTo?: string }>({
+    mutationFn: ({ defId, reassignTo }) =>
+      fieldDefinitions.deleteFieldDefinition(projectId, defId, reassignTo),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: fieldDefinitionKeys.listAll(projectId),

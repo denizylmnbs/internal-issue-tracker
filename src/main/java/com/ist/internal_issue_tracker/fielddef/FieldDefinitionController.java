@@ -3,6 +3,7 @@ package com.ist.internal_issue_tracker.fielddef;
 import com.ist.internal_issue_tracker.fielddef.dto.FieldDefinitionCreateRequest;
 import com.ist.internal_issue_tracker.fielddef.dto.FieldDefinitionResponse;
 import com.ist.internal_issue_tracker.fielddef.dto.FieldDefinitionUpdateRequest;
+import com.ist.internal_issue_tracker.fielddef.dto.FieldUsageResponse;
 import com.ist.internal_issue_tracker.fielddef.dto.ReorderRequest;
 import com.ist.internal_issue_tracker.shared.port.FieldKind;
 import com.ist.internal_issue_tracker.shared.web.ApiResponse;
@@ -64,10 +65,20 @@ public class FieldDefinitionController {
     return ResponseEntity.ok(ApiResponse.ok(response));
   }
 
+  @GetMapping("/{defId}/usage")
+  public ResponseEntity<ApiResponse<FieldUsageResponse>> getFieldDefinitionUsage(
+      @PathVariable Integer id, @PathVariable Integer defId) {
+    long count = fieldDefinitionService.usageCount(id, defId);
+
+    return ResponseEntity.ok(ApiResponse.ok(new FieldUsageResponse(count)));
+  }
+
   @DeleteMapping("/{defId}")
   public ResponseEntity<ApiResponse<Void>> deleteFieldDefinition(
-      @PathVariable Integer id, @PathVariable Integer defId) {
-    fieldDefinitionService.delete(id, defId);
+      @PathVariable Integer id,
+      @PathVariable Integer defId,
+      @RequestParam(required = false) String reassignTo) {
+    fieldDefinitionService.delete(id, defId, reassignTo);
 
     return ResponseEntity.ok(ApiResponse.ok());
   }

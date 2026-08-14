@@ -5,6 +5,7 @@ import com.ist.internal_issue_tracker.shared.port.TeamLookup;
 import com.ist.internal_issue_tracker.shared.ratelimit.RateLimitFilter;
 import com.ist.internal_issue_tracker.shared.ratelimit.RateLimiterService;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BiPredicate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -97,7 +98,8 @@ public class SecurityConfig {
       ProjectLookup projectLookup,
       CorsConfigurationSource corsConfigurationSource,
       RateLimiterService rateLimiterService,
-      ObjectMapper objectMapper)
+      ObjectMapper objectMapper,
+      @Value("${app.security.trusted-proxies}") List<String> trustedProxies)
       throws Exception {
     http.csrf(csrf -> csrf.disable())
         // Ahead of the authorization rules on purpose: a CORS preflight carries no Authorization
@@ -126,6 +128,14 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.DELETE, "/api/users/{id}")
                     .hasRole("ADMIN")
                     .requestMatchers(HttpMethod.PATCH, "/api/users/{id}/password")
+                    .access(selfOrAdmin(roleHierarchy))
+                    // {id} matches exactly one path segment, so this cannot be shadowed by the
+                    // PUT/DELETE /api/users/{id} rules above - they match a different segment
+                    // count. Written as /api/users/{id}/** instead, the DELETE rule would have
+                    // silently made avatar deletion admin-only.
+                    .requestMatchers(HttpMethod.PUT, "/api/users/{id}/avatar")
+                    .access(selfOrAdmin(roleHierarchy))
+                    .requestMatchers(HttpMethod.DELETE, "/api/users/{id}/avatar")
                     .access(selfOrAdmin(roleHierarchy))
                     .requestMatchers(HttpMethod.POST, "/api/users/{id}/reset-password")
                     .hasRole("ADMIN")
@@ -262,7 +272,8 @@ public class SecurityConfig {
         // JwtAuthenticationFilter'dan sonra: SecurityContext doluysa user-id bazlı, boşsa yalnızca
         // IP bazlı limit uygulanır.
         .addFilterAfter(
-            new RateLimitFilter(rateLimiterService, objectMapper), JwtAuthenticationFilter.class);
+            new RateLimitFilter(rateLimiterService, objectMapper, Set.copyOf(trustedProxies)),
+            JwtAuthenticationFilter.class);
 
     return http.build();
   }

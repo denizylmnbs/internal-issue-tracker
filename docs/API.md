@@ -1,7 +1,7 @@
 # Internal Issue Tracker — API Reference
 
 Complete reference for every HTTP endpoint the backend exposes, written to be the single source a
-frontend is built against. **89 endpoints across 18 controllers.**
+frontend is built against. **93 endpoints across 18 controllers.**
 
 Generated from the source. When the code and this document disagree, the code in
 `src/main/java/com/ist/internal_issue_tracker/**/*Controller.java` wins — but please fix the document.
@@ -125,6 +125,50 @@ Every paged endpoint accepts Spring's standard `Pageable` query parameters:
 `sort` takes **entity property names**, not response field names (they coincide almost everywhere).
 An unknown property yields `400 INVALID_SORT_PROPERTY`.
 
+### Multipart requests
+
+Every other endpoint in this document takes JSON. Exactly two, both in [§4.2](#42-users), are the
+exception and take `multipart/form-data` instead:
+
+```
+PUT    /api/users/{id}/avatar
+DELETE /api/users/{id}/avatar
+```
+
+Upload the file under the part name **`file`**. Constraints, enforced in that order:
+
+- **2MB hard cap** (`spring.servlet.multipart.max-file-size`) — a larger request never reaches the
+  handler and comes back `413 PAYLOAD_TOO_LARGE`.
+- **`image/png` and `image/jpeg` only.** The declared `Content-Type` on the multipart part is
+  **never trusted** — the backend sniffs the actual bytes and discards the client's claim entirely.
+  An unrecognized format comes back `415 UNSUPPORTED_MEDIA_TYPE`, and an empty file comes back
+  `400 VALIDATION_FAILED`. `image/svg+xml` is deliberately not accepted — an SVG served back from
+  the same origin as the presigned URL below is an XSS vector, not just an image. `image/webp` was
+  dropped for a duller reason: stock ImageIO has no WebP reader, and decoding is mandatory below.
+- **Malware scan** against clamd, on the bytes as uploaded. A hit comes back
+  `400 MALWARE_DETECTED` (the matched signature name is logged, never returned). If the scanner
+  cannot be reached the upload is **rejected with `503`**, not stored unscanned. Scanning can be
+  disabled wholesale with `app.storage.av.enabled=false`, which is an operator decision, not
+  something a dropped connection can cause.
+- **Re-encoding.** The image is decoded, redrawn onto a fresh raster at a maximum of 512×512
+  (aspect preserved, never upscaled), and re-encoded. Three consequences worth knowing:
+  - **The stored object is always `image/png`**, whatever went in.
+  - **All metadata is gone**, EXIF/GPS included. Do not rely on it surviving.
+  - Bytes appended after a valid image (`cat valid.png payload > avatar.png`) do not survive
+    either, which is the point — a correct magic-number prefix is no longer sufficient.
+  - Dimensions are checked against `app.storage.image.max-dimension` / `max-pixels` from the
+    header **before** decoding, so a 2MB file that decodes to 30000×30000 comes back
+    `413 PAYLOAD_TOO_LARGE` rather than allocating gigabytes. An image whose body fails to decode
+    comes back `415 UNSUPPORTED_MEDIA_TYPE`.
+
+`PUT /api/users/{id}/avatar` is also rate limited on its own budget — **10 per minute per user**,
+rather than the general authenticated allowance — and returns `429` with a `Retry-After` header
+once that is spent. A decode plus an AV round trip costs far more per request than an ordinary
+read, so it does not share a bucket with one.
+
+Both responses (and every `UserResponse`) come back as the normal JSON envelope — only the request
+body for these two routes is multipart, not the response.
+
 ### Authentication
 
 Stateless JWT bearer tokens. Send on every request except the public routes:
@@ -237,6 +281,8 @@ something it *points at* cannot be used.
 | `FIELD_KIND_NOT_PROJECT_SCOPED` | 422 | field definition |
 | `FIELD_KIND_NOT_GLOBAL` | 422 | field definition |
 | `REORDER_SET_MISMATCH` | 422 | field definition |
+| `FIELD_IN_USE` | 409 | field definition |
+| `REASSIGN_TARGET_INVALID` | 422 | field definition |
 
 ### Date & time formats
 
@@ -438,7 +484,7 @@ The current user, resolved from the bearer token alone. Returns the same `UserRe
   "data": {
     "id": 1, "name": "Deniz", "surname": "Yalmanbas",
     "email": "deniz@example.com", "role": "DEVELOPER",
-    "isActive": true, "createdAt": "2026-07-24T12:00:00Z"
+    "isActive": true, "createdAt": "2026-07-24T12:00:00Z", "avatarUrl": null
   },
   "timestamp": "..."
 }
@@ -465,6 +511,8 @@ depends on**, and it is not in the token. Errors: `401 UNAUTHENTICATED`.
 | `PUT` | `/api/users/{id}` | self+admin |
 | `DELETE` | `/api/users/{id}` | ADMIN |
 | `PATCH` | `/api/users/{id}/password` | self+admin |
+| `PUT` | `/api/users/{id}/avatar` | self+admin |
+| `DELETE` | `/api/users/{id}/avatar` | self+admin |
 | `POST` | `/api/users/{id}/reset-password` | ADMIN |
 | `PATCH` | `/api/users/{id}/role` | ADMIN (+ outranking rule) |
 | `GET` | `/api/users/{id}/teams` | auth |
@@ -482,11 +530,16 @@ depends on**, and it is not in the token. Errors: `401 UNAUTHENTICATED`.
   "email": "deniz@example.com",
   "role": "DEVELOPER",
   "isActive": true,
-  "createdAt": "2026-07-24T12:00:00Z"
+  "createdAt": "2026-07-24T12:00:00Z",
+  "avatarUrl": "http://localhost:9000/issue-tracker/avatars/1/8f...?X-Amz-Signature=..."
 }
 ```
 
-The password hash is never present in any response.
+The password hash is never present in any response. `avatarUrl` is `null` when the user has no
+avatar — render initials/a placeholder in that case, the way this app's own frontend does. When
+present, it is a **presigned URL that expires** (`app.storage.presigned-url-ttl`, 1 hour by
+default) — fetch it promptly, never persist it, and be ready to fall back to initials if the `<img>`
+fails to load after the URL goes stale rather than only on first render.
 
 #### `POST /api/users/register` → `201`, `Location: /api/users/{id}`
 
@@ -528,6 +581,24 @@ from team memberships and project assignments by listeners.
 { "currentPassword": "hunter2000", "newPassword": "correcthorse" }
 ```
 `newPassword` ≥ 8 chars. Errors: `400 CURRENT_PASSWORD_INCORRECT`.
+
+#### `PUT /api/users/{id}/avatar` → `200` `UserResponse`
+
+`multipart/form-data`, part name `file` — see [Multipart requests](#multipart-requests) for the
+size/type rules. Full replacement: uploading a new photo discards the previous one (the old object
+is deleted from storage after the new one is saved, best-effort — a storage hiccup during cleanup
+never fails the upload, it just leaves an orphaned object behind).
+
+Returns the full `UserResponse` — including the new `avatarUrl` — in the same round trip, so the
+client never needs a second call to see the photo it just uploaded.
+
+Errors: `413 PAYLOAD_TOO_LARGE`, `415 UNSUPPORTED_MEDIA_TYPE`, `400 VALIDATION_FAILED`.
+
+#### `DELETE /api/users/{id}/avatar` → `200` `UserResponse`
+
+Removes the avatar, if any — idempotent, calling it twice is not an error. Unlike `DELETE
+/api/users/{id}`, the user still exists afterwards, so this returns the user's fresh state
+(`avatarUrl: null`) rather than an empty envelope.
 
 #### `POST /api/users/{id}/reset-password` → `200` empty
 
@@ -1059,11 +1130,20 @@ leave them where they were, and would silently erase any it forgot.
 
 #### `PATCH /{issueId}/sprint` → `200` — `{ "sprintId": 4 }`
 Moves the issue into a sprint. **`null` means the backlog**, not "leave it alone" — the field is the
-whole body, which is what makes the two impossible to confuse. Nothing else on the issue is touched.
-The sprint must be live and belong to *this* project. Errors: `422 SPRINT_NOT_FOUND`,
-`404 ISSUE_NOT_FOUND`, `404 PROJECT_NOT_FOUND`.
+whole body, which is what makes the two impossible to confuse. The sprint must be live and belong to
+*this* project. Errors: `422 SPRINT_NOT_FOUND`, `404 ISSUE_NOT_FOUND`, `404 PROJECT_NOT_FOUND`.
 
-Writes a `SPRINT_UPDATED` activity row, or none at all if the issue was already in that sprint.
+Nothing else on the issue is touched, with one exception: **an issue sent to the backlog also goes
+back to the project's default status** (the seeded `BACKLOG`, unless the project renamed or moved
+that flag). An issue that no sprint schedules any more should not still read `TODO` or
+`IN_PROGRESS`. Work that is already `DONE`- or `CANCELLED`-semantic keeps its status — it happened,
+and rewriting it would take it out of the completion metrics. Moving an issue *into* a sprint never
+touches the status, and neither does re-sending `null` for an issue that had no sprint to begin with.
+
+Writes a `SPRINT_UPDATED` activity row, or none at all if the issue was already in that sprint — plus
+a `STATUS_UPDATED` row when the backlog rule above moved the status. Expect the returned
+`IssueResponse` to differ from what you sent, and re-read `status` from it rather than assuming it
+held.
 
 #### `PATCH /{issueId}/epic` → `200` — `{ "epicId": 2 }`
 As above, for the epic; `null` means no epic. Errors: `422 EPIC_NOT_FOUND`.
@@ -1457,11 +1537,13 @@ replace and why every status/type/priority/unit is now data rather than a fixed 
 | `POST` | `/api/projects/{id}/field-definitions` | editor / leader |
 | `PUT` | `/api/projects/{id}/field-definitions/{defId}` | editor / leader |
 | `PATCH` | `/api/projects/{id}/field-definitions/reorder` | editor / leader |
+| `GET` | `/api/projects/{id}/field-definitions/{defId}/usage` | auth |
 | `DELETE` | `/api/projects/{id}/field-definitions/{defId}` | editor / leader |
 | `GET` | `/api/field-definitions` | auth |
 | `POST` | `/api/field-definitions` | **ADMIN** |
 | `PUT` | `/api/field-definitions/{defId}` | **ADMIN** |
 | `PATCH` | `/api/field-definitions/reorder` | **ADMIN** |
+| `GET` | `/api/field-definitions/{defId}/usage` | auth |
 | `DELETE` | `/api/field-definitions/{defId}` | **ADMIN** |
 
 **`FieldDefinitionResponse`**:
@@ -1478,8 +1560,9 @@ replace and why every status/type/priority/unit is now data rather than a fixed 
 `ISSUE_PRIORITY`, `ISSUE_UNIT`, `TEAM_FIELD`. `projectId` is `null` for the two global kinds
 (`PROJECT_STATUS`, `TEAM_FIELD`) and for every row returned by the `/api/field-definitions` routes.
 `code` is what every other endpoint stores and expects back — **immutable** once created; relabel
-with `label`, not by creating a new code and retiring the old one, or every issue already carrying
-the old code becomes orphaned.
+with `label`, not by creating a new code and retiring the old one. `DELETE` below refuses to
+retire a code that anything still carries unless you tell it where to move those rows first, so a
+code cannot become orphaned by accident.
 
 #### `GET /api/projects/{id}/field-definitions` → `200`
 Query: `kind` (optional — omit it to get every kind at once, sorted by kind then `sortOrder`).
@@ -1513,9 +1596,22 @@ and exactly one default — see §2.
 `orderedIds` must name **exactly** the project's active rows of that `kind` — no more, no fewer.
 Errors: `422 REORDER_SET_MISMATCH`.
 
-#### `DELETE /api/projects/{id}/field-definitions/{defId}` → `200` empty
-Soft delete (`isActive: false`); issues already carrying this code keep it, they just cannot be set
-to it again. Same last-done/default guard as the `PUT` above.
+#### `GET /api/projects/{id}/field-definitions/{defId}/usage` → `200`
+```json
+{ "count": 12 }
+```
+How many live rows (issues, sprints, epics, ...) currently carry this code. Call this before
+offering the delete confirm, so the UI can decide whether to prompt for a replacement.
+
+#### `DELETE /api/projects/{id}/field-definitions/{defId}?reassignTo={code}` → `200` empty
+Soft delete (`isActive: false`). If no live row carries this code, `reassignTo` is unnecessary and
+can be omitted. If any do, the request is rejected with `409 FIELD_IN_USE` unless `reassignTo`
+names a *different*, active field definition of the same kind/scope — in which case every row
+carrying the old code is moved onto `reassignTo` first, in the same transaction as the delete. An
+invalid or same-as-deleted `reassignTo` returns `422 REASSIGN_TARGET_INVALID`. Same last-done/
+default guard as the `PUT` above. This is what stops issues (or sprints/epics/projects/teams)
+carrying a retired status from silently dropping out of any view that groups by the field-
+definitions list, e.g. the board's columns.
 
 #### Global routes
 Same shapes, `kind` restricted to `PROJECT_STATUS` / `TEAM_FIELD`, no `{id}` in the path. Sending a
@@ -1530,7 +1626,7 @@ project-scoped `kind` here returns `422 FIELD_KIND_NOT_GLOBAL`.
 | Module | Count |
 |--------|-------|
 | Auth (`login`, `me`) | 2 |
-| Users (incl. `/{id}/teams`, `/{id}/projects`) | 10 |
+| Users (incl. `/{id}/teams`, `/{id}/projects`, `/{id}/avatar`) | 12 |
 | Teams + team members | 10 |
 | Projects | 8 |
 | Project members | 4 |
@@ -1541,8 +1637,8 @@ project-scoped `kind` here returns `422 FIELD_KIND_NOT_GLOBAL`.
 | Comments | 5 |
 | Activity | 3 |
 | Metrics | 14 |
-| Field definitions (project + global) | 10 |
-| **Total** | **89** |
+| Field definitions (project + global) | 12 |
+| **Total** | **93** |
 
 ### Suggested route → endpoint mapping
 
@@ -1588,8 +1684,19 @@ project-scoped `kind` here returns `422 FIELD_KIND_NOT_GLOBAL`.
    security-relevant; render optimistically and let a `403` correct you.
 9. **`data` is absent, not null, on empty successes.** `response.data.data` is `undefined` after a
    `DELETE`. Type it optional.
-10. **Metrics series are sparse** — supply your own zero baseline before charting.
-11. **No default sort** on any list endpoint. Pass `sort=` explicitly or the order is the database's
+10. **`avatarUrl` expires.** It's a presigned URL (default 1 hour), not a stable link — don't cache
+    it beyond the response it came in, and render it through an `<img>` that falls back to initials
+    on load failure rather than assuming a URL fetched earlier is still good. The URL is also signed
+    for MinIO's **public** endpoint, which must be reachable from the browser, not just the backend.
+11. **An uploaded avatar is not the file you sent.** The server re-encodes every upload to a PNG of
+    at most 512×512 and drops all metadata, so the object you get back differs in format, size and
+    bytes from the one you uploaded. Don't round-trip it or compare hashes. See
+    [§1 Multipart requests](#multipart-requests).
+12. **Avatar upload has three failure modes beyond 413/415.** `400 MALWARE_DETECTED` if the scanner
+    flags it, `503` if the scanner is unreachable (the upload is refused rather than stored
+    unscanned — show "try again later"), and `429` on its own 10/minute budget.
+13. **Metrics series are sparse** — supply your own zero baseline before charting.
+14. **No default sort** on any list endpoint. Pass `sort=` explicitly or the order is the database's
     choice and may change between calls.
 
 ### Suggested client skeleton
