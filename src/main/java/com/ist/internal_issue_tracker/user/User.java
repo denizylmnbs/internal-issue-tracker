@@ -56,6 +56,13 @@ public class User {
   @Column(nullable = false)
   private Boolean isActive = true;
 
+  // Opaque key into object storage, generated and owned by shared.storage.ObjectStorage - never
+  // constructed or parsed here. Null means no avatar; a plain setter is fine, unlike role/
+  // passwordHashed, because there is no invariant to protect on replacement.
+  @Size(max = 255)
+  @Column
+  private String avatarObjectKey;
+
   @CreationTimestamp
   @Column(updatable = false)
   private OffsetDateTime createdAt;

@@ -31,6 +31,13 @@ public class RateLimiterService {
     return Bandwidth.builder().capacity(50).refillGreedy(50, Duration.ofSeconds(1)).build();
   }
 
+  // Dosya yükleme: istek başına maliyet genel API'den bambaşka - AV taraması bir ağ turu, decode
+  // ise onlarca MB'lık geçici raster. perUser() ile aynı kovada olsalardı tek kullanıcı saniyede
+  // 50 decode tetikleyebilirdi. Bkz. ImageNormalizer sınıf Javadoc'u.
+  public static Bandwidth perUpload() {
+    return Bandwidth.builder().capacity(10).refillGreedy(10, Duration.ofMinutes(1)).build();
+  }
+
   public boolean tryConsume(String key, Bandwidth bandwidth) {
     Supplier<BucketConfiguration> configSupplier =
         () -> BucketConfiguration.builder().addLimit(bandwidth).build();
