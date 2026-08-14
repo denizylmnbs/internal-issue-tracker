@@ -1,6 +1,7 @@
 package com.ist.internal_issue_tracker.project;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -63,4 +64,13 @@ interface ProjectRepository extends JpaRepository<Project, Integer> {
       @Param("startDateAfter") LocalDate startDateAfter,
       @Param("endDateBefore") LocalDate endDateBefore,
       Pageable pageable);
+
+  /**
+   * Usage count/reassignment for {@code fielddef}'s delete guard on the global {@code
+   * PROJECT_STATUS} kind - see {@code ProjectFieldCodeUsageAdapter}. Scoped to {@code isActive},
+   * matching every other read of {@code status} in this repository.
+   */
+  long countByStatusAndIsActiveTrue(String status);
+
+  List<Project> findByStatusAndIsActiveTrue(String status);
 }

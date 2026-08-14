@@ -70,4 +70,10 @@ interface SprintRepository extends JpaRepository<Sprint, Integer> {
       @Param("name") String name,
       @Param("status") String status,
       Pageable pageable);
+
+  /** Usage count/reassignment for {@code fielddef}'s delete guard - see {@code
+   * SprintFieldCodeUsageAdapter}. */
+  long countByProjectIdAndStatusAndDeletedAtIsNull(Integer projectId, String status);
+
+  List<Sprint> findByProjectIdAndStatusAndDeletedAtIsNull(Integer projectId, String status);
 }
