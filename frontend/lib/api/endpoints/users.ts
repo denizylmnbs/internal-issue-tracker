@@ -1,4 +1,4 @@
-import { apiData, apiVoid, json, toQuery } from "../client";
+import { apiData, apiVoid, json, toQuery, upload } from "../client";
 import type {
   ChangePasswordRequest,
   ChangeRoleRequest,
@@ -40,6 +40,16 @@ export const deleteUser = (id: number) => apiVoid(`/api/users/${id}`, { method: 
 
 export const changePassword = (id: number, body: ChangePasswordRequest) =>
   apiData<UserResponse>(`/api/users/${id}/password`, json(body, "PATCH"));
+
+// Part name "file" must match @RequestPart("file") on UserController.uploadAvatar exactly.
+export const uploadAvatar = (id: number, file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+  return apiData<UserResponse>(`/api/users/${id}/avatar`, upload(formData, "PUT"));
+};
+
+export const deleteAvatar = (id: number) =>
+  apiData<UserResponse>(`/api/users/${id}/avatar`, { method: "DELETE" });
 
 export const resetPassword = (id: number, body: ResetPasswordRequest) =>
   apiVoid(`/api/users/${id}/reset-password`, json(body, "POST"));

@@ -56,6 +56,10 @@ export type UserResponse = {
   role: Role;
   isActive: boolean;
   createdAt: string;
+  // Null when the user has no avatar - render initials/AvatarFallback in that case. When present
+  // this is a presigned URL that expires (~1h) - fetch promptly, never cache it beyond this
+  // response, and let <img>'s onError fall back to initials rather than assuming it's still good.
+  avatarUrl: string | null;
 };
 
 export type RegisterRequest = {

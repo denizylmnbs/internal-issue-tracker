@@ -44,15 +44,21 @@ async function proxy(req: NextRequest, path: string[]): Promise<Response> {
   targetUrl.search = req.nextUrl.search;
 
   const hasBody = !["GET", "HEAD", "DELETE"].includes(req.method);
-  // Read the body once up front — req.text() can't be called again for the
-  // retry after a refresh, the stream is consumed the first time.
-  const body = hasBody ? await req.text() : undefined;
+  // Read the body once up front — it can't be read again for the retry after a refresh, the
+  // stream is consumed the first time (also why this can't stream the body through instead).
+  // Multipart uploads (avatar upload) carry a boundary parameter inside their own Content-Type,
+  // so that header is forwarded verbatim below rather than hard-coded to JSON; buffering as raw
+  // bytes rather than text keeps a binary body intact either way. Route Handlers have no built-in
+  // body-size limit the way the old Pages API routes did, so the multipart size cap is enforced by
+  // Spring (spring.servlet.multipart.max-file-size), not here.
+  const requestContentType = req.headers.get("content-type");
+  const body = hasBody ? Buffer.from(await req.arrayBuffer()) : undefined;
 
   const forward = (token: string | undefined) =>
     fetch(targetUrl, {
       method: req.method,
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": requestContentType ?? "application/json",
         Accept: "application/json",
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
