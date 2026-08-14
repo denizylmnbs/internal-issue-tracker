@@ -110,3 +110,14 @@ export function useProjectContext() {
   if (!ctx) throw new Error("useProjectContext must be used within ProjectProvider");
   return ctx;
 }
+
+/**
+ * `undefined` outside a `ProjectProvider` instead of throwing — for the rare component (a status
+ * chip, mainly) that renders both under `/projects/[id]` and on a cross-project page like My Work,
+ * where "the current project" isn't a coherent concept for issues spanning several projects. Most
+ * callers want the throwing `useProjectContext` above; reach for this one only when rendering
+ * outside a single project is a real, expected case rather than a bug to surface loudly.
+ */
+export function useProjectContextOptional() {
+  return useContext(ProjectContext);
+}

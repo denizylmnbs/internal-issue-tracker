@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 import { ROLE_LABEL } from "@/lib/api/enums";
 import type { Role } from "@/lib/api/enums";
-import { useProjectContext } from "@/lib/project/ProjectContext";
+import { useProjectContextOptional } from "@/lib/project/ProjectContext";
 import { useGlobalFieldDefinitions } from "@/lib/fielddef/GlobalFieldDefinitionsProvider";
 import { resolveColor } from "@/lib/fielddef/colors";
 import type { FieldKind } from "@/lib/api/types";
@@ -19,10 +19,14 @@ import type { FieldKind } from "@/lib/api/types";
  * palette color keyed on that code — rather than crashing or going blank.
  */
 
-/** For the six per-project kinds — must be rendered under a ProjectProvider. */
+/**
+ * For the six per-project kinds. Falls back to the raw code (no ProjectProvider, or the code
+ * belongs to a different project than the one in context, e.g. a cross-project list like My Work)
+ * rather than throwing — see `useProjectContextOptional`.
+ */
 function useProjectFieldChip(kind: FieldKind, code: string) {
-  const { resolveField } = useProjectContext();
-  const def = resolveField(kind, code);
+  const ctx = useProjectContextOptional();
+  const def = ctx?.resolveField(kind, code);
   return { label: def?.label ?? code, color: resolveColor(def, code) };
 }
 
