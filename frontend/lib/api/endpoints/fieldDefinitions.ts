@@ -51,7 +51,22 @@ export const reorderFieldDefinitions = (
     json(body, "PATCH"),
   );
 
+export const getFieldDefinitionUsage = (
+  projectId: number | null,
+  defId: number,
+) => apiData<{ count: number }>(`${basePath(projectId)}/${defId}/usage`);
+
+/**
+ * `reassignTo` is required whenever the usage check above returns a nonzero
+ * count - the server re-checks and fails with `FIELD_IN_USE` if it's omitted,
+ * so this is a convenience, not the only guard.
+ */
 export const deleteFieldDefinition = (
   projectId: number | null,
   defId: number,
-) => apiVoid(`${basePath(projectId)}/${defId}`, { method: "DELETE" });
+  reassignTo?: string,
+) =>
+  apiVoid(
+    `${basePath(projectId)}/${defId}${toQuery({ reassignTo })}`,
+    { method: "DELETE" },
+  );

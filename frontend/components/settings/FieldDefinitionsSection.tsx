@@ -32,9 +32,17 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   useFieldDefinitionsList,
   useReorderFieldDefinitions,
   useDeleteFieldDefinition,
+  useFieldDefinitionUsage,
 } from "@/lib/hooks/useFieldDefinitions";
 import { FieldDefinitionFormDialog } from "./FieldDefinitionFormDialog";
 import { resolveColor } from "@/lib/fielddef/colors";
@@ -111,6 +119,8 @@ function KindList({
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<FieldDefinitionResponse | undefined>();
   const [pendingDelete, setPendingDelete] = useState<FieldDefinitionResponse | undefined>();
+  const [reassignTo, setReassignTo] = useState<string | undefined>();
+  const usage = useFieldDefinitionUsage(projectId, pendingDelete?.id);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
   const rows = [...(data ?? [])].sort((a, b) => a.sortOrder - b.sortOrder);
@@ -159,7 +169,10 @@ function KindList({
                   def={def}
                   canManage={canManage}
                   onEdit={() => openEdit(def)}
-                  onDelete={() => setPendingDelete(def)}
+                  onDelete={() => {
+                    setReassignTo(undefined);
+                    setPendingDelete(def);
+                  }}
                 />
               ))}
             </div>
@@ -177,27 +190,86 @@ function KindList({
         />
       )}
 
-      <AlertDialog open={!!pendingDelete} onOpenChange={(v) => !v && setPendingDelete(undefined)}>
+      <AlertDialog
+        open={!!pendingDelete}
+        onOpenChange={(v) => {
+          if (!v) {
+            setPendingDelete(undefined);
+            setReassignTo(undefined);
+          }
+        }}
+      >
         <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete &quot;{pendingDelete?.label}&quot;?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Records already carrying this code keep it; it just won&apos;t be selectable again.
-              Blocked if this is the last value flagged &quot;done&quot; or the current default —
-              the server will say which.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (pendingDelete) del.mutate(pendingDelete.id);
-                setPendingDelete(undefined);
-              }}
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          {(() => {
+            const count = usage.data?.count ?? 0;
+            const inUse = !usage.isLoading && count > 0;
+            const alternatives = rows.filter((r) => r.id !== pendingDelete?.id);
+
+            return (
+              <>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete &quot;{pendingDelete?.label}&quot;?</AlertDialogTitle>
+                  <AlertDialogDescription asChild>
+                    <div className="space-y-3">
+                      {usage.isLoading ? (
+                        <p>Checking whether anything still uses this value…</p>
+                      ) : inUse ? (
+                        <>
+                          <p>
+                            {count} record{count === 1 ? "" : "s"} still carr
+                            {count === 1 ? "ies" : "y"} this value. Pick a replacement to move{" "}
+                            {count === 1 ? "it" : "them"} to before deleting — otherwise{" "}
+                            {count === 1 ? "it" : "they"} would silently drop out of any view
+                            grouped by this field.
+                          </p>
+                          {alternatives.length === 0 ? (
+                            <p className="font-medium text-ink">
+                              There&apos;s no other value of this kind to move them to — add one
+                              first.
+                            </p>
+                          ) : (
+                            <Select value={reassignTo} onValueChange={setReassignTo}>
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Move to…" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {alternatives.map((alt) => (
+                                  <SelectItem key={alt.code} value={alt.code}>
+                                    {alt.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          )}
+                        </>
+                      ) : (
+                        <p>
+                          Nothing currently uses this value. Blocked if this is the last value
+                          flagged &quot;done&quot; or the current default — the server will say
+                          which.
+                        </p>
+                      )}
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={usage.isLoading || (inUse && !reassignTo)}
+                    onClick={() => {
+                      if (pendingDelete) {
+                        del.mutate({ defId: pendingDelete.id, reassignTo });
+                      }
+                      setPendingDelete(undefined);
+                      setReassignTo(undefined);
+                    }}
+                  >
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </>
+            );
+          })()}
         </AlertDialogContent>
       </AlertDialog>
     </div>
