@@ -4,7 +4,7 @@
 > **Next.js** frontend.
 
 <p align="left">
-  <img src="https://img.shields.io/badge/status-in%20development-yellow?style=flat-square" alt="Project Status" />
+  <img src="https://img.shields.io/badge/status-complete-brightgreen?style=flat-square" alt="Project Status" />
   <img src="https://img.shields.io/badge/Java-25-orange?style=flat-square&logo=openjdk&logoColor=white" alt="Java 25" />
   <img src="https://img.shields.io/badge/Spring%20Boot-4.1.0-6DB33F?style=flat-square&logo=springboot&logoColor=white" alt="Spring Boot 4.1.0" />
   <img src="https://img.shields.io/badge/Spring%20Modulith-2.1.0-6DB33F?style=flat-square&logo=spring&logoColor=white" alt="Spring Modulith 2.1.0" />
@@ -219,8 +219,8 @@ behavioural rules a client has to know (full-replacement `PUT`s, sparse metric s
 
 ## Project Status
 
-🚀 **Backend feature-complete, frontend built against it.** Every domain module is implemented, wired through the
-event-driven activity log, and covered by the authorization model below; the Next.js frontend consumes the full API.
+✅ **Complete.** Every domain module is implemented, wired through the event-driven activity log, and covered by the
+authorization model below; the Next.js frontend consumes the full API.
 
 What's in place:
 
@@ -248,14 +248,6 @@ What's in place:
 - [x] `GET /api/auth/me` — the authenticated caller's own record, role included
 - [x] Next.js 16 frontend — auth, projects, board, backlog, sprints, epics, issues, comments, activity feed, metrics
   dashboards, admin user/field-definition management, collapsible navigation
-
-### Roadmap
-
-- [ ] `POST /api/auth/refresh` — refresh tokens; sessions currently end abruptly at expiry
-- [ ] Batch user lookup, so clients stop resolving ids one at a time
-- [ ] OpenAPI/Swagger (`springdoc-openapi`), for generated client types
-- [ ] Broader test coverage — the suite runs without a database today, so anything touching
-  persistence (including `contextLoads`) is verified by hand
 
 ## Roles & Permissions
 
