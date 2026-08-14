@@ -1,6 +1,7 @@
 # Internal Issue Tracker
 
-> A Jira-style internal issue tracking system built as a **Modular Monolith** with Spring Boot and Spring Modulith.
+> A Jira-style internal issue tracking system: a **Modular Monolith** Spring Boot backend with a
+> **Next.js** frontend.
 
 <p align="left">
   <img src="https://img.shields.io/badge/status-in%20development-yellow?style=flat-square" alt="Project Status" />
@@ -8,27 +9,37 @@
   <img src="https://img.shields.io/badge/Spring%20Boot-4.1.0-6DB33F?style=flat-square&logo=springboot&logoColor=white" alt="Spring Boot 4.1.0" />
   <img src="https://img.shields.io/badge/Spring%20Modulith-2.1.0-6DB33F?style=flat-square&logo=spring&logoColor=white" alt="Spring Modulith 2.1.0" />
   <img src="https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL 17" />
+  <img src="https://img.shields.io/badge/Redis-8.2-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis 8.2" />
+  <img src="https://img.shields.io/badge/Kafka-4.1.0-231F20?style=flat-square&logo=apachekafka&logoColor=white" alt="Kafka 4.1.0" />
   <img src="https://img.shields.io/badge/Flyway-Migrations-CC0200?style=flat-square&logo=flyway&logoColor=white" alt="Flyway" />
   <img src="https://img.shields.io/badge/Maven-Build-C71A36?style=flat-square&logo=apachemaven&logoColor=white" alt="Maven" />
+  <img src="https://img.shields.io/badge/Next.js-16-000000?style=flat-square&logo=nextdotjs&logoColor=white" alt="Next.js 16" />
+  <img src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square&logo=react&logoColor=black" alt="React 19" />
+  <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5" />
   <img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License" />
 </p>
 
 ## About
 
 Internal Issue Tracker is a project/sprint/issue tracking application intended for internal team use, similar in spirit
-to Jira. It manages users, teams, projects, sprints, epics, issues, comments, and full activity history for auditing
-purposes.
+to Jira. It manages users, teams, projects, sprints, epics, issues, comments, avatars, and full activity history for
+auditing and metrics purposes — end to end, with a Spring Boot API and the Next.js frontend built directly against it.
 
-The project is deliberately built as a **Modular Monolith** rather than microservices: a single deployable application
+The backend is deliberately built as a **Modular Monolith** rather than microservices: a single deployable application
 internally organized into independent, well-bounded modules (
 via [Spring Modulith](https://spring.io/projects/spring-modulith)), each owning its own domain logic and enforcing
 boundaries at compile/verification time. This gives the simplicity of a monolith (one deployment, one database, easy
 local development) while keeping the codebase modular enough to split into separate services later if needed.
+Cross-module events (activity logging, cache eviction, cleanup on delete) are externalized through **Kafka** via
+Spring Modulith's event publication outbox, so a module never calls another module's internals directly — only reacts
+to what happened.
 
 ## Tech Stack
 
+### Backend
+
 | Layer                 | Technology                                  |
-|-----------------------|---------------------------------------------|
+|-----------------------|----------------------------------------------|
 | Language              | Java 25                                     |
 | Framework             | Spring Boot 4.1.0                           |
 | Architecture          | Spring Modulith 2.1.0 (Modular Monolith)    |
@@ -36,29 +47,55 @@ local development) while keeping the codebase modular enough to split into separ
 | Persistence           | Spring Data JPA + Hibernate                 |
 | Database              | PostgreSQL 17                               |
 | Migrations            | Flyway                                      |
-| Security              | Spring Security                             |
+| Security              | Spring Security, JWT                        |
+| Event bus / outbox    | Spring Modulith Events + Apache Kafka       |
+| Caching / rate limits | Redis + Lettuce, Bucket4j                   |
+| Object storage        | MinIO (S3-compatible, via the AWS SDK)      |
+| Malware scanning      | ClamAV                                      |
 | Validation            | Spring Validation (Jakarta Bean Validation) |
 | Build Tool            | Maven (via Maven Wrapper)                   |
 | Boilerplate Reduction | Lombok                                      |
 | Local Infrastructure  | Docker Compose                              |
 
+### Frontend
+
+| Layer            | Technology                              |
+|-------------------|------------------------------------------|
+| Framework         | Next.js 16 (App Router)                 |
+| Language          | TypeScript 5                            |
+| UI runtime        | React 19                                |
+| Server state       | TanStack Query 5                        |
+| Components        | shadcn/ui on Radix UI                   |
+| Styling           | Tailwind CSS 4                          |
+| Forms             | React Hook Form + Zod                   |
+| Drag & drop       | dnd-kit (issue board)                   |
+| Charts            | Recharts (metrics dashboards)           |
+
+The frontend never calls the backend directly from the browser: `app/bff/[...path]/route.ts` is a
+same-origin proxy that attaches the bearer token from an httpOnly cookie, so the token never reaches
+client-side JavaScript.
+
 ## Database Schema
 
 The database schema was designed with [dbdiagram.io](https://dbdiagram.io) and is version-controlled through Flyway
-migrations under [`src/main/resources/db/migration`](./src/main/resources/db/migration).
+migrations under [`src/main/resources/db/migration`](./src/main/resources/db/migration) (`V1` through `V10`, covering
+the initial schema, activity-log hardening, metric dimensions, field definitions replacing fixed enums, and user
+avatars).
 
 <!-- TODO: Replace with the exported dbdiagram.io schema image, e.g.: -->
 <!-- ![Database Schema](./docs/db-schema.png) -->
 
-Core entities include: `users`, `teams`, `team_users`, `projects`, `project_teams`, `project_users`, `sprints`, `epics`,
-`issues`, `comments`, and per-entity activity logs (`issue_activities`, `sprint_activities`, `project_activities`) for
-tracking changes over time.
+Core entities include: `users`, `teams`, `team_users`, `projects`, `project_teams`, `project_users`, `sprints`,
+`epics`, `issues`, `comments`, `field_definitions` (per-project and global status/type/priority/unit vocabularies),
+and per-entity activity logs (`issue_activities`, `sprint_activities`, `project_activities`) for tracking changes
+over time.
 
 ## Project Structure
 
-The codebase follows the conventions of a Spring Modulith application, where each business capability lives in its own
+The backend follows the conventions of a Spring Modulith application, where each business capability lives in its own
 top-level package (module) under the base package, with internal classes kept package-private and only intended APIs
-exposed publicly.
+exposed publicly. The frontend is a standard Next.js App Router project that consumes the backend exclusively through
+its own BFF proxy route.
 
 ```
 internal-issue-tracker/
@@ -66,7 +103,17 @@ internal-issue-tracker/
 │   ├── main/
 │   │   ├── java/com/ist/internal_issue_tracker/
 │   │   │   ├── InternalIssueTrackerApplication.java   # Application entry point
-│   │   │   └── ...                                    # Feature modules (user, team, project, sprint, issue, ...)
+│   │   │   ├── auth/                                   # Login, JWT issuance
+│   │   │   ├── user/                                   # Users, roles, avatars
+│   │   │   ├── team/                                   # Teams & membership
+│   │   │   ├── project/                                # Projects, members, teams
+│   │   │   ├── sprint/                                 # Sprints
+│   │   │   ├── epic/                                   # Epics
+│   │   │   ├── issue/                                  # Issues
+│   │   │   ├── comment/                                # Comments
+│   │   │   ├── fielddef/                                # Field definitions (status/type/priority/unit)
+│   │   │   ├── activity/                                # Activity log + metrics
+│   │   │   └── shared/                                  # Cross-cutting: security, ports, storage, ratelimit
 │   │   └── resources/
 │   │       ├── application.properties                 # Application configuration
 │   │       ├── db/migration/                           # Flyway SQL migrations (versioned schema)
@@ -74,21 +121,28 @@ internal-issue-tracker/
 │   │       └── templates/                               # Server-side templates
 │   └── test/
 │       └── java/com/ist/internal_issue_tracker/        # Tests (unit, module, integration)
-├── compose.yaml                                         # Local PostgreSQL via Docker Compose
+├── frontend/                                             # Next.js 16 App Router frontend
+│   ├── app/                                              # Routes: (app), (auth), api/session, bff proxy
+│   ├── components/                                       # board, backlog, sprint, issue, settings, shell, ui, ...
+│   ├── lib/                                               # api client, hooks, auth, project/sprint context
+│   └── public/
+├── docs/API.md                                           # Full backend API reference
+├── compose.yaml                                          # Local Postgres, Redis, Kafka, MinIO, ClamAV
 ├── pom.xml                                               # Maven project & dependency definitions
-├── .env.example                                          # Example environment variables
+├── .env.example                                          # Example backend environment variables
 └── mvnw / mvnw.cmd                                       # Maven Wrapper
 ```
 
 Each module is expected to be verified for boundary violations using Spring Modulith's testing support (
-`ApplicationModules.verify()`) as the codebase grows.
+`ApplicationModules.verify()`, run as `ModularityTests`) as the codebase grows.
 
 ## Getting Started
 
 ### Prerequisites
 
 - Java 25 (JDK)
-- Docker & Docker Compose (for local PostgreSQL)
+- Node.js 20+ and npm (for the frontend)
+- Docker & Docker Compose (for local Postgres, Redis, Kafka, MinIO, and ClamAV)
 - Maven Wrapper is included, so a local Maven install is not required
 
 ### 1. Clone the repository
@@ -106,72 +160,97 @@ Copy the example environment file and adjust the values as needed:
 cp .env.example .env
 ```
 
-```env
-POSTGRES_DB=issue_tracker
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=change_me
-POSTGRES_PORT=5432
-```
+`.env.example` documents every variable inline; the essentials are database, Redis and Kafka
+connection settings, the JWT secret/expirations, CORS origins for the frontend, and MinIO/ClamAV
+settings for avatar storage and malware scanning (all optional in local dev — they fall back to
+sane defaults that match `compose.yaml`).
 
-### 3. Start the database
+### 3. Start local infrastructure
 
 ```bash
 docker compose up -d
 ```
 
-This starts a PostgreSQL 17 container (`issue-tracker-db`) and applies persistent storage via a named Docker volume.
+This starts Postgres 17, Redis, Kafka, MinIO (S3-compatible object storage), and ClamAV (malware
+scanning for uploads) as named containers with persistent volumes.
 
-### 4. Run the application
+### 4. Run the backend
 
 ```bash
 ./mvnw spring-boot:run
 ```
 
 On startup, Flyway automatically applies all pending migrations under `src/main/resources/db/migration` against the
-configured database.
+configured database. The API listens on `http://localhost:8080` by default.
 
-### 5. Run the tests
+### 5. Run the backend tests
 
 ```bash
 ./mvnw test
 ```
 
+### 6. Run the frontend
+
+```bash
+cd frontend
+npm install
+cp .env.example .env.local   # points the BFF proxy at the backend and mirrors its JWT expirations
+npm run dev
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser. The dev server proxies every
+API call through `app/bff/[...path]/route.ts` to the backend at `API_BASE_URL` (defaults to
+`http://localhost:8080`).
+
+Other frontend scripts:
+
+```bash
+npm run build   # production build
+npm run start   # serve the production build
+npm run lint    # ESLint
+```
+
 ## API Documentation
 
-**→ [`docs/API.md`](./docs/API.md)** — the complete reference for all 79 endpoints: request and
+**→ [`docs/API.md`](./docs/API.md)** — the complete reference for all 93 endpoints across 18 controllers: request and
 response shapes, query parameters, authorization rules per route, every error code, and the
 behavioural rules a client has to know (full-replacement `PUT`s, sparse metric series, the
 `/members` vs `/participants` distinction, and so on).
 
 ## Project Status
 
-🚀 **Backend feature-complete.** Every domain module is implemented, wired through the event-driven
-activity log, and covered by the authorization model below.
+🚀 **Backend feature-complete, frontend built against it.** Every domain module is implemented, wired through the
+event-driven activity log, and covered by the authorization model below; the Next.js frontend consumes the full API.
 
 What's in place:
 
-- [x] Project scaffolding (Spring Boot + Maven) and Docker Compose PostgreSQL
-- [x] Database schema via Flyway migrations (`V1` init, `V2` activity hardening, `V3` metric dimensions)
+- [x] Project scaffolding (Spring Boot + Maven) and Docker Compose infrastructure (Postgres, Redis, Kafka, MinIO, ClamAV)
+- [x] Database schema via Flyway migrations, `V1` through `V10`
 - [x] Module boundaries enforced at build time (`ModularityTests`)
 - [x] Shared exception hierarchy, global exception handler, single response envelope, paged responses
 - [x] JWT authentication (`POST /api/auth/login`), stateless security filter chain
 - [x] Role hierarchy (`ADMIN → EDITOR → DEVELOPER → USER`) plus project-scoped authorization
-- [x] `user` module — CRUD, password management, role changes with lockout guards
+- [x] `user` module — CRUD, password management, role changes with lockout guards, avatar upload/removal
 - [x] `team` module — teams, membership, leadership
 - [x] `project` module — projects, direct members, assigned teams, participants, leadership
 - [x] `sprint` module — sprints with one-running-sprint enforcement and commitment snapshots
 - [x] `epic` module — epics and their lifecycle
-- [x] `issue` module — issues, status, dual (user + team) assignment, filtering
+- [x] `issue` module — issues, status, dual (user + team) assignment, filtering, board grouping
 - [x] `comment` module — comments with author-scoped editing
-- [x] `activity` module — issue / sprint / project audit logs via Spring Modulith events
+- [x] `fielddef` module — per-project and global status/type/priority/unit definitions, replacing fixed enums, with
+  usage checks and reassignment before a value can be deleted
+- [x] `activity` module — issue / sprint / project audit logs, externalized to Kafka via Spring Modulith events
 - [x] `activity.metrics` — 14 agile metrics computed from the log
+- [x] Redis-backed caching (metrics, auth) and rate limiting (Bucket4j), including a stricter bucket for uploads
+- [x] Avatar upload: MinIO object storage, ClamAV malware scanning, image normalization
 - [x] API documentation ([`docs/API.md`](./docs/API.md))
-- [x] CORS for a browser frontend (`CORS_ALLOWED_ORIGINS`, defaults to `http://localhost:3000`)
+- [x] CORS for the browser frontend (`CORS_ALLOWED_ORIGINS`, defaults to `http://localhost:3000`)
 - [x] `GET /api/auth/me` — the authenticated caller's own record, role included
+- [x] Next.js 16 frontend — auth, projects, board, backlog, sprints, epics, issues, comments, activity feed, metrics
+  dashboards, admin user/field-definition management, collapsible navigation
 
 ### Roadmap
 
-- [ ] Next.js frontend
 - [ ] `POST /api/auth/refresh` — refresh tokens; sessions currently end abruptly at expiry
 - [ ] Batch user lookup, so clients stop resolving ids one at a time
 - [ ] OpenAPI/Swagger (`springdoc-openapi`), for generated client types
@@ -237,12 +316,12 @@ beyond being logged in, since a team that cannot see its own flow cannot improve
 
 ## Endpoints
 
-All 79 endpoints are documented in **[`docs/API.md`](./docs/API.md)**. Summary:
+All 93 endpoints are documented in **[`docs/API.md`](./docs/API.md)**. Summary:
 
 | Area | Base path | Count |
 |------|-----------|-------|
 | Auth | `/api/auth` | 2 |
-| Users | `/api/users` | 10 |
+| Users (incl. teams, projects, avatar) | `/api/users` | 12 |
 | Teams & membership | `/api/teams` | 10 |
 | Projects | `/api/projects` | 8 |
 | Project members | `/api/projects/{id}/members`, `/participants` | 4 |
@@ -253,6 +332,7 @@ All 79 endpoints are documented in **[`docs/API.md`](./docs/API.md)**. Summary:
 | Comments | `/api/projects/{id}/issues/{issueId}/comments` | 5 |
 | Activity log | `/api/projects/{id}/**/activities` | 3 |
 | Metrics | `/api/projects/{id}/metrics` | 14 |
+| Field definitions | `/api/projects/{id}/field-definitions`, `/api/field-definitions` | 12 |
 
 ## Metrics
 
